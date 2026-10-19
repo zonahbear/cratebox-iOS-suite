@@ -1,0 +1,1 @@
+[{"id":3,"parent":0,"folder":false,"name":"Playlist 1","unk":0,"tracks":[1,2]},{"id":1,"parent":0,"folder":true,"name":"Folder","unk":0,"tracks":[]},{"id":2,"parent":1,"folder":false,"name":"Sub Playlist","unk":0,"tracks":[1,2]}]
