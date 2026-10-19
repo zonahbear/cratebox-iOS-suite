@@ -200,7 +200,7 @@ struct LibraryPane: View {
     func onDeck(_ t: LibTrack?) -> Int? { guard let t else { return nil }; return core.decks.firstIndex { $0.track === t.info } }
     func clockShort(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
 
-    @ViewBuilder func addToMenu(_ tracks: [LibTrack]) {
+    @ViewBuilder func addToMenu(_ tracks: [LibTrack]) -> some View {
         Menu("Add to playlist") {
             ForEach(playlists.lists.filter { !$0.folder }) { p in Button(playlists.path(p)) { playlists.add(tracks, to: p.id); app.status("Added to \(p.name)") } }
             Button("New playlist…") { let p = playlists.new(playlists.nextName("Playlist")); playlists.add(tracks, to: p.id); renaming = "pl:" + p.id; renameText = p.name }

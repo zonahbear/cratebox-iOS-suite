@@ -13,7 +13,8 @@ final class Device: ObservableObject, Identifiable {
     var byRbId = [UInt32: LibTrack]()
     var stamp: String
     var oneLibrary = false
-    @Published var saving = false, unsaved = false
+    @Published var saving = false
+    @Published var unsaved = false
     var backedUp = false, told = false
     var saveWork: DispatchWorkItem?
     init(id: String, name: String, root: URL, tree: [PDBPlaylist], stamp: String) { self.id = id; self.name = name; self.root = root; self.tree = tree; self.stamp = stamp }
