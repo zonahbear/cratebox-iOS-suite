@@ -18,8 +18,9 @@ jobs:
           xcodebuild -version | tee ci.log
       - name: Test tracks (tests/make_tracks.py, checked against the ones the fixtures came from)
         run: |
-          python3 -m pip install --quiet --break-system-packages numpy 2>/dev/null || python3 -m pip install --quiet numpy
-          python3 tests/make_tracks.py "$RUNNER_TEMP/music" | tail -2
+          python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install --quiet numpy 2>&1 | tail -3 | tee -a ci.log
+          mkdir -p "$RUNNER_TEMP/music"
+          "$RUNNER_TEMP/venv/bin/python" tests/make_tracks.py "$RUNNER_TEMP/music" 2>&1 | tail -5 | tee -a ci.log
           (cd "$RUNNER_TEMP/music" && md5 -r *.wav | sed 's/ /  /') | tee md5.txt
           diff <(sort md5.txt) <(sort ios/CrateboxKit/Tests/CrateboxKitTests/Fixtures/music.md5) | tee -a ci.log || echo "TRACKS DIFFER from the fixtures' (numpy?)" | tee -a ci.log
       - name: Core tests (swift test, optimised)
