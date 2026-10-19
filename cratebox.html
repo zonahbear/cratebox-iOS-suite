@@ -82,6 +82,8 @@ header { min-width: 0; overflow: hidden; }
 .dinfo > .keytag, .dinfo > .mastertag { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dinfo > .phasetag { width: 52px; min-width: 52px; }
 .dinfo { gap: 9px; }
+/* a really narrow deck (a tablet held upright) can't fit the row on one line: there it may wrap */
+@container deck (max-width: 460px) { .dinfo { flex-wrap: wrap; } }
 .beats { display: flex; gap: 3px; }
 .beats i { width: 16px; height: 6px; background: var(--line2); border-radius: 1px; }
 .beats i.on { background: var(--c); }
