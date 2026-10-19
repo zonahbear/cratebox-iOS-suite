@@ -118,8 +118,8 @@ html.learning .learned-flash { outline: 3px solid var(--ok) !important; }
 #waves canvas { touch-action: none; cursor: grab; }
 #waves canvas:active { cursor: grabbing; }
 .dbody { display: grid; gap: 10px; align-items: start; }
-.deck[data-i="0"] .dbody { grid-template-columns: 48px 150px 1fr; grid-template-areas: "pitch jog ctrl"; }
-.deck[data-i="1"] .dbody { grid-template-columns: 1fr 150px 48px; grid-template-areas: "ctrl jog pitch"; }
+.deck[data-i="0"] .dbody, .deck[data-i="2"] .dbody { grid-template-columns: 48px 150px 1fr; grid-template-areas: "pitch jog ctrl"; }
+.deck[data-i="1"] .dbody, .deck[data-i="3"] .dbody { grid-template-columns: 1fr 150px 48px; grid-template-areas: "ctrl jog pitch"; }
 .pitchwrap { grid-area: pitch; display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .jogwrap { grid-area: jog; display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .jog { width: 150px; height: 150px; touch-action: none; cursor: grab; }
@@ -453,8 +453,8 @@ button, select, .pad, .sq { touch-action: manipulation; }
   html:not(.phone) #status { flex-basis: 100%; max-width: none; order: 10; }
   html:not(.phone) #decks { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   html:not(.phone) #decks > #mixer { grid-column: 1 / -1; grid-row: 2; }
-  html:not(.phone) .deck[data-i="0"] .dbody { grid-template-columns: 40px 120px minmax(0, 1fr); }
-  html:not(.phone) .deck[data-i="1"] .dbody { grid-template-columns: minmax(0, 1fr) 120px 40px; }
+  html:not(.phone) .deck[data-i="0"] .dbody, html:not(.phone) .deck[data-i="2"] .dbody { grid-template-columns: 40px 120px minmax(0, 1fr); }
+  html:not(.phone) .deck[data-i="1"] .dbody, html:not(.phone) .deck[data-i="3"] .dbody { grid-template-columns: minmax(0, 1fr) 120px 40px; }
   html:not(.phone) .jog { width: 120px; height: 120px; }
   html:not(.phone) .ltool { flex-wrap: wrap; padding: 6px 10px; height: auto; }
   html:not(.phone) #library { grid-template-rows: auto 1fr; }
@@ -480,8 +480,8 @@ html.phone .modes button { padding: 0 2px; letter-spacing: 0; }
 @container deck (max-width: 440px) { .modes button { padding: 0 2px !important; font-size: 11px !important; letter-spacing: 0 !important; } }
 @container deck (max-width: 260px) { .modes button { font-size: 8.5px !important; padding: 0 !important; } }
 html:not(.phone) .deck { --jog: clamp(96px, min(30cqw, calc(100vh - 600px)), 150px); }
-html:not(.phone) .deck[data-i="0"] .dbody { grid-template-columns: 44px var(--jog) minmax(0, 1fr); }
-html:not(.phone) .deck[data-i="1"] .dbody { grid-template-columns: minmax(0, 1fr) var(--jog) 44px; }
+html:not(.phone) .deck[data-i="0"] .dbody, html:not(.phone) .deck[data-i="2"] .dbody { grid-template-columns: 44px var(--jog) minmax(0, 1fr); }
+html:not(.phone) .deck[data-i="1"] .dbody, html:not(.phone) .deck[data-i="3"] .dbody { grid-template-columns: minmax(0, 1fr) var(--jog) 44px; }
 html:not(.phone) .jog { width: var(--jog); height: var(--jog); }
 html:not(.phone) .round { width: clamp(46px, calc(var(--jog) * .36), 54px); height: clamp(46px, calc(var(--jog) * .36), 54px); }
 html:not(.phone) .pad { height: clamp(28px, calc(100vh / 24), 40px); }

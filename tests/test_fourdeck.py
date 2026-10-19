@@ -85,6 +85,25 @@ def main():
         page.click("#startBtn")
         page.wait_for_function("window.cratebox && cratebox.A.ctx")
         check("4-deck mode is remembered after a reload", page.evaluate("document.documentElement.classList.contains('four')"))
+        load_all(page, 4)
+        # decks 3 and 4 expanded (⤢): the full deck layout, like decks 1 and 2 (tempo | jog | controls,
+        # mirrored on deck 4), with nothing on top of anything else
+        page.click("#fourBtn") if not page.evaluate("document.documentElement.classList.contains('four')") else None
+        for i in (2, 3):
+            if page.evaluate(f"document.querySelector('.deck[data-i=\"{i}\"]').classList.contains('compact')"):
+                page.click(f'.deck[data-i="{i}"] .expand')
+        page.wait_for_timeout(300)
+        ex = page.evaluate("""(() => { const out = {}; const r = (e) => e.getBoundingClientRect();
+          for (const i of [2, 3]) { const d = document.querySelector(`.deck[data-i="${i}"]`);
+            const els = [...d.querySelectorAll('.jog, .pad, .round, .ctrl button, .vslider, .modes button')].filter(e => r(e).width > 0);
+            let over = 0; for (let a = 0; a < els.length; a++) for (let b = a + 1; b < els.length; b++) { const A = r(els[a]), B = r(els[b]);
+              if (els[a].contains(els[b]) || els[b].contains(els[a])) continue;
+              if (Math.min(A.right, B.right) - Math.max(A.left, B.left) > 2 && Math.min(A.bottom, B.bottom) - Math.max(A.top, B.top) > 2) over++; }
+            const jog = r(d.querySelector('.jog')), pitch = r(d.querySelector('.pitchwrap .vslider')), ctrl = r(d.querySelector('.ctrl'));
+            out[i + 1] = { over, order: i === 2 ? pitch.right <= jog.left && jog.right <= ctrl.left : ctrl.right <= jog.left && jog.right <= pitch.left }; }
+          return out; })()""")
+        check("expanded decks 3 and 4: full layout (tempo | jog | controls), nothing overlapping", all(v["over"] == 0 and v["order"] for v in ex.values()), str(ex))
+        for i in (2, 3): page.click(f'.deck[data-i="{i}"] .expand')
         ctx.close()
 
         # a 1440p screen: the app is scaled up (interface size Auto), and clicks still land right
