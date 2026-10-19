@@ -1,0 +1,31 @@
+name: iOS build
+on:
+  push:
+    branches: [ios]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: ios, cancel-in-progress: true }
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version | tee ci.log
+      - name: Core tests (swift test)
+        run: |
+          set -o pipefail
+          cd ios/CrateboxKit && swift test 2>&1 | tee -a ../../ci.log
+      - name: Error summary to the ci-logs branch
+        if: always()
+        run: |
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
+          git config user.name ci; git config user.email ci@users.noreply.github.com
+          git fetch origin ci-logs || true
+          git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
+          cp summary.txt ios-latest.txt
+          git add -f ios-latest.txt && git commit -qm "ios ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs
