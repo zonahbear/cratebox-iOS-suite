@@ -5,8 +5,10 @@
 import Foundation
 import os
 
-public struct DeckReport { public var pos = 0.0, speed = 0.0, playing = false, ended = false, coast = false, peakL: Float = 0, peakR: Float = 0 }
-public struct EngineSnapshot { public var time = 0.0; public var decks = [DeckReport](repeating: DeckReport(), count: 4); public var masterPeak: (Float, Float) = (0, 0) }
+public struct DeckReport { public var pos = 0.0, speed = 0.0, playing = false, ended = false, coast = false, peakL: Float = 0, peakR: Float = 0, seq = 0 }
+/// time: the audio clock (s) at the end of the last block; host: the host clock (s, uptime) when it was rendered
+public struct EngineSnapshot { public var time = 0.0, host = 0.0; public var decks = [DeckReport](repeating: DeckReport(), count: 4); public var masterPeak: (Float, Float) = (0, 0) }
+@inline(__always) public func hostSeconds() -> Double { Double(DispatchTime.now().uptimeNanoseconds) / 1e9 }
 
 public enum EngineCommand {
     case deck(Int, DeckMessage)
@@ -39,7 +41,7 @@ public final class Engine {
     var inbox = [EngineCommand]()
     // written by the audio thread in place (no array copy-on-write there)
     let reports = UnsafeMutablePointer<DeckReport>.allocate(capacity: 4)
-    var reportTime = 0.0, reportMaster: (Float, Float) = (0, 0)
+    var reportTime = 0.0, reportHost = 0.0, reportMaster: (Float, Float) = (0, 0)
     var trash = [PCMTrack]()                    // replaced tracks, freed off the audio thread
     /// a copy of the master output (after the limiter) for recording; set by the recorder
     public var recordTap: ((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?
@@ -66,7 +68,7 @@ public final class Engine {
     public func snapshot() -> EngineSnapshot {
         var s = EngineSnapshot()
         os_unfair_lock_lock(&lock)
-        s.time = reportTime; s.masterPeak = reportMaster
+        s.time = reportTime; s.host = reportHost; s.masterPeak = reportMaster
         for i in 0..<4 { s.decks[i] = reports[i] }
         if !trash.isEmpty { trash.removeAll(keepingCapacity: true) }
         os_unfair_lock_unlock(&lock)
@@ -134,10 +136,10 @@ public final class Engine {
             frames += Int64(m); done += m
         }
         if os_unfair_lock_trylock(&lock) {
-            reportTime = Double(frames) / sampleRate
+            reportTime = Double(frames) / sampleRate; reportHost = hostSeconds()
             for i in 0..<4 {
                 let d = decks[i]
-                reports[i] = DeckReport(pos: d.pos, speed: d.speed, playing: d.playing, ended: d.ended, coast: d.coast, peakL: strips[i].peakL, peakR: strips[i].peakR)
+                reports[i] = DeckReport(pos: d.pos, speed: d.speed, playing: d.playing, ended: d.ended, coast: d.coast, peakL: strips[i].peakL, peakR: strips[i].peakR, seq: d.seq)
             }
             reportMaster = (mpl, mpr)
             os_unfair_lock_unlock(&lock)

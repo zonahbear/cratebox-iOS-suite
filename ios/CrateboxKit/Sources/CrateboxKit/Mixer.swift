@@ -133,26 +133,19 @@ final class ChannelStrip {
     }
 }
 
-/// Peak limiter like the web app's DynamicsCompressor (threshold -1 dB, knee 0, ratio 20, attack 1 ms,
-/// release 80 ms), with the compressor's automatic makeup gain.
+/// Peak limiter at -1 dB (ratio 20, release 80 ms), like the web app's DynamicsCompressor on the master,
+/// except that it catches a peak at once (the browser's looks 6 ms ahead) and has no makeup gain, so the
+/// output never goes over full scale.
 struct Limiter {
     var env = 0.0
-    let att: Double, rel: Double
+    let rel: Double
     let thr = -1.0, ratio = 20.0
-    let makeup: Double
-    init(sr: Double) {
-        att = 1 - exp(-1 / (0.001 * sr)); rel = 1 - exp(-1 / (0.08 * sr))
-        // Web Audio: makeup = (1 / gain at 0 dBFS) ^ 0.6
-        let at0 = -1.0 + 1.0 / 20.0
-        makeup = dbToGain(-at0 * 0.6)
-    }
+    init(sr: Double) { rel = 1 - exp(-1 / (0.08 * sr)) }
     @inline(__always) mutating func run(_ l: inout Double, _ r: inout Double) {
         let p = max(abs(l), abs(r))
-        env += (p - env) * (p > env ? att : rel)
+        if p > env { env = p } else { env += (p - env) * rel }
         let db = 20 * log10(max(env, 1e-9))
-        let red = db > thr ? (db - thr) * (1 - 1 / ratio) : 0
-        let g = dbToGain(-red) * makeup
-        l *= g; r *= g
+        if db > thr { let g = dbToGain(-(db - thr) * (1 - 1 / ratio)); l *= g; r *= g }
     }
 }
 
