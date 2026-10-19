@@ -120,7 +120,8 @@ Playback runs on the browser's real-time audio thread and nothing else in the ap
 - Sync and the beat lock run on their own timer, not the screen refresh: they keep working with the tab in the background or the screen busy, and a drawing error can't stop them.
 - A stopped deck costs (almost) nothing; decks 3 and 4 use no audio processing until 4-deck mode is turned on.
 - The recorder reuses its buffers, so it makes no garbage on the audio thread.
-- Library analysis runs two tracks at a time on a computer with 4 or more hardware threads, and drops to one, with a breather between tracks, while music plays; waveform drawing skips frames on a slow computer before anything else gives.
+- Library analysis runs two tracks at a time while nothing plays. On a computer with 2 cores (4 hardware threads or fewer) and on phones it stops completely while music plays, so it never takes CPU time from the audio: a job under way is ended the moment you press PLAY, its track goes back in the queue, and the library carries on when everything stops. Tracks you load are still analysed straight away. On bigger computers, one track at a time keeps going while you play, with a breather in between.
+- Loading a track never holds up the other decks: the replaced track's audio is handed back to the page to be thrown away there, not on the audio thread.
 - If the browser stops the audio (another app such as rekordbox takes the controller's sound, the controller is unplugged, the laptop sleeps), Cratebox starts it again by itself and shows a small banner until it's back; it never covers the decks.
 - **Audio buffer** (Settings): Medium is the default. Small gives the tightest jog feel on a strong computer; Large is the safest from dropouts. It takes effect after a reload.
 

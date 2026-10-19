@@ -1001,10 +1001,19 @@ class DeckPlayer extends AudioWorkletProcessor {
     this.port.onmessage = (e) => this.msg(e.data);
   }
   flush() { this.gK[0] = this.gK[1] = this.Nw; this.ph = 0; this.fresh = true; }
+  // the track being replaced goes back to the page to be thrown away there: ~100 MB freed by the
+  // garbage collector on this thread would hold up the audio of every deck for tens of ms
+  giveBack() {
+    if (!this.L) return;
+    const bufs = [this.L.buffer];
+    if (this.R && this.R.buffer !== this.L.buffer) bufs.push(this.R.buffer);
+    try { this.port.postMessage({ freed: true, L: this.L, R: this.R }, bufs); } catch (e) {}
+    this.L = this.R = null;
+  }
   msg(d) {
     switch (d.t) {
-      case "unload": this.L = this.R = null; this.len = 0; this.playing = false; this.amp = 0; break;
-      case "load": this.L = d.L; this.R = d.R; this.len = d.L.length; this.pos = 0; this.target = 0;
+      case "unload": this.giveBack(); this.L = this.R = null; this.len = 0; this.playing = false; this.amp = 0; break;
+      case "load": this.giveBack(); this.L = d.L; this.R = d.R; this.len = d.L.length; this.pos = 0; this.target = 0;
         this.sc = d.L instanceof Int16Array ? 1 / 32768 : 1;       // 16-bit PCM on low-memory devices
         this.playing = false; this.loopOn = false; this.amp = 0; this.vel = 0; this.ended = false;
         if (d.mt != null) this.mt = d.mt; if (d.spin) this.spinA = 9 / d.spin; this.coast = false; this.flush(); break;
@@ -1992,6 +2001,12 @@ let analyzeSeq = 0;
 // analysis workers: two on a computer with 4 or more hardware threads (the 2017 MacBook Air has 4), so
 // the library is analysed two tracks at a time while nothing plays; one while music plays.
 const ANALYZERS = [];
+// audio first: on a computer with 2 cores (4 hardware threads or fewer, like the 2017 MacBook Air), library
+// analysis stops completely while anything plays. A track crunched in the background takes the CPU time
+// the audio needs, and on 2 cores that made the playing deck stutter (worst when a new track was being
+// loaded at the same time). Tracks you load are still analysed right away; the rest catch up when it stops.
+const PAUSE_ANALYSIS_WHILE_PLAYING = LOWMEM || (navigator.hardwareConcurrency || 2) <= 4;     // phones too
+const audible = () => decks.some((d) => d.playing || d.previewing);
 const ANALYSIS_LANES = (() => {
   try { const o = +localStorage.getItem("cb.lanes"); if (o >= 1 && o <= 4) return o; } catch (e) {}
   return (navigator.hardwareConcurrency || 2) >= 4 ? 2 : 1;
@@ -2108,17 +2123,30 @@ function analyzerFor() {
   // the least busy one: a deck load never waits behind library analysis if a worker is free
   return ANALYZERS.reduce((a, b) => (b.pending < a.pending ? b : a));
 }
-function analyzeMono(mono, fs, opt) {
+function analyzeMono(mono, fs, opt, background) {
   const w = analyzerFor();
   const id = ++analyzeSeq;
   return new Promise((res, rej) => {
-    analyzeWaiters.set(id, { res, rej });
+    analyzeWaiters.set(id, { res, rej, w, background: !!background });
     opt = opt || {};
     const tr = [mono.buffer];
     if (opt.xw && opt.xw.buffer !== mono.buffer) tr.push(opt.xw.buffer);
     w.pending++;
     w.postMessage({ id, mono, fs, range: BPM_RANGES[bpmRange], opt }, tr);
   });
+}
+// a deck starts playing: stop library analysis that's under way (its track goes back in the queue).
+// The worker is ended mid-track and a fresh one starts when it's next needed.
+function stopBackgroundAnalysis() {
+  if (!PAUSE_ANALYSIS_WHILE_PLAYING) return;
+  for (const w of [...ANALYZERS]) {
+    const jobs = [...analyzeWaiters].filter(([, q]) => q.w === w);
+    // only a worker that has nothing but library analysis on it (never one with a deck load's job)
+    if (!jobs.length || jobs.some(([, q]) => !q.background)) continue;
+    ANALYZERS.splice(ANALYZERS.indexOf(w), 1);
+    try { w.terminate(); } catch (e) {}
+    for (const [id, q] of jobs) { analyzeWaiters.delete(id); const err = new Error("paused"); err.name = "Paused"; q.rej(err); }
+  }
 }
 // give the screen a turn without a timer (timers slow to once a second in a background tab)
 const yieldToPage = () => new Promise((r) => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
@@ -2463,6 +2491,7 @@ class Deck {
     return this.mt ? this.ana.key : shiftKey(this.ana.key, Math.round(12 * Math.log2(this.rate())));
   }
   onReport(d) {
+    if (d.freed) return;                          // the previous track's audio, handed back to be dropped
     // d.t is the audio clock when the worklet finished this block: a shared reference for both decks
     // a report sent before our latest seek arrived would undo it (scrubbing loses steps): skip those
     if ((d.seq || 0) < (this.seekSeq || 0)) return;
@@ -2575,7 +2604,7 @@ class Deck {
   setPlaying(on) {
     if (!this.loaded) return;
     if (on && this.sync && this.master() && this.master().playing) this.alignPhase();
-    if (on && !this.playing) this.startedAt = performance.now();
+    if (on && !this.playing) { this.startedAt = performance.now(); stopBackgroundAnalysis(); }
     this.playing = on;
     this.previewing = false;
     this.sendRate();
@@ -2996,9 +3025,9 @@ async function runAnalysisQueue() {
 async function analysisLane(lane, off, st) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   while (lib.queue.length) {
-    // deck loads go first; on phones, don't analyse while music is playing (keeps playback smooth)
-    while (deckLoads > 0 || (LOWMEM && decks.some((d) => d.playing))) {
-      $("#progress").textContent = deckLoads > 0 ? "Analysis waiting…" : "Analysis paused while playing";
+    // deck loads go first; on a phone or a 2-core computer, nothing at all while music plays (see PAUSE_ANALYSIS_WHILE_PLAYING)
+    while (deckLoads > 0 || (PAUSE_ANALYSIS_WHILE_PLAYING && audible())) {
+      $("#progress").textContent = deckLoads > 0 ? "Analysis waiting…" : `Analysis paused while playing (${lib.queue.length} to go)`;
       await sleep(1000);
     }
     const playing = decks.some((d) => d.playing);
@@ -3022,11 +3051,14 @@ async function analysisLane(lane, off, st) {
         } finally { clearInflight(); }
       });
       const { mono, fs } = dec, buf = { duration: dec.duration };
-      const r = await analyzeMono(mono, fs, { noWave: true, grid: t.gridManual ? { bpm: t.bpm, firstBeat: t.firstBeat } : null });
+      // a deck started playing while this was decoding: put it back and pause
+      if (PAUSE_ANALYSIS_WHILE_PLAYING && audible()) { lib.queue.unshift(t); continue; }
+      const r = await analyzeMono(mono, fs, { noWave: true, grid: t.gridManual ? { bpm: t.bpm, firstBeat: t.firstBeat } : null }, true);
       if (!t.gridManual) { t.bpm = r.bpm; t.firstBeat = r.firstBeat; }
       t.duration = buf.duration; if (t.keyFrom !== "rekordbox" || t.key == null || t.key < 0) t.key = r.key; t.phrases = r.phrases || []; t.ver = ANALYSIS_VER;
       await saveAnalysis(t);
     } catch (e) {
+      if (e && e.name === "Paused") { lib.queue.unshift(t); continue; }       // stopped for playback: later
       t.bpm = t.bpm || 0; t.duration = t.duration || 0; t.key = -1;
     }
     st.done++;
@@ -6170,7 +6202,7 @@ $("#startBtn").addEventListener("click", async () => {
 });
 
 // test hook: lets the automated tests feed MIDI in and read the LED output
-window.cratebox = { VERSION, get showPhrases() { return showPhrases; }, get loadLock() { return loadLock; }, phraseSpans, PHRASE_COLORS, ANALYSIS_VER, FX, FX_LIST, PAD_FX, fxSelect, fxBeat, fxChannel, fxOn, fxDepth, pfxDown, pfxUp, sendClock, get jogSens() { return jogSens; }, barBeat, applyTheme, controlTick, get drawCost() { return drawCost; }, REC, recStart, recStop, setFour, applyUiSize, PL, RB, plNew, plGet, plAdd, plMove, plDelete, setView, renderTree, mountDevice, setupLayerButtons, ANALYSIS_LANES, ANALYZERS, importXml, exportXml, removeFromPlaylist, selectRow, treePress, treeMove, decks, M, lib, midiIn, MIDI, useProfile, profileFor, PROFILES, startLearn, stopLearn, addFiles, applyView, loadSelected, lanePps, camelot, A, routeOutput, initAudio, applyHeadphones, WORKLET };
+window.cratebox = { VERSION, get showPhrases() { return showPhrases; }, get loadLock() { return loadLock; }, phraseSpans, PHRASE_COLORS, ANALYSIS_VER, FX, FX_LIST, PAD_FX, fxSelect, fxBeat, fxChannel, fxOn, fxDepth, pfxDown, pfxUp, sendClock, get jogSens() { return jogSens; }, barBeat, applyTheme, controlTick, get drawCost() { return drawCost; }, REC, recStart, recStop, setFour, applyUiSize, PL, RB, plNew, plGet, plAdd, plMove, plDelete, setView, renderTree, mountDevice, PAUSE_ANALYSIS_WHILE_PLAYING, setupLayerButtons, ANALYSIS_LANES, ANALYZERS, importXml, exportXml, removeFromPlaylist, selectRow, treePress, treeMove, decks, M, lib, midiIn, MIDI, useProfile, profileFor, PROFILES, startLearn, stopLearn, addFiles, applyView, loadSelected, lanePps, camelot, A, routeOutput, initAudio, applyHeadphones, WORKLET };
 </script>
 </body>
 </html>
