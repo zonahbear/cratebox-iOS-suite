@@ -48,12 +48,38 @@ jobs:
           gh release upload ios-latest "$RUNNER_TEMP/Cratebox.ipa" --clobber
           gh release edit ios-latest --notes "Unsigned build of the ios branch, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC). Install with SideStore or AltStore." 
           echo "PUBLISHED ios-latest from ${GITHUB_SHA::7}" | tee -a ci.log
+      - name: Launch in the simulators (screenshots)
+        if: steps.app.outcome == 'success'
+        continue-on-error: true
+        run: |
+          cd ios
+          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/dds" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|BUILD" | tee -a ../ci.log
+          APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Debug-iphonesimulator/*.app | head -1)
+          mkdir -p "$RUNNER_TEMP/shots"
+          for dev in "iPhone 16 Pro" "iPad Pro 13-inch (M4)"; do
+            UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for r in d.values() for x in r if x['name']=='$dev'), ''))")
+            [ -z "$UDID" ] && UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for r in d.values() for x in r if x['name'].startswith('${dev%% *}')), ''))")
+            echo "SIM $dev $UDID" | tee -a ../ci.log
+            xcrun simctl boot "$UDID" || true
+            xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1 || true
+            xcrun simctl install "$UDID" "$APP"
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox | tee -a ../ci.log
+            sleep 12
+            xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q cratebox && echo "SIM RUNNING $dev" | tee -a ../ci.log || echo "SIM NOT RUNNING $dev (crashed?)" | tee -a ../ci.log
+            n=$(echo "$dev" | tr ' ()' '___')
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$n.png" || true
+            xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|error|crash|fatal" | head -20 | tee -a ../ci.log || true
+            xcrun simctl shutdown "$UDID" || true
+          done
+          ls "$RUNNER_TEMP/shots" | tee -a ../ci.log
       - name: Error summary to the ci-logs branch
         if: always()
         run: |
-          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |PUBLISHED|Cratebox.ipa|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |PUBLISHED|Cratebox.ipa|SIM |\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git fetch origin ci-logs || true
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
           cp summary.txt ios-latest.txt
-          git add -f ios-latest.txt && git commit -qm "ios ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs
+          mkdir -p shots && cp "$RUNNER_TEMP"/shots/*.png shots/ 2>/dev/null || true
+          git add -f ios-latest.txt shots && git commit -qm "ios ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs
