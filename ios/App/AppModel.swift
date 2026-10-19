@@ -24,6 +24,9 @@ final class AppModel: ObservableObject, ControlTarget {
     let midi = MIDIEngine()
     let midiHost = MIDIHost()
     let library = Library()
+    let recorder = Recorder()
+    let playlists = Playlists()
+    private var lastSec = 0.0
     @Published var statusText = ""
     @Published var controllerName = ""
     @Published var selection: String?           // the library row the browse knob and LOAD use
@@ -51,6 +54,7 @@ final class AppModel: ObservableObject, ControlTarget {
         core.reanalyse = { [weak self] t in if let lt = self?.library.track(t.id) { lt.rec.ver = 0; self?.library.enqueue(lt) } }
         library.status = { [weak self] s in self?.status(s) }
         library.isPlaying = { [weak self] in self?.core.decks.contains { $0.playing } ?? false }
+        recorder.app = self
         midi.target = self
         midi.send = { [weak self] b in self?.midiHost.send(b) }
         midi.loadLearned = { id in
@@ -111,6 +115,7 @@ final class AppModel: ObservableObject, ControlTarget {
         let now = hostSeconds()
         if now - lastLed > 0.05 { lastLed = now; midi.updateLeds(blink: Int(now * 2) % 2 == 0) }
         if now - lastKeep > 0.2 { lastKeep = now; midi.keepAliveTick() }
+        if now - lastSec > 1 { lastSec = now; recorder.noteAudible(core) }
         if statusUntil > 0 && now > statusUntil { statusUntil = 0; statusText = "" }
         frame += 1
         // the decks' readouts (time, beat, sync offset) follow the playhead: refresh ~20 times a second
@@ -283,6 +288,75 @@ final class AppModel: ObservableObject, ControlTarget {
         return p <= 0 ? 0 : min(1, max(0, (20 * log10(p) + 48) / 48))
     }
     func controllerStatus(_ s: String) { status(s, 6) }
+}
+
+// ---- rekordbox XML ----
+extension AppModel {
+    func importXml(_ url: URL) {
+        _ = url.startAccessingSecurityScopedResource()
+        defer { url.stopAccessingSecurityScopedResource() }
+        guard let data = try? Data(contentsOf: url), let x = try? RekordboxXML.parse(data) else { status("Couldn't read that file: not a rekordbox XML export", 8); return }
+        // match rekordbox's tracks to files Cratebox knows (file name + size, then file name)
+        var byFile = [String: LibTrack]()
+        for t in library.tracks where t.device == nil {
+            let f = (t.rec.rel as NSString).lastPathComponent.lowercased()
+            byFile["\(f)|\(t.rec.size)"] = t
+            if byFile[f] == nil { byFile[f] = t }
+        }
+        var resolved = [String: LibTrack](), matched = 0, applied = 0
+        for id in x.order {
+            guard let r = x.tracks[id] else { continue }
+            let f = r.filename.lowercased()
+            guard let t = byFile["\(f)|\(r.size)"] ?? byFile[f] else { continue }
+            matched += 1; resolved[id] = t
+            var did = false
+            if let g = r.grid, g.bpm > 0, !t.info.gridManual {
+                let spb = 60 / g.bpm, bar = 4 * spb
+                var first = g.firstBeat - Double(g.beat - 1) * spb           // back to the downbeat
+                first -= (first / bar).rounded(.down) * bar
+                t.info.bpm = g.bpm; t.info.firstBeat = first; t.info.gridManual = true
+                if t.info.autoBpm == nil { t.info.autoBpm = g.bpm; t.info.autoFirst = first }
+                did = true
+            }
+            let k = RekordboxANLZ.keyIndex(r.key)
+            if k >= 0 { t.info.key = k; t.info.keyFromRekordbox = true; did = true }
+            if t.info.duration == 0 && r.duration > 0 { t.info.duration = r.duration }
+            if !r.marks.isEmpty && core.cues.load(t.id) == nil {
+                var hot = [Double?](repeating: nil, count: 8)
+                for m in r.marks where m.num >= 0 && m.num < 8 { hot[m.num] = m.start }
+                let mem = r.marks.filter { $0.num == -1 }.map { $0.start }.min()
+                core.cues.save(t.id, cue: mem, hot: hot); did = true
+            }
+            if did { applied += 1; library.changed(t); if !t.analysed { library.enqueue(t) } }
+        }
+        // playlists go into a folder of their own
+        let df = DateFormatter(); df.dateStyle = .short
+        let top = playlists.new("rekordbox (\(df.string(from: Date())))", folder: true)
+        var made = [Int: String]()
+        for n in x.playlists {
+            let parent = n.parent.flatMap { made[$0] } ?? top.id
+            let p = playlists.new(n.name, folder: n.folder, parent: parent)
+            made[n.key] = p.id
+            if !n.folder { playlists.add(n.tracks.compactMap { resolved[$0] }, to: p.id) }
+        }
+        library.objectWillChange.send()
+        status("rekordbox XML: \(x.tracks.count) tracks (\(matched) found in your folders, grids/cues/keys taken from rekordbox for \(applied)), \(x.playlists.filter { !$0.folder }.count) playlists", 12)
+    }
+    func exportXml() -> URL? {
+        let own = library.tracks.filter { $0.device == nil }
+        let ts = own.map { t -> RekordboxXML.ExportTrack in
+            let c = core.cues.load(t.id)
+            let folderName = library.folders.first { $0.id == t.rec.folder }?.name ?? ""
+            return RekordboxXML.ExportTrack(id: t.id, title: t.info.title, artist: t.info.artist, file: (t.rec.rel as NSString).lastPathComponent, rel: folderName + "/" + t.rec.rel,
+                                            size: Int(t.rec.size), duration: t.info.duration, bpm: t.info.bpm ?? 0, firstBeat: t.info.firstBeat, key: t.info.key, cue: c?.cue, hot: c?.hot ?? [])
+        }
+        let ls = playlists.lists.map { RekordboxXML.ExportList(id: $0.id, name: $0.name, folder: $0.folder, parent: $0.parent, order: $0.order, items: $0.items) }
+        let s = RekordboxXML.export(ts, ls, root: UserDefaults.standard.string(forKey: "cb.basePath") ?? "")
+        let u = Recorder.folder.appendingPathComponent("cratebox-rekordbox.xml")
+        do { try s.write(to: u, atomically: true, encoding: .utf8) } catch { status("Couldn't write the XML: \(error.localizedDescription)"); return nil }
+        status("Exported \(own.count) tracks and \(playlists.lists.filter { !$0.folder }.count) playlists. In rekordbox: Preferences → Advanced → Imported Library = this file.", 12)
+        return u
+    }
 }
 
 enum Settings {

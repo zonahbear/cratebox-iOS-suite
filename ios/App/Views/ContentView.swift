@@ -55,6 +55,7 @@ struct ContentView: View {
                 Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: 170)
             }
             Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+            RecButton()
             LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
             Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
         }.padding(.horizontal, 4)
@@ -96,6 +97,9 @@ struct SettingsView: View {
     @Environment(\.dismiss) var dismiss
     @AppStorage("cb.bpmRange") var bpmRange = "88-175"
     @AppStorage("cb.split") var split = false
+    @AppStorage("cb.recFmt") var recFmt = "wav"
+    @AppStorage("cb.phrases") var phrases = true
+    @AppStorage("cb.wave") var waveStyle = "rgb"
     @State private var warn = false
     @State private var learning = false
     @State private var hint = ""
@@ -106,9 +110,18 @@ struct SettingsView: View {
                 Section("Sound") {
                     LabeledContent("Output", value: app.audio.routeName.isEmpty ? "—" : app.audio.routeName)
                     LabeledContent("Headphones", value: app.audio.outputChannels >= 4 ? "Controller's headphone jack (outputs 3/4)" : split ? "Split: master left, cue right" : "Master only (no cue)")
+                    Button("Test cue (three beeps in the headphones only)") { app.audio.engine.post(.testCue) }
                     if app.audio.outputChannels < 4 {
                         Toggle("Split (mono master left, mono cue right, with a splitter cable)", isOn: $split).onChange(of: split) { _, v in app.audio.setSplit(v) }
                     }
+                }
+                Section("Look") {
+                    Toggle("Phrases (Intro / Build / Drop… on the waveforms)", isOn: $phrases)
+                    Picker("Waveform", selection: $waveStyle) { Text("RGB (red lows, green mids, blue highs)").tag("rgb"); Text("3-band").tag("3band") }
+                }
+                Section("Recording") {
+                    Picker("Format", selection: $recFmt) { Text("WAV (lossless, ~650 MB per hour)").tag("wav"); Text("AAC 256 kbps (~115 MB per hour)").tag("aac") }
+                    Text("Recordings and their tracklists go to Files → On My iPhone/iPad → Cratebox.").font(.caption).foregroundStyle(Theme.muted)
                 }
                 Section("Decks") {
                     Toggle("4 decks", isOn: Binding(get: { core.four }, set: { core.setFour($0); if !$0 { app.midi.resetSides() } }))
@@ -164,5 +177,22 @@ struct LearnView: View {
         .navigationTitle("MIDI learn")
         .onAppear { app.midi.learnHint = { h in hint = h }; app.midi.startLearn() }
         .onDisappear { app.midi.stopLearn() }
+    }
+}
+
+struct RecButton: View {
+    @EnvironmentObject var app: AppModel
+    var body: some View { RecInner(rec: app.recorder) }
+}
+struct RecInner: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var rec: Recorder
+    var body: some View {
+        Button { rec.recording ? rec.stop(app.audio.engine) : rec.start(app.audio.engine) } label: {
+            HStack(spacing: 4) {
+                Circle().fill(rec.recording ? Theme.hot : Theme.dim).frame(width: 8, height: 8)
+                Text(rec.recording ? String(format: "%d:%02d", Int(rec.seconds) / 60, Int(rec.seconds) % 60) : "REC").font(.system(size: 11, weight: .bold, design: .monospaced))
+            }.padding(.horizontal, 8).frame(height: 26).background(Capsule().fill(Theme.raise))
+        }.buttonStyle(.plain)
     }
 }

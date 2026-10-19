@@ -233,6 +233,8 @@ struct JogView: View {
 /// cues and the loop. Drag it to scratch.
 struct WaveformView: View {
     @EnvironmentObject var app: AppModel
+    @AppStorage("cb.phrases") var showPhrases = true
+    @AppStorage("cb.wave") var waveStyle = "rgb"
     @ObservedObject var deck: DeckModel
     let color: Color
     @State private var dragX: CGFloat?
@@ -271,15 +273,24 @@ struct WaveformView: View {
             let k = Int(t * wps)
             if k >= 0 && k < w.peak.count {
                 let pk = Double(w.peak[k]) / 255, lo = Double(w.low[k]) / 255, mi = Double(w.mid[k]) / 255, hi = Double(w.high[k]) / 255
-                let s = max(0.001, lo + mi + hi)
-                let col = Color(red: min(1, 0.25 + lo / s * 1.1), green: min(1, 0.25 + mi / s * 1.1), blue: min(1, 0.3 + hi / s * 1.1))
-                let h = pk * mid * 0.95
-                ctx.fill(Path(CGRect(x: Double(x), y: mid - h, width: Double(step), height: max(1, 2 * h))), with: .color(col.opacity(t < now ? 0.55 : 1)))
+                let past = t < now
+                if waveStyle == "3band" {
+                    // the older blue / orange / white style: lows, mids and highs stacked
+                    for (v, c) in [(lo, Theme.hex(0x2f6fff)), (mi, Theme.hex(0xff9a3c)), (hi, Color.white)] {
+                        let h = v * mid * 0.95
+                        ctx.fill(Path(CGRect(x: Double(x), y: mid - h, width: Double(step), height: max(1, 2 * h))), with: .color(c.opacity(past ? 0.4 : 0.85)))
+                    }
+                } else {
+                    let s = max(0.001, lo + mi + hi)
+                    let col = Color(red: min(1, 0.25 + lo / s * 1.1), green: min(1, 0.25 + mi / s * 1.1), blue: min(1, 0.3 + hi / s * 1.1))
+                    let h = pk * mid * 0.95
+                    ctx.fill(Path(CGRect(x: Double(x), y: mid - h, width: Double(step), height: max(1, 2 * h))), with: .color(col.opacity(past ? 0.55 : 1)))
+                }
             }
             x += step
         }
         // phrases along the top
-        for p in a.phrases {
+        for p in showPhrases ? a.phrases : [] {
             let end = p.start + Double(p.bars) * 4 * deck.spb
             let x0 = (p.start - t0) * pps, x1 = (end - t0) * pps
             if x1 < 0 || x0 > W { continue }

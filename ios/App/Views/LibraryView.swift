@@ -17,6 +17,10 @@ struct LibraryPane: View {
     @State private var renaming: String?
     @State private var renameText = ""
     @State private var editMode: EditMode = .inactive
+    @State private var pickXml = false
+    @State private var exported: URL?
+    @State private var askBase = false
+    @State private var basePath = ""
 
     // ---- what the list shows ----
     var viewKey: String {
@@ -97,6 +101,13 @@ struct LibraryPane: View {
         .background(Theme.panel)
         .fileImporter(isPresented: $pickFolder, allowedContentTypes: [.folder]) { r in if case .success(let u) = r { _ = library.addFolder(u) } }
         .fileImporter(isPresented: $pickUSB, allowedContentTypes: [.folder]) { r in if case .success(let u) = r { devices.open(u) } }
+        .fileImporter(isPresented: $pickXml, allowedContentTypes: [.xml]) { r in if case .success(let u) = r { app.importXml(u) } }
+        .sheet(item: Binding(get: { exported.map { Shared(url: $0) } }, set: { exported = $0?.url })) { s in ShareSheet(items: [s.url]) }
+        .alert("Where is your music folder on the computer rekordbox runs on?", isPresented: $askBase) {
+            TextField("e.g. C:\\Users\\you\\Music", text: $basePath)
+            Button("OK") { UserDefaults.standard.set(basePath.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "[\\\\/]+$", with: "", options: .regularExpression), forKey: "cb.basePath") }
+            Button("Cancel", role: .cancel) {}
+        } message: { Text("rekordbox needs full paths. The folder you added in Cratebox is the last part of it.") }
         .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameText)
             Button("OK") { commitRename() }
@@ -238,6 +249,11 @@ struct LibraryPane: View {
                     Spacer()
                     Button { let p = playlists.new(playlists.nextName("Playlist")); renaming = "pl:" + p.id; renameText = p.name } label: { Image(systemName: "plus") }
                     Button { let p = playlists.new(playlists.nextName("Folder"), folder: true); renaming = "pl:" + p.id; renameText = p.name } label: { Image(systemName: "folder.badge.plus") }
+                    Menu {
+                        Button("Import rekordbox XML…") { pickXml = true }
+                        Button("Export to rekordbox XML") { if let u = app.exportXml() { exported = u } }
+                        Button("Music folder path for export…") { basePath = UserDefaults.standard.string(forKey: "cb.basePath") ?? ""; askBase = true }
+                    } label: { Image(systemName: "ellipsis.circle") }
                 }
             }
             Section {
@@ -342,4 +358,11 @@ extension Array {
     func stableSort(_ less: (Element, Element) -> Bool) -> [Element] {
         enumerated().sorted { a, b in less(a.element, b.element) || (!less(b.element, a.element) && a.offset < b.offset) }.map { $0.element }
     }
+}
+
+struct Shared: Identifiable { let url: URL; var id: String { url.path } }
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    func makeUIViewController(context: Context) -> UIActivityViewController { UIActivityViewController(activityItems: items, applicationActivities: nil) }
+    func updateUIViewController(_ c: UIActivityViewController, context: Context) {}
 }

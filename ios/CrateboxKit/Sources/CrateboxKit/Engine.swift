@@ -17,6 +17,10 @@ public enum EngineCommand {
     case fx(unit: Int, slot: FxSlotName, fx: FxKind?, beats: Double?, depth: Double?, on: Bool?)   // unit 0-3 = decks, 4 = master
     case clock(unit: Int, FxClock)
     case output(OutputMode)
+    /// set or clear the recording tap on the audio thread itself (so it never changes mid-block)
+    case recordTap(((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?)
+    /// three short beeps in the headphone mix only (if the speakers play them too, cue isn't separate)
+    case testCue
 }
 public enum FxSlotName { case beat, pad }
 
@@ -30,6 +34,7 @@ public final class Engine {
     var gMaster: Double, gHpCue = 1.0, gHpMaster = 0.0, gMcue = 0.0
     public private(set) var output: OutputMode = .stereo
     var frames: Int64 = 0
+    var beepLeft = 0, beepPhase = 0.0
     // scratch, allocated once
     let B = 128
     let dl: [UnsafeMutablePointer<Float>], dr: [UnsafeMutablePointer<Float>]
@@ -44,7 +49,7 @@ public final class Engine {
     var reportTime = 0.0, reportHost = 0.0, reportMaster: (Float, Float) = (0, 0)
     var trash = [PCMTrack]()                    // replaced tracks, freed off the audio thread
     /// a copy of the master output (after the limiter) for recording; set by the recorder
-    public var recordTap: ((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?
+    var recordTap: ((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?
 
     public init(sampleRate: Double) {
         self.sampleRate = sampleRate
@@ -87,6 +92,8 @@ public final class Engine {
             (slot == .beat ? unit.beat : unit.pad).set(fx: fx, beats: beats, depth: depth, on: on)
         case .clock(let u, let c): (u < 4 ? strips[u].fx : masterFx).clock = c
         case .output(let o): output = o
+        case .recordTap(let f): recordTap = f
+        case .testCue: beepLeft = Int(1.05 * sampleRate); beepPhase = 0
         }
     }
 
@@ -117,12 +124,19 @@ public final class Engine {
                 let ml = Double(mL[j]) * gMaster, mr = Double(mR[j]) * gMaster
                 // headphones: the CUE mix, the master by the CUE/MASTER knob, and MASTER CUE at full level
                 hL[j] = Float(Double(cL[j]) * gHpCue + ml * (gHpMaster + gMcue)); hR[j] = Float(Double(cR[j]) * gHpCue + mr * (gHpMaster + gMcue))
+                if beepLeft > 0 {
+                    // 3 x 150 ms of 880 Hz, 200 ms apart
+                    let pos = Int(1.05 * sampleRate) - beepLeft, cyc = Int(0.35 * sampleRate)
+                    if pos % cyc < Int(0.15 * sampleRate) { let b = Float(0.3 * sin(beepPhase)); hL[j] += b; hR[j] += b }
+                    beepPhase += 2 * Double.pi * 880 / sampleRate
+                    beepLeft -= 1
+                }
                 var l = ml, r = mr
                 limiter.run(&l, &r)
                 mL[j] = Float(l); mR[j] = Float(r)
                 if abs(mL[j]) > mpl { mpl = abs(mL[j]) }; if abs(mR[j]) > mpr { mpr = abs(mR[j]) }
             }
-            recordTap?(mL, mR, m)
+            if let tap = recordTap { tap(mL, mR, m) }
             switch output {
             case .quad where outs.count >= 4:
                 for j in 0..<m { outs[0][done + j] = mL[j]; outs[1][done + j] = mR[j]; outs[2][done + j] = hL[j]; outs[3][done + j] = hR[j] }

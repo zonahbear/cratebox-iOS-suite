@@ -3,7 +3,6 @@ import SwiftUI
 @main
 struct CrateboxApp: App {
     @StateObject private var app = AppModel()
-    @StateObject private var playlists = Playlists()
     var body: some Scene {
         WindowGroup {
             ContentView()
@@ -11,8 +10,9 @@ struct CrateboxApp: App {
                 .environmentObject(app.core)
                 .environmentObject(app.core.fx)
                 .environmentObject(app.library)
-                .environmentObject(playlists)
+                .environmentObject(app.playlists)
                 .environmentObject(Devices.shared)
+                .environmentObject(app.recorder)
                 .preferredColorScheme(.dark)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)

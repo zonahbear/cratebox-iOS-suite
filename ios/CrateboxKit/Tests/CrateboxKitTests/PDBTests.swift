@@ -69,3 +69,49 @@ final class ANLZTests: XCTestCase {
         XCTAssertEqual(RekordboxANLZ.keyIndex("C"), 0); XCTAssertEqual(RekordboxANLZ.keyIndex("Ebm"), 15); XCTAssertEqual(RekordboxANLZ.keyIndex(""), -1)
     }
 }
+
+/// rekordbox XML both ways, on the file tests/test_playlists.py imports into the web app
+final class XMLTests: XCTestCase {
+    let xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DJ_PLAYLISTS Version="1.0.0"><PRODUCT Name="rekordbox" Version="6.8.5" Company="AlphaTheta"/>
+    <COLLECTION Entries="2">
+    <TRACK TrackID="11" Name="House Groove" Artist="Test Artist" Kind="WAV File" Size="13230044" TotalTime="60" AverageBpm="126.00" Tonality="Am"
+     Location="file://localhost/C:/Users/jonah/Music/Test%20Artist%20-%20House%20Groove%20126.wav">
+     <TEMPO Inizio="0.367" Bpm="126.00" Metro="4/4" Battito="1"/>
+     <POSITION_MARK Name="" Type="0" Start="0.367" Num="-1"/>
+     <POSITION_MARK Name="drop" Type="0" Start="15.600" Num="0" Red="40" Green="226" Blue="20"/>
+     <POSITION_MARK Name="" Type="0" Start="30.000" Num="3"/>
+    </TRACK>
+    <TRACK TrackID="12" Name="Ghost Track" Artist="Nobody" Kind="MP3 File" Size="12345" TotalTime="200" AverageBpm="140.00" Tonality="8A"
+     Location="file://localhost/C:/Users/jonah/Music/ghost.mp3"><TEMPO Inizio="0.1" Bpm="140.00" Metro="4/4" Battito="1"/></TRACK>
+    </COLLECTION>
+    <PLAYLISTS><NODE Type="0" Name="ROOT" Count="2">
+     <NODE Type="0" Name="Bass" Count="1"><NODE Name="Wobbles" Type="1" KeyType="0" Entries="2"><TRACK Key="11"/><TRACK Key="12"/></NODE></NODE>
+     <NODE Name="Warmup" Type="1" KeyType="0" Entries="1"><TRACK Key="11"/></NODE>
+    </NODE></PLAYLISTS></DJ_PLAYLISTS>
+    """
+    func testImport() throws {
+        let x = try RekordboxXML.parse(Data(xml.utf8))
+        XCTAssertEqual(x.tracks.count, 2)
+        let h = x.tracks["11"]!
+        XCTAssertEqual(h.filename, "Test Artist - House Groove 126.wav"); XCTAssertEqual(h.size, 13230044)
+        XCTAssertEqual(h.grid!.bpm, 126); XCTAssertEqual(h.grid!.firstBeat, 0.367)
+        XCTAssertEqual(h.marks.count, 3); XCTAssertEqual(RekordboxANLZ.keyIndex(h.key), 21)
+        XCTAssertEqual(x.playlists.map { $0.name }, ["Bass", "Wobbles", "Warmup"])
+        XCTAssertEqual(x.playlists[1].parent, 0); XCTAssertNil(x.playlists[2].parent)
+        XCTAssertEqual(x.playlists[1].tracks, ["11", "12"])
+        XCTAssertThrowsError(try RekordboxXML.parse(Data("<foo/>".utf8)))
+    }
+    func testExportReadsBack() throws {
+        let t = RekordboxXML.ExportTrack(id: "a", title: "House Groove 126", artist: "Test Artist", file: "Test Artist - House Groove 126.wav", rel: "music/Test Artist - House Groove 126.wav",
+                                         size: 13230044, duration: 75, bpm: 126, firstBeat: 0.367, key: 21, cue: 0.367, hot: [15.6, nil, nil, 30, nil, nil, nil, nil])
+        let s = RekordboxXML.export([t], [RekordboxXML.ExportList(id: "f", name: "Saturday", folder: true, parent: nil, order: 0, items: []),
+                                          RekordboxXML.ExportList(id: "p", name: "Peak time", folder: false, parent: "f", order: 0, items: ["a", "missing"])], root: "C:\\Users\\jonah\\Music")
+        XCTAssertTrue(s.contains("Location=\"file://localhost/C:/Users/jonah/Music/Test%20Artist%20-%20House%20Groove%20126.wav\""), s)
+        let x = try RekordboxXML.parse(Data(s.utf8))
+        XCTAssertEqual(x.tracks["1"]?.grid?.bpm, 126); XCTAssertEqual(x.tracks["1"]?.key, "Am")
+        XCTAssertEqual(x.playlists.map { $0.name }, ["Saturday", "Peak time"]); XCTAssertEqual(x.playlists[1].tracks, ["1"])
+        XCTAssertEqual(x.tracks["1"]?.marks.count, 3)
+    }
+}
