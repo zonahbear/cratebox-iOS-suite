@@ -1,0 +1,1095 @@
+{
+ "deck_plain": {
+  "proc": "deck-player",
+  "blocks": 400,
+  "input": false,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "load",
+     "L": "signal",
+     "R": "signal",
+     "mt": false
+    }
+   },
+   {
+    "block": 2,
+    "msg": {
+     "t": "play",
+     "v": true
+    }
+   },
+   {
+    "block": 150,
+    "msg": {
+     "t": "rate",
+     "v": 1.06
+    }
+   },
+   {
+    "block": 300,
+    "msg": {
+     "t": "play",
+     "v": false
+    }
+   }
+  ]
+ },
+ "deck_mt": {
+  "proc": "deck-player",
+  "blocks": 400,
+  "input": false,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "load",
+     "L": "signal",
+     "R": "signal",
+     "mt": true
+    }
+   },
+   {
+    "block": 0,
+    "msg": {
+     "t": "rate",
+     "v": 0.94
+    }
+   },
+   {
+    "block": 1,
+    "msg": {
+     "t": "play",
+     "v": true
+    }
+   },
+   {
+    "block": 200,
+    "msg": {
+     "t": "rate",
+     "v": 1.08
+    }
+   }
+  ]
+ },
+ "deck_loop_seek": {
+  "proc": "deck-player",
+  "blocks": 500,
+  "input": false,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "load",
+     "L": "signal",
+     "R": "signal",
+     "mt": false
+    }
+   },
+   {
+    "block": 0,
+    "msg": {
+     "t": "seek",
+     "v": 22050
+    }
+   },
+   {
+    "block": 1,
+    "msg": {
+     "t": "play",
+     "v": true
+    }
+   },
+   {
+    "block": 50,
+    "msg": {
+     "t": "loop",
+     "on": true,
+     "a": 30000,
+     "b": 41025
+    }
+   },
+   {
+    "block": 300,
+    "msg": {
+     "t": "loop",
+     "on": false,
+     "a": 0,
+     "b": 0
+    }
+   },
+   {
+    "block": 320,
+    "msg": {
+     "t": "seek",
+     "v": 100000
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "bend",
+     "v": 0.05
+    }
+   }
+  ]
+ },
+ "deck_scratch": {
+  "proc": "deck-player",
+  "blocks": 400,
+  "input": false,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "load",
+     "L": "signal",
+     "R": "signal",
+     "mt": false
+    }
+   },
+   {
+    "block": 1,
+    "msg": {
+     "t": "play",
+     "v": true
+    }
+   },
+   {
+    "block": 100,
+    "msg": {
+     "t": "scratch",
+     "v": true
+    }
+   },
+   {
+    "block": 101,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 102,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 103,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 104,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 105,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 106,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 107,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 108,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 109,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 110,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 111,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 112,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 113,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 114,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 115,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 116,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 117,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 118,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 119,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 120,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 121,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 122,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 123,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 124,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 125,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 126,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 127,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 128,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 129,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 130,
+    "msg": {
+     "t": "jog",
+     "v": -300
+    }
+   },
+   {
+    "block": 131,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 132,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 133,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 134,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 135,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 136,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 137,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 138,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 139,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 140,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 141,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 142,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 143,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 144,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 145,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 146,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 147,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 148,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 149,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 150,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 151,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 152,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 153,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 154,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 155,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 156,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 157,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 158,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 159,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 160,
+    "msg": {
+     "t": "jog",
+     "v": 300
+    }
+   },
+   {
+    "block": 200,
+    "msg": {
+     "t": "scratch",
+     "v": false
+    }
+   },
+   {
+    "block": 250,
+    "msg": {
+     "t": "scratch",
+     "v": true
+    }
+   },
+   {
+    "block": 251,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 252,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 253,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 254,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 255,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 256,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 257,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 258,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 259,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 260,
+    "msg": {
+     "t": "jog",
+     "v": -2500
+    }
+   },
+   {
+    "block": 262,
+    "msg": {
+     "t": "scratch",
+     "v": false
+    }
+   }
+  ]
+ },
+ "fx_ECHO": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "ECHO",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_DELAY": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "DELAY",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_PING_PONG": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "PING PONG",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_REVERB": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "REVERB",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_FLANGER": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "FLANGER",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_FILTER": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "FILTER",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_TRANS": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "TRANS",
+     "beats": 0.25,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_ROLL": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "ROLL",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_HPF": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "HPF",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_LPF": {
+  "proc": "fx-unit",
+  "blocks": 700,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 10,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "LPF",
+     "beats": 0.5,
+     "depth": 0.7,
+     "on": true
+    }
+   },
+   {
+    "block": 400,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "on": false
+    }
+   }
+  ]
+ },
+ "fx_pad_and_beat": {
+  "proc": "fx-unit",
+  "blocks": 500,
+  "input": true,
+  "steps": [
+   {
+    "block": 0,
+    "msg": {
+     "t": "clock",
+     "t0": 0,
+     "beat0": 0,
+     "bps": 2.1,
+     "spb": 0.47619047619047616
+    }
+   },
+   {
+    "block": 5,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "fx": "ECHO",
+     "beats": 0.75,
+     "depth": 0.5,
+     "on": true
+    }
+   },
+   {
+    "block": 100,
+    "msg": {
+     "t": "slot",
+     "slot": "pad",
+     "fx": "ROLL",
+     "beats": 0.125,
+     "depth": 1,
+     "on": true
+    }
+   },
+   {
+    "block": 250,
+    "msg": {
+     "t": "slot",
+     "slot": "pad",
+     "on": false
+    }
+   },
+   {
+    "block": 300,
+    "msg": {
+     "t": "slot",
+     "slot": "beat",
+     "depth": 0.9,
+     "beats": 1
+    }
+   }
+  ]
+ }
+}
