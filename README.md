@@ -95,7 +95,8 @@ Not mapped yet: Beat FX, sampler, Pad FX, key shift, and the SMART CFX/keyboard 
 - Decks 3 and 4 start **compact**: title, waveform, CUE, PLAY, SYNC, a 4-beat loop and ± tempo. **⤢** opens the full deck.
 - Load them by dragging a track onto them, or with Ctrl+Shift+← / → (Shift+← / → loads decks 1 and 2).
 - With four decks, SYNC follows the deck that isn't synced itself and is playing (the one playing longest, if there are several).
-- **Deck layers** (playing decks 3 and 4 from a 2-channel controller like the FLX4): the toggles at the top of the mixer pick which deck each side of the controller plays. **1 | 3** on the left, **2 | 4** on the right; click to switch. Everything on that side follows: PLAY, CUE, SYNC, the jog, pads, loops, LOAD, the tempo fader, and that channel's fader, EQ, TRIM, CFX and CUE, plus the lights and the VU meter. The decks the controller is playing have an outline in their colour. The BEAT FX CH SELECT lever follows the side it points at.
+- **Deck layers** (playing decks 3 and 4 from a 2-channel controller like the FLX4): above the mixer's channel strips there's one number per deck, in the mixer's order **3 1 | 2 4**. Click a deck's number to put that side of the controller on it (left side: 1 or 3, right side: 2 or 4). The decks the controller plays are lit, with a slow pulse, and their players get an outline in their colour. Everything on that side follows: PLAY, CUE, SYNC, the jog, pads, loops, LOAD, the tempo fader, and that channel's fader, EQ, TRIM, CFX and CUE, plus the lights and the VU meter. The BEAT FX CH SELECT lever follows the side it points at.
+- **On the FLX4's SMART CFX and SMART FADER:** Settings → Controller → **Deck layers on SMART CFX / FADER…**, then press SMART CFX and SMART FADER when asked. From then on SMART CFX switches the left side 1 ⇄ 3 and SMART FADER the right side 2 ⇄ 4, and each flashes while its side is on deck 3 or 4. (Any two spare buttons work the same way on other controllers.)
 - **No jumps when you switch:** after switching, a fader or knob only takes over once you move it to (or past) the new deck's setting, so deck 3's tempo or volume never jumps to where deck 1's was (soft takeover). Until then, moving it does nothing.
 - The toggles can be learned onto spare buttons (Settings → Controller → **Learn…**, click a toggle, press the button). Going back to **2 DECKS** puts the controller on decks 1 and 2 again.
 
@@ -119,7 +120,8 @@ Playback runs on the browser's real-time audio thread and nothing else in the ap
 - Sync and the beat lock run on their own timer, not the screen refresh: they keep working with the tab in the background or the screen busy, and a drawing error can't stop them.
 - A stopped deck costs (almost) nothing; decks 3 and 4 use no audio processing until 4-deck mode is turned on.
 - The recorder reuses its buffers, so it makes no garbage on the audio thread.
-- Library analysis slows down while music plays; waveform drawing skips frames on a slow computer before anything else gives.
+- Library analysis runs two tracks at a time on a computer with 4 or more hardware threads, and drops to one, with a breather between tracks, while music plays; waveform drawing skips frames on a slow computer before anything else gives.
+- If the browser stops the audio (another app such as rekordbox takes the controller's sound, the controller is unplugged, the laptop sleeps), Cratebox starts it again by itself and shows a small banner until it's back; it never covers the decks.
 - **Audio buffer** (Settings): Medium is the default. Small gives the tightest jog feel on a strong computer; Large is the safest from dropouts. It takes effect after a reload.
 
 ## Report a problem

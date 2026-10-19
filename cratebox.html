@@ -68,6 +68,20 @@ header { min-width: 0; overflow: hidden; }
 .dbpm span { font-size: 11px; color: var(--muted); }
 .dinfo { display: flex; flex-wrap: wrap; row-gap: 4px; align-items: center; gap: 12px; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
 .dinfo .remain { color: var(--fg); font-size: 16px; }
+/* one line, and GRID / MT / Q never move: the buttons don't shrink, and when the changing labels (phrase,
+   sync offset, key, MASTER) need room, the phrase name and the elapsed time give way (cut off with …)
+   instead of pushing the buttons sideways or onto a second line */
+.dinfo { flex-wrap: nowrap; min-width: 0; font-variant-numeric: tabular-nums; }
+.dinfo > * { flex-shrink: 0; }
+.dinfo > .spacer { flex: 1 1 0; min-width: 0; }
+.dinfo > span:first-child, .dinfo > .phrasetag { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dinfo > .phrasetag { flex-shrink: 40; font-variant-numeric: tabular-nums; }
+.dinfo > span:first-child { flex-shrink: 20; }
+/* on a narrow deck the beat dots, then the key and MASTER labels give way too, so the row can always fit */
+.dinfo > .beats { flex-shrink: 8; min-width: 0; overflow: hidden; }
+.dinfo > .keytag, .dinfo > .mastertag { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dinfo > .phasetag { width: 52px; min-width: 52px; }
+.dinfo { gap: 9px; }
 .beats { display: flex; gap: 3px; }
 .beats i { width: 16px; height: 6px; background: var(--line2); border-radius: 1px; }
 .beats i.on { background: var(--c); }
@@ -417,9 +431,9 @@ html.phone #list .hdr { height: 26px; padding: 0 10px; }
   #rotate span { color: var(--muted); max-width: 280px; }
 }
 @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
-#resume { position: fixed; inset: 0; z-index: 90; background: #000c; display: flex; align-items: center; justify-content: center; }
+#resume { position: fixed; top: 48px; left: 50%; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 10px; background: #1b1416; border: 1px solid #ff3b55; box-shadow: 0 8px 30px #000a; color: #ffd7dd; font-size: 13px; max-width: calc(100vw - 32px); }
 #resume[hidden] { display: none; }
-#resume button { height: 52px; padding: 0 28px; border-radius: 12px; border: 0; background: var(--d0); color: #031321; font-family: var(--f-disp); font-weight: 700; font-size: 18px; letter-spacing: .06em; }
+#resume button { height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--d0); color: #031321; font-family: var(--f-disp); font-weight: 700; font-size: 18px; letter-spacing: .06em; }
 
 /* ---- touch screens, iPad and iPhone ---- */
 button, select, .pad, .sq { touch-action: manipulation; }
@@ -567,16 +581,20 @@ html.four #mixer > .strip[data-i="0"] { grid-column: 2; grid-row: 2; }
 html.four #mixer > .mcenter { grid-column: 3; grid-row: 2; }
 html.four #mixer > .strip[data-i="1"] { grid-column: 4; grid-row: 2; }
 html.four #mixer > .strip.s3 { grid-column: 5; grid-row: 2; }
-/* deck layers: which decks the controller's sides play (1|3 on the left, 2|4 on the right) */
-.layers { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
-.layerbtn { display: inline-flex; padding: 0; border: 1px solid var(--line2); border-radius: 5px; overflow: hidden; background: #0c0e12; height: 22px; }
-.layerbtn span { min-width: 24px; padding: 0 6px; display: grid; place-items: center; font-family: var(--f-disp); font-weight: 700; font-size: 13px; color: var(--muted); }
-html.touch .layerbtn { height: 30px; }
-html.touch .layerbtn span { min-width: 34px; font-size: 15px; }
-.layerbtn span.on[data-d="0"] { background: var(--d0); color: #031321; }
-.layerbtn span.on[data-d="1"] { background: var(--d1); color: #1d0c02; }
-.layerbtn span.on[data-d="2"] { background: var(--d2); color: #02201c; }
-.layerbtn span.on[data-d="3"] { background: var(--d3); color: #220320; }
+/* deck layers: each deck's number over its own channel strip (3 1 | 2 4); the decks the controller plays
+   are lit in their colour with a slow, soft pulse */
+html.four #mixer > .layers { display: grid; grid-template-columns: subgrid; align-items: center; justify-items: center; }
+.layercell { width: 100%; max-width: 56px; height: 22px; padding: 0; border: 1px solid var(--line2); border-radius: 5px; background: #0c0e12;
+  font-family: var(--f-disp); font-weight: 700; font-size: 13px; color: var(--muted); }
+.layercell.on { color: #0a0b0d; border-color: transparent; animation: layerpulse 1.6s ease-in-out infinite; }
+.layercell.on[data-d="0"] { background: var(--d0); }
+.layercell.on[data-d="1"] { background: var(--d1); }
+.layercell.on[data-d="2"] { background: var(--d2); }
+.layercell.on[data-d="3"] { background: var(--d3); }
+.layerlabel { font-size: 9px; }
+@keyframes layerpulse { 50% { filter: brightness(.72); } }
+@media (prefers-reduced-motion: reduce) { .layercell.on { animation: none; } }
+html.touch .layercell { height: 30px; font-size: 15px; }
 html.four .deck.hw[data-i="0"] { outline: 2px solid var(--d0); outline-offset: -2px; }
 html.four .deck.hw[data-i="1"] { outline: 2px solid var(--d1); outline-offset: -2px; }
 html.four .deck.hw[data-i="2"] { outline: 2px solid var(--d2); outline-offset: -2px; }
@@ -767,6 +785,7 @@ html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme=
             <select class="hsel" id="ctlProfile"></select>
             <p id="ctlNote" class="ctlnote"></p>
             <div class="ctlrow"><button class="hbtn" id="ctlLearn">Learn…</button><button class="hbtn" id="ctlClear">Clear learned</button>
+              <button class="hbtn" id="ctlSmart" title="Use two spare buttons (on the FLX4: SMART CFX and SMART FADER) to switch the controller's sides between decks 1/3 and 2/4 in 4-deck mode. Their lights flash while a side is on deck 3 or 4.">Deck layers on SMART CFX / FADER…</button>
               <button class="hbtn" id="ctlExport">Export</button><button class="hbtn" id="ctlImport">Import</button>
               <input type="file" id="ctlImportFile" accept=".json,application/json" class="pick"></div>
           </div>
@@ -821,7 +840,7 @@ html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme=
   <button class="hbtn" data-learn="load" data-deck="0">Load 1</button><button class="hbtn" data-learn="load" data-deck="1">Load 2</button>
   <button class="hbtn" data-learn="jogSide" data-deck="0">Jog side 1</button><button class="hbtn" data-learn="jogSide" data-deck="1">Jog side 2</button></span>
   <button class="hbtn" id="learnDone">Done</button></div>
-<div id="resume" hidden><button>Tap to resume audio</button></div>
+<div id="resume" hidden role="alert"><span id="resumeText">Audio stopped. Starting it again…</span><button>Start audio</button></div>
 <div class="sheet" id="setSheet" hidden><div class="panel"><h3>SETTINGS<span class="spacer"></span><button class="iconbtn" data-close>✕</button></h3><div id="setBody"></div></div></div>
 <div id="recPanel" hidden><div class="row"><b id="recTitle">RECORDING SAVED</b><span class="spacer"></span><button class="iconbtn" id="recClose" aria-label="Close">✕</button></div>
   <span class="ctlnote" id="recInfo"></span><pre id="recList"></pre>
@@ -1555,17 +1574,12 @@ function beatGrid(x, fs, range) {
   const NB = 16, bandOf = new Int8Array(N / 2).fill(-1);
   for (let k = b0; k < b2; k++) bandOf[k] = Math.min(NB - 1, Math.floor(NB * Math.log(k / b0) / Math.log(b2 / b0)));
   const spec = new Float32Array(frames * NB);
-  const re = new Float64Array(N), im = new Float64Array(N);
+  const re = new Float64Array(N), im = new Float64Array(N), ma = new Float64Array(N / 2), mb = new Float64Array(N / 2);
   let prev = new Float32Array(N / 2), cur = new Float32Array(N / 2);
-  for (let t = 0; t < frames; t++) {
-    const s0 = t * hop;
-    let e = 0;
-    for (let i = 0; i < N; i++) { const v = x[s0 + i]; re[i] = v * win[i]; im[i] = 0; e += v * v; }
-    rms[t] = Math.sqrt(e / N);
-    fft(re, im);
+  const frameOut = (t, mag) => {
     let lo = 0, mi = 0, hi = 0;
     for (let k = b0; k <= b3; k++) {
-      const L = Math.log(1 + 100 * Math.hypot(re[k], im[k]));
+      const L = Math.log(1 + 100 * mag[k]);
       cur[k] = L;
       const d = L - prev[k];
       if (d > 0) { if (k < b1) lo += d; else if (k < b2) mi += d; else hi += d; }
@@ -1574,6 +1588,19 @@ function beatGrid(x, fs, range) {
     }
     fLow[t] = lo / (b1 - b0); fMid[t] = mi / (b2 - b1); fHigh[t] = hi / (b3 - b2 + 1);
     const tmp = prev; prev = cur; cur = tmp;
+  };
+  // frames t and t+1 share one FFT (see splitMags): half the FFTs, same spectra
+  for (let t = 0; t < frames; t += 2) {
+    const sa = t * hop, sb = sa + hop, two = t + 1 < frames;
+    let ea = 0, eb = 0;
+    if (two) for (let i = 0; i < N; i++) { const v = x[sa + i], w = x[sb + i]; re[i] = v * win[i]; im[i] = w * win[i]; ea += v * v; eb += w * w; }
+    else for (let i = 0; i < N; i++) { const v = x[sa + i]; re[i] = v * win[i]; im[i] = 0; ea += v * v; }
+    rms[t] = Math.sqrt(ea / N);
+    if (two) rms[t + 1] = Math.sqrt(eb / N);
+    fft(re, im);
+    splitMags(re, im, b0, b3, ma, mb);
+    frameOut(t, ma);
+    if (two) frameOut(t + 1, mb);
   }
   fLow[0] = fMid[0] = fHigh[0] = 0;
   // each band: remove the local average (0.3 s), keep the rises, scale to unit mean
@@ -1837,25 +1864,42 @@ const KEY_PROFILES = {
   kkn: [[6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88],
         [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.17, 3.34]],
 };
-function fft(re, im) {
-  const n = re.length;
-  for (let i = 1, j = 0; i < n; i++) {
-    let bit = n >> 1;
-    for (; j & bit; bit >>= 1) j ^= bit;
-    j ^= bit;
-    if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; }
+// in-place radix-2 FFT. The bit-reversal order and the twiddle factors are worked out once per size
+// (they used to be recomputed on every call, ~52 000 calls for a 5-minute track)
+const FFT_TABLES = new Map();
+function fftTables(n) {
+  let t = FFT_TABLES.get(n);
+  if (!t) {
+    const rev = new Int32Array(n), cos = new Float64Array(n / 2), sin = new Float64Array(n / 2);
+    for (let i = 0, j = 0; i < n; i++) { rev[i] = j; let bit = n >> 1; for (; j & bit; bit >>= 1) j ^= bit; j ^= bit; }
+    for (let k = 0; k < n / 2; k++) { cos[k] = Math.cos(-2 * Math.PI * k / n); sin[k] = Math.sin(-2 * Math.PI * k / n); }
+    FFT_TABLES.set(n, (t = { rev, cos, sin }));
   }
+  return t;
+}
+function fft(re, im) {
+  const n = re.length, { rev, cos, sin } = fftTables(n);
+  for (let i = 0; i < n; i++) { const j = rev[i]; if (i < j) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
   for (let len = 2; len <= n; len <<= 1) {
-    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang), h = len >> 1;
+    const h = len >> 1, step = n / len;
     for (let i = 0; i < n; i += len) {
-      let cr = 1, ci = 0;
-      for (let k = 0; k < h; k++) {
-        const a = i + k, b = a + h;
+      for (let k = 0, w = 0; k < h; k++, w += step) {
+        const a = i + k, b = a + h, cr = cos[w], ci = sin[w];
         const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
         re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
-        const t = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = t;
       }
     }
+  }
+}
+// two real frames in one complex FFT: frame A went in as the real part, frame B as the imaginary part.
+// Their spectra come apart as A[k] = (Z[k] + conj Z[n-k]) / 2 and B[k] = (Z[k] - conj Z[n-k]) / 2i;
+// this writes the magnitudes |A[k]| and |B[k]| for k = k0..k1 (1 <= k0, k1 < n/2)
+function splitMags(re, im, k0, k1, ma, mb) {
+  const n = re.length;
+  for (let k = k0; k <= k1; k++) {
+    const zr = re[k], zi = im[k], cr = re[n - k], ci = -im[n - k];
+    const ar = (zr + cr) / 2, ai = (zi + ci) / 2, br = (zi - ci) / 2, bi = (cr - zr) / 2;
+    ma[k] = Math.sqrt(ar * ar + ai * ai); mb[k] = Math.sqrt(br * br + bi * bi);
   }
 }
 function detectKey(x, fs, opt) {
@@ -1866,24 +1910,24 @@ function detectKey(x, fs, opt) {
   const hop = Math.max(N / 2, Math.floor((n - N) / 360));
   const win = new Float64Array(N);
   for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / N);
-  const re = new Float64Array(N), im = new Float64Array(N), mag = new Float64Array(N / 2);
+  const re = new Float64Array(N), im = new Float64Array(N), magA = new Float64Array(N / 2), magB = new Float64Array(N / 2);
   const kLo = Math.ceil(50 * N / fs), kHi = Math.min(N / 2 - 2, Math.floor((opt.fmax || 2100) * N / fs));
   const pm = [], pw = [], pf = [];     // peak pitch (midi), weight, frame
-  let frame = 0;
-  for (let s = 0; s + N <= n; s += hop, frame++) {
-    for (let i = 0; i < N; i++) { re[i] = x[s + i] * win[i]; im[i] = 0; }
-    fft(re, im);
+  // local spectral floor: mean magnitude over +/- R bins (running sum); magnitudes kept for kM0..kM1
+  const R = 24, kM0 = Math.max(1, kLo - R - 1), kM1 = Math.min(N / 2 - 1, kHi + R + 1);
+  const starts = [];
+  for (let s = 0; s + N <= n; s += hop) starts.push(s);
+  // two frames per FFT (see splitMags)
+  const frameOut = (frame, mag) => {
     let mx = 0;
-    for (let k = kLo - 1; k <= kHi + 1; k++) { mag[k] = Math.hypot(re[k], im[k]); if (mag[k] > mx) mx = mag[k]; }
-    if (mx < 1e-4) continue;
+    for (let k = kLo - 1; k <= kHi + 1; k++) if (mag[k] > mx) mx = mag[k];
+    if (mx < 1e-4) return;
     const thr = mx * (opt.thr || 0.02);
-    // local spectral floor: mean magnitude over +/- 24 bins (running sum)
-    const R = 24;
     let run = 0;
-    for (let k = kLo - R; k <= kLo + R; k++) run += k >= 0 ? Math.hypot(re[k], im[k]) : 0;
+    for (let k = kLo - R; k <= kLo + R; k++) run += k >= kM0 ? mag[k] : 0;
     const prom = opt.prom || 0;
     for (let k = kLo; k <= kHi; k++) {
-      if (k > kLo) { const a = k + R, b0 = k - R - 1; run += (a < N / 2 ? Math.hypot(re[a], im[a]) : 0) - (b0 >= 0 ? Math.hypot(re[b0], im[b0]) : 0); }
+      if (k > kLo) { const a = k + R, b0 = k - R - 1; run += (a <= kM1 ? mag[a] : 0) - (b0 >= kM0 ? mag[b0] : 0); }
       const b = mag[k];
       if (b < thr || b <= mag[k - 1] || b < mag[k + 1]) continue;
       if (prom && b < prom * run / (2 * R + 1)) continue;
@@ -1893,6 +1937,15 @@ function detectKey(x, fs, opt) {
       const f = p * fs / N;
       pm.push(69 + 12 * Math.log2(f / 440)); pw.push(Math.pow(b / mx, opt.pow || 0.5)); pf.push(frame);
     }
+  };
+  for (let q = 0; q < starts.length; q += 2) {
+    const sa = starts[q], two = q + 1 < starts.length, sb = two ? starts[q + 1] : 0;
+    if (two) for (let i = 0; i < N; i++) { re[i] = x[sa + i] * win[i]; im[i] = x[sb + i] * win[i]; }
+    else for (let i = 0; i < N; i++) { re[i] = x[sa + i] * win[i]; im[i] = 0; }
+    fft(re, im);
+    splitMags(re, im, kM0, kM1, magA, magB);
+    frameOut(q, magA);
+    if (two) frameOut(q + 1, magB);
   }
   // tuning: weighted circular mean of each peak's offset from the nearest semitone
   let cs = 0, sn = 0;
@@ -1933,7 +1986,14 @@ function detectKey(x, fs, opt) {
 `;
 
 const A = { ctx: null, decks: [], master: null, cueBus: null, out: "off" };
-let analyzer = null, analyzeSeq = 0;
+let analyzeSeq = 0;
+// analysis workers: two on a computer with 4 or more hardware threads (the 2017 MacBook Air has 4), so
+// the library is analysed two tracks at a time while nothing plays; one while music plays.
+const ANALYZERS = [];
+const ANALYSIS_LANES = (() => {
+  try { const o = +localStorage.getItem("cb.lanes"); if (o >= 1 && o <= 4) return o; } catch (e) {}
+  return (navigator.hardwareConcurrency || 2) >= 4 ? 2 : 1;
+})();
 // BPM ranges, like Serato's and Traktor's: where half/double-time tempos get folded to
 const BPM_RANGES = { "58-115": [58, 116], "68-135": [68, 136], "78-155": [78, 156], "88-175": [88, 176] };
 let bpmRange = "88-175";
@@ -2032,25 +2092,34 @@ const analyzeWaiters = new Map();
 function makeWorker(src) {
   return new Worker(URL.createObjectURL(new Blob([src], { type: "text/javascript" })));
 }
-function ensureAnalyzer() {
-  if (analyzer) return;
-  analyzer = makeWorker(ANALYZER);
-  analyzer.onmessage = (e) => {
-    const w = analyzeWaiters.get(e.data.id);
-    if (w) { analyzeWaiters.delete(e.data.id); e.data.ok ? w.res(e.data) : w.rej(new Error(e.data.error)); }
-  };
+function analyzerFor() {
+  while (ANALYZERS.length < ANALYSIS_LANES) {
+    const w = makeWorker(ANALYZER);
+    w.pending = 0;
+    w.onmessage = (e) => {
+      w.pending--;
+      const q = analyzeWaiters.get(e.data.id);
+      if (q) { analyzeWaiters.delete(e.data.id); e.data.ok ? q.res(e.data) : q.rej(new Error(e.data.error)); }
+    };
+    ANALYZERS.push(w);
+  }
+  // the least busy one: a deck load never waits behind library analysis if a worker is free
+  return ANALYZERS.reduce((a, b) => (b.pending < a.pending ? b : a));
 }
 function analyzeMono(mono, fs, opt) {
-  ensureAnalyzer();
+  const w = analyzerFor();
   const id = ++analyzeSeq;
   return new Promise((res, rej) => {
     analyzeWaiters.set(id, { res, rej });
     opt = opt || {};
     const tr = [mono.buffer];
     if (opt.xw && opt.xw.buffer !== mono.buffer) tr.push(opt.xw.buffer);
-    analyzer.postMessage({ id, mono, fs, range: BPM_RANGES[bpmRange], opt }, tr);
+    w.pending++;
+    w.postMessage({ id, mono, fs, range: BPM_RANGES[bpmRange], opt }, tr);
   });
 }
+// give the screen a turn without a timer (timers slow to once a second in a background tab)
+const yieldToPage = () => new Promise((r) => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
 // mono, downsampled by an integer factor to ~11-12 kHz for analysis (~22 kHz for the waveform)
 function monoFor(buffer, target = 11025) {
   const f = Math.max(1, Math.round(buffer.sampleRate / target));
@@ -2066,6 +2135,24 @@ function monoFor(buffer, target = 11025) {
   }
   return { mono: out, fs: buffer.sampleRate / f };
 }
+// the same downmix in slices of ~8 ms, so a long track doesn't freeze the screen for a moment (the
+// numbers come out exactly the same: same additions, same order)
+async function monoForSliced(buffer, target = 11025) {
+  const f = Math.max(1, Math.round(buffer.sampleRate / target));
+  const n = Math.floor(buffer.length / f);
+  const out = new Float32Array(n);
+  const chs = [];
+  for (let c = 0; c < Math.min(2, buffer.numberOfChannels); c++) chs.push(buffer.getChannelData(c));
+  const k = 1 / (f * chs.length);
+  let t0 = performance.now();
+  for (let i = 0; i < n; i++) {
+    let s = 0;
+    for (const ch of chs) for (let j = 0; j < f; j++) s += ch[i * f + j];
+    out[i] = s * k;
+    if ((i & 16383) === 0 && performance.now() - t0 > 8) { await yieldToPage(); t0 = performance.now(); }
+  }
+  return { mono: out, fs: buffer.sampleRate / f };
+}
 
 function biquad(type, freq, Q = 0.7071) {
   const b = A.ctx.createBiquadFilter();
@@ -2076,6 +2163,7 @@ function chain(...nodes) { for (let i = 0; i < nodes.length - 1; i++) nodes[i].c
 
 async function initAudio(ctxOverride) {
   const ctx = (A.ctx = ctxOverride || new AudioContext({ latencyHint: LOWMEM ? "playback" : audioBuffer }));
+  watchAudio(ctx);
   const url = URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" }));
   await ctx.audioWorklet.addModule(url);
   A.master = ctx.createGain();
@@ -2414,7 +2502,7 @@ class Deck {
         try {
           const file = await track.getFile();
           let buf = await A.ctx.decodeAudioData(await file.arrayBuffer());
-          const m = monoFor(buf), w = LOWMEM ? null : monoFor(buf, 22050);
+          const m = await monoForSliced(buf), w = LOWMEM ? null : await monoForSliced(buf, 22050);
           const c0 = buf.getChannelData(0), c1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : c0;
           const L = LOWMEM ? toInt16(c0) : c0.slice(), R = c1 === c0 ? (LOWMEM ? L.slice() : L.slice()) : LOWMEM ? toInt16(c1) : c1.slice();
           const out = { mono: m.mono, fs: m.fs, w, L, R, sr: buf.sampleRate, duration: buf.duration };
@@ -2894,26 +2982,39 @@ async function runAnalysisQueue() {
   lib.running = true;
   // low-memory devices decode straight to 22 kHz for analysis (a quarter of the memory)
   const off = new OfflineAudioContext(1, 1, LOWMEM ? 22050 : 44100);
+  const st = { done: 0 };
+  const lanes = [];
+  for (let i = 0; i < ANALYSIS_LANES; i++) lanes.push(analysisLane(i, off, st));
+  await Promise.all(lanes);
+  $("#progress").textContent = lib.tracks.length ? `${lib.tracks.length} tracks` : "";
+  lib.running = false;
+}
+// one analysis lane. Decoding stays one track at a time (heavy: memory, crash guard); the analysis
+// itself runs in this lane's worker, so with two lanes one track is decoded while another is analysed.
+async function analysisLane(lane, off, st) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-  let done = 0;
   while (lib.queue.length) {
     // deck loads go first; on phones, don't analyse while music is playing (keeps playback smooth)
     while (deckLoads > 0 || (LOWMEM && decks.some((d) => d.playing))) {
       $("#progress").textContent = deckLoads > 0 ? "Analysis waiting…" : "Analysis paused while playing";
       await sleep(1000);
     }
-    // music playing: a breather between tracks, so analysis never competes with the decks for long
-    if (decks.some((d) => d.playing)) { $("#progress").textContent = "Analysis (slowed while playing)…"; await sleep(1500); }
+    const playing = decks.some((d) => d.playing);
+    // while music plays: one lane only, with a breather between tracks, so analysis never competes
+    // with the decks for long. The other lanes wait and join in again when everything stops.
+    if (playing && lane > 0) { await sleep(1000); continue; }
+    if (playing) { $("#progress").textContent = "Analysis (slowed while playing)…"; await sleep(1500); }
     const t = lib.queue.shift();
+    if (!t) break;
     if (analysisCurrent(t) || badTracks.has(t.id)) { if (badTracks.has(t.id) && t.bpm == null) t.bpm = 0; continue; }
-    $("#progress").textContent = `Analyzing ${done + 1} of ${done + lib.queue.length + 1}: ${t.title}`;
+    $("#progress").textContent = `Analyzing ${st.done + 1} of ${st.done + lib.queue.length + 1}${ANALYSIS_LANES > 1 && !playing ? " (2 at a time)" : ""}: ${t.title}`;
     try {
       const dec = await heavy(async () => {
         markInflight(t);
         try {
           const file = await t.getFile();
           let buf = await off.decodeAudioData(await file.arrayBuffer());
-          const m = monoFor(buf), duration = buf.duration;
+          const m = await monoForSliced(buf), duration = buf.duration;
           buf = null;
           return { ...m, duration };
         } finally { clearInflight(); }
@@ -2926,11 +3027,9 @@ async function runAnalysisQueue() {
     } catch (e) {
       t.bpm = t.bpm || 0; t.duration = t.duration || 0; t.key = -1;
     }
-    done++;
-    if (done % 3 === 0 || !lib.queue.length) applyView(true);
+    st.done++;
+    if (st.done % 3 === 0 || !lib.queue.length) applyView(true);
   }
-  $("#progress").textContent = lib.tracks.length ? `${lib.tracks.length} tracks` : "";
-  lib.running = false;
 }
 
 // ---- track list (virtualised) ----
@@ -4437,14 +4536,19 @@ function buildMixer() {
   A.masterMeterCanvas = h("canvas", { class: "meter", width: "16", height: "300", style: "width:14px;height:126px" });
   center.append(A.masterMeterCanvas);
   // deck layers (4-deck mode): which decks the controller's left and right sides play
+  // each deck's number sits over its own channel strip (mixer order 3 1 | 2 4); click one to put that side
+  // of the controller on it. The decks the controller plays are lit, with a slow pulse.
   const layers = h("div", { class: "layers ch34" });
-  A.layerBtns = [0, 1].map((side) => {
-    const b = h("button", { class: "layerbtn", title: `Which deck the controller's ${side ? "right" : "left"} side plays: ${side + 1} or ${side + 3}. Click to switch (learnable).`,
-      onclick: () => toggleSide(side) },
-      h("span", { "data-d": side, class: "on" }, String(side + 1)), h("span", { "data-d": side + 2 }, String(side + 3)));
-    return b;
-  });
-  layers.append(A.layerBtns[0], h("span", { class: "slabel" }, "Controller"), A.layerBtns[1]);
+  A.layerCells = [];
+  for (const d of [2, 0, 1, 3]) {
+    const side = d % 2;
+    const c = h("button", { class: "layercell", "data-d": d, "data-side": side,
+      title: `Deck ${d + 1}: put the controller's ${side ? "right" : "left"} side on it (it plays deck ${side + 1} or ${side + 3})`,
+      onclick: () => setSide(side, d) }, String(d + 1));
+    A.layerCells[d] = c;
+    layers.append(c);
+    if (d === 0) layers.append(h("span", { class: "slabel layerlabel", title: "Which decks the controller plays" }, "CTRL"));
+  }
   mx.append(layers, strip(0), center, strip(1));
   for (let i = 2; i < NDECKS; i++) mx.append(Object.assign(strip(i), { className: `strip ch34 s${i}` }));
   const faders = h("div", { class: "faders" });
@@ -5096,6 +5200,7 @@ function midiIn(data) {
   const [st, d1, d2 = 0] = data;
   const type = st & 0xf0;
   if (type !== 0x90 && type !== 0x80 && type !== 0xb0) return;
+  if (MIDI.capture && type === 0x90 && d2 > 0) return MIDI.capture(st, d1);
   if (MIDI.learning) return learnCapture(st, d1, d2);
   const k = midiKey(st, d1);
   const e = MIDI.table.get(k);
@@ -5106,7 +5211,7 @@ function midiIn(data) {
 
 const ABS_ACTIONS = new Set(["tempo", "fader", "trim", "hi", "mid", "low", "cfx", "xfader", "headMix", "master", "fxDepth"]);
 const REL_ACTIONS = new Set(["jogTop", "jogSide", "jogSearch", "browse", "zoom"]);
-const LED_ACTIONS = /^(play|cue|sync|pfl|loopIn|loopOut|reloop|keylock|quant|mode:|hot:|loop:|pfx:|pfx2:|fxOn)/;
+const LED_ACTIONS = /^(play|cue|sync|pfl|loopIn|loopOut|reloop|keylock|quant|mode:|hot:|loop:|pfx:|pfx2:|fxOn|layer)/;
 const PAD_MODES_OK = new Set(["hotcue", "beatloop", "beatjump", "padfx", "padfx2"]);
 function runEntry(e, type, v, isLsb) {
   const [, , action, side, lsb] = e;
@@ -5167,10 +5272,7 @@ function setSide(side, deck) {
 }
 function toggleSide(side) { setSide(side, MIDI.side[side] === side ? side + 2 : side); }
 function refreshLayerUI() {
-  for (const side of [0, 1]) {
-    const b = A.layerBtns && A.layerBtns[side];
-    if (b) for (const sp of b.children) sp.classList.toggle("on", +sp.dataset.d === MIDI.side[side]);
-  }
+  if (A.layerCells) A.layerCells.forEach((c, d) => c.classList.toggle("on", MIDI.side[d % 2] === d));
   for (let i = 0; i < NDECKS; i++) {
     const el = document.querySelector(`.deck[data-i="${i}"]`);
     if (el) el.classList.toggle("hw", FOUR && MIDI.side.includes(i));
@@ -5255,6 +5357,7 @@ function updateLeds() {
   for (const e of MIDI.ledEntries) {
     const [st, no, action] = e;
     if (action === "fxOn") { led(st, no, FX.beat.on); continue; }
+    if (action === "layer") { led(st, no, FOUR && MIDI.side[e[3]] !== e[3] ? blinkOn : false); continue; }
     if (e[3] < 0) continue;
     const deck = hwDeck(e[3]), d = decks[deck];
     const colon = action.indexOf(":"), name = colon < 0 ? action : action.slice(0, colon), arg = action.slice(colon + 1);
@@ -5280,6 +5383,32 @@ function updateLeds() {
   }
   if (MIDI.profile && MIDI.profile.vu) for (const i of [0, 1]) led(0xb0 + i, 0x02, Math.round(meterState[hwDeck(i)] * 127));   // channel VU meters
 }
+
+// ---- deck layers on the FLX4's SMART CFX and SMART FADER (or any two spare buttons) ----
+// Pioneer doesn't publish what those two send, so they're picked up by pressing them once, then kept
+// with the controller's learned controls. A button that already does something is refused.
+function setupLayerButtons() {
+  if (!MIDI.profile) return status("Connect the controller first", 5000);
+  const flx = /FLX/i.test(MIDI.profile.id);
+  const steps = [[0, flx ? "SMART CFX" : "a spare button for the left side", "1 and 3"], [1, flx ? "SMART FADER" : "a spare button for the right side", "2 and 4"]];
+  let k = 0;
+  const ask = (pre = "") => status(`${pre}Press ${steps[k][1]} on the controller: it will switch the ${k ? "right" : "left"} side between decks ${steps[k][2]}. (Esc cancels)`, 0);
+  MIDI.capture = (st, d1) => {
+    const have = MIDI.table.get(midiKey(st, d1));
+    if (have && have[2] !== "layer" && !have[2].startsWith("unsupported")) return ask(`That button already does "${LEARN_LABEL[have[2]] || have[2]}". `);
+    const side = steps[k][0], p = MIDI.profile;
+    MIDI.learned = MIDI.learned.filter((e) => !(e[0] === st && e[1] === d1) && !(e[2] === "layer" && e[3] === side));
+    MIDI.learned.push([st, d1, "layer", side, 0]);
+    try { localStorage.setItem(learnedKey(p), JSON.stringify(MIDI.learned)); } catch (e) {}
+    useProfile(p);
+    if (++k < steps.length) return ask();
+    MIDI.capture = null;
+    status(`Done: ${steps[0][1]} switches the left side 1 ⇄ 3, ${steps[1][1]} the right side 2 ⇄ 4 (in 4-deck mode). Their lights flash while a side is on deck 3 or 4.`, 10000);
+  };
+  ask();
+}
+$("#ctlSmart").addEventListener("click", () => { $("#setPanel").hidden = true; setupLayerButtons(); });
+window.addEventListener("keydown", (e) => { if (e.key === "Escape" && MIDI.capture) { MIDI.capture = null; status("Cancelled", 3000); } });
 
 // ---- MIDI learn: click a control on screen, then move or press it on the controller ----
 // learnable on-screen controls carry data-learn="action" and data-deck
@@ -5424,6 +5553,12 @@ async function listOutputs() {
   const saved = pref("cb.out", null);
   const flx = outDevs.find((d) => /FLX4|DDJ/i.test(d.label));
   const target = saved && outDevs.some((d) => d.deviceId === saved) ? saved : flx ? flx.deviceId : null;
+  if (A.ctx && A.ctx.setSinkId && A.currentSink && !outDevs.some((d) => d.deviceId === A.currentSink)) {
+    noteError("audio: output unplugged, back to the default output");
+    A.currentSink = ""; $("#outSel").value = "";
+    try { await A.ctx.setSinkId(""); } catch (e) {}
+    tryResume();
+  }
   if (target && A.ctx && A.ctx.setSinkId && A.currentSink !== target) { $("#outSel").value = target; await setOutput(target); }
   else applyHeadphones(false);
 }
@@ -5546,7 +5681,7 @@ function tagLearnables() {
   if (A.bfx) { tag(A.bfx.on, "fxOn", -1); tag(A.bfx.sel, "fxSelect", -1); tag(A.bfx.bl, "fxBeatDown", -1); tag(A.bfx.br, "fxBeatUp", -1); }
   tag(widgets.fxdepth && widgets.fxdepth.el, "fxDepth", -1);
   tag(widgets.master && widgets.master.el, "master", -1);
-  if (A.layerBtns) A.layerBtns.forEach((b, side) => tag(b, "layer", side));
+  if (A.layerCells) A.layerCells.forEach((c, d) => tag(c, "layer", d % 2));
 }
 // ---- set recording: master output to WAV (16-bit) or MP3 (320 kbps, lamejs in a worker) + a tracklist ----
 const REC = { on: false, fmt: "wav", sr: 48000, frames: 0, parts: [], pending: [], pendingBytes: 0, worker: null, list: [], logged: new Map(), started: null, blob: null, name: "" };
@@ -5833,12 +5968,53 @@ function updateWakeLock() {
       .catch(() => {}).finally(() => { wakePending = false; });
   } else if (!want && wakeLock) { wakeLock.release().catch(() => {}); wakeLock = null; }
 }
+// ---- keeping the audio running ----
+// The browser can stop the audio by itself: the output device drops out (the FLX4 unplugged or reset,
+// the system's sound server restarting), the laptop sleeps, or the system borrows the audio for a
+// moment. Cratebox starts it again straight away, then every 2 s and on the next click or key press,
+// and goes back to the default output if the chosen one has gone (and to the FLX4 when it's back).
+// A banner shows while it's stopped; it never covers the decks, so the app doesn't seem frozen.
+let resumeTimer = 0, resumeTries = 0, audioStoppedAt = 0;
+function tryResume() {
+  const ctx = A.ctx;
+  if (!ctx || ctx.state === "running" || ctx.state === "closed") return;
+  resumeTries++;
+  let p;
+  try { p = Promise.resolve(ctx.resume()); } catch (e) { p = Promise.reject(e); }
+  // a resume that never settles (its device is gone) isn't waited on
+  Promise.race([p, new Promise((r) => setTimeout(r, 1500))]).catch((e) => noteError("audio resume: " + (e && e.message || e))).finally(() => {
+    if (ctx.state !== "running" && resumeTries >= 2 && A.currentSink && ctx.setSinkId) {
+      noteError("audio: the chosen output isn't answering, back to the default output");
+      const lost = A.currentSink;
+      A.currentSink = "";
+      ctx.setSinkId("").then(() => { if ($("#outSel")) $("#outSel").value = ""; status("The audio output went away: playing on the default output until it's back", 8000); applyHeadphones(false); },
+        () => { A.currentSink = lost; });
+    }
+    checkAudioAlive();
+  });
+}
 function checkAudioAlive() {
   if (!A.ctx) return;
-  const st = A.ctx.state;
-  $("#resume").hidden = st === "running" || st === "closed";
+  const st = A.ctx.state, stopped = st !== "running" && st !== "closed";
+  $("#resume").hidden = !stopped;
+  if (stopped) {
+    if (!audioStoppedAt) { audioStoppedAt = performance.now(); noteError(`audio: ${st}`); }
+    $("#resumeText").textContent = resumeTries < 3 ? "Audio stopped. Starting it again…" : "Audio stopped. Is another app using the controller's sound (rekordbox, Serato, a DAW)? Close it, or check the controller is plugged in, then press Start audio.";
+    if (!resumeTimer) resumeTimer = setInterval(tryResume, 2000);
+  } else if (audioStoppedAt) {
+    noteError(`audio: running again after ${((performance.now() - audioStoppedAt) / 1000).toFixed(1)} s`);
+    clearInterval(resumeTimer); resumeTimer = 0; resumeTries = 0; audioStoppedAt = 0;
+    status("Audio is running again", 3000);
+  }
 }
-$("#resume button").addEventListener("click", () => { if (A.ctx) A.ctx.resume().then(checkAudioAlive, checkAudioAlive); });
+$("#resume button").addEventListener("click", () => { resumeTries = 0; tryResume(); });
+// some browsers only restart audio from a click or key press: any one will do
+for (const ev of ["pointerdown", "keydown"]) document.addEventListener(ev, () => { if (A.ctx && A.ctx.state !== "running") tryResume(); }, true);
+function watchAudio(ctx) {
+  ctx.addEventListener("statechange", () => { checkAudioAlive(); if (ctx.state !== "running") tryResume(); });
+  // Chrome reports a failed output device here
+  ctx.addEventListener("error", (e) => { noteError("audio device error: " + (e.error && e.error.message || e.message || "?")); tryResume(); });
+}
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && A.ctx && A.ctx.state !== "running") A.ctx.resume().catch(() => {}).finally(checkAudioAlive);
   updateWakeLock();
@@ -5990,7 +6166,7 @@ $("#startBtn").addEventListener("click", async () => {
 });
 
 // test hook: lets the automated tests feed MIDI in and read the LED output
-window.cratebox = { VERSION, get showPhrases() { return showPhrases; }, get loadLock() { return loadLock; }, phraseSpans, PHRASE_COLORS, ANALYSIS_VER, FX, FX_LIST, PAD_FX, fxSelect, fxBeat, fxChannel, fxOn, fxDepth, pfxDown, pfxUp, sendClock, get jogSens() { return jogSens; }, barBeat, applyTheme, controlTick, get drawCost() { return drawCost; }, REC, recStart, recStop, setFour, applyUiSize, PL, RB, plNew, plGet, plAdd, plMove, plDelete, setView, renderTree, mountDevice, importXml, exportXml, removeFromPlaylist, selectRow, treePress, treeMove, decks, M, lib, midiIn, MIDI, useProfile, profileFor, PROFILES, startLearn, stopLearn, addFiles, applyView, loadSelected, lanePps, camelot, A, routeOutput, initAudio, applyHeadphones, WORKLET };
+window.cratebox = { VERSION, get showPhrases() { return showPhrases; }, get loadLock() { return loadLock; }, phraseSpans, PHRASE_COLORS, ANALYSIS_VER, FX, FX_LIST, PAD_FX, fxSelect, fxBeat, fxChannel, fxOn, fxDepth, pfxDown, pfxUp, sendClock, get jogSens() { return jogSens; }, barBeat, applyTheme, controlTick, get drawCost() { return drawCost; }, REC, recStart, recStop, setFour, applyUiSize, PL, RB, plNew, plGet, plAdd, plMove, plDelete, setView, renderTree, mountDevice, setupLayerButtons, ANALYSIS_LANES, ANALYZERS, importXml, exportXml, removeFromPlaylist, selectRow, treePress, treeMove, decks, M, lib, midiIn, MIDI, useProfile, profileFor, PROFILES, startLearn, stopLearn, addFiles, applyView, loadSelected, lanePps, camelot, A, routeOutput, initAudio, applyHeadphones, WORKLET };
 </script>
 </body>
 </html>

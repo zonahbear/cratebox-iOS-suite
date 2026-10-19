@@ -8,7 +8,16 @@ All notable changes to Cratebox (the web app). Version numbers follow `MAJOR.MIN
 - **Deck layers: play decks 3 and 4 from the FLX4** (or any 2-channel controller). In 4-deck mode, toggles at the top of the mixer switch the controller's left side between decks 1 and 3 and its right side between 2 and 4. Every control on that side follows (transport, jog, pads, loops, LOAD, tempo, the channel's fader, EQ, TRIM, CFX and CUE), and so do the lights, the VU meter and the BEAT FX CH SELECT lever. The decks being played get an outline in their colour.
 - **Soft takeover** after a switch: faders and knobs only take over once they reach the new deck's setting, so nothing jumps.
 - The toggles are learnable onto hardware buttons. 2 DECKS puts the controller back on decks 1 and 2.
-- `tests/test_layers.py`.
+- **SMART CFX / SMART FADER as deck layer buttons**: Settings → Controller → *Deck layers on SMART CFX / FADER…*, press each once. SMART CFX switches the left side 1 ⇄ 3, SMART FADER the right side 2 ⇄ 4; their lights flash while a side is on deck 3 or 4. (Pioneer doesn't publish those two buttons' messages, so they're picked up by pressing them; a button that already does something is refused.)
+- `tests/test_layers.py`, `tests/test_header.py`, `tests/test_resume.py`.
+
+### Changed
+- **Deck layer toggles sit over their channel strips**: one number per deck in the mixer's own order (3 1 | 2 4). The decks the controller plays are lit in their colour with a slow, soft pulse (none with reduced motion turned on).
+- **Track analysis is about twice as fast for a library**: the beat tracker and key detection do the same maths with half the FFTs (two frames per FFT, tables worked out once); BPM, grid, key and phrases come out the same (to floating-point rounding). On a computer with 4 or more hardware threads (the 2017 MacBook Air has 4) two tracks are analysed at a time while nothing plays, one while music plays. Measured: 8 tracks (4 x 5 min, 4 x 75 s) from 15.5 to 7.1 s. Deck loads use whichever analysis worker is free, and the downmix before analysis runs in slices so the screen keeps drawing.
+
+### Fixed
+- **GRID / MT / Q no longer jump around during playback.** When the deck's info row was full (a synced deck with MASTER, the sync offset and a pitched key showing, at 1440 px wide), every change pushed the buttons sideways, and MASTER onto a second line. The row now stays on one line and the buttons stay put; the phrase name, elapsed time and the beat dots give way instead (cut off with …).
+- **"Tap to resume audio" no longer freezes the screen.** When the browser stops the audio by itself (another app such as rekordbox takes the controller's sound, the controller is unplugged, the laptop sleeps), Cratebox now starts it again on its own straight away, then every 2 s and on the next click or key press, and goes back to the default output if the chosen one has gone. A small banner says what's going on, without covering the decks; after a few tries it suggests closing rekordbox or checking the cable. The stops and restarts are in problem reports.
 
 ## 1.1.1 (2026-10-16)
 

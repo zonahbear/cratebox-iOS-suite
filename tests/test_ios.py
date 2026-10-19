@@ -169,13 +169,16 @@ def main():
             b.dispatchEvent(new PointerEvent('pointerup', { pointerType: 'touch', bubbles: true })); }""")
         check("tap sets a hot cue, holding the pad deletes it", had and page.evaluate("cratebox.decks[0].hot[0]") is None)
 
-        # a phone call / Siri suspends the audio: a big "tap to resume" button appears
-        page.evaluate("cratebox.A.ctx.suspend()")
+        # a phone call / Siri suspends the audio and holds it (resume fails until the call ends):
+        # a banner says so, the app stays usable, and once it can, the audio comes back
+        page.evaluate("(() => { const c = cratebox.A.ctx; c._resume = c.resume; c.resume = () => Promise.reject(new Error('interrupted')); c.suspend(); })()")
         page.wait_for_timeout(1500)
         shown = page.is_visible("#resume")
+        free = page.evaluate("(() => { const r = document.querySelector('.deck .round.play').getBoundingClientRect(); return !document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2).closest('#resume'); })()")
+        page.evaluate("(() => { const c = cratebox.A.ctx; c.resume = c._resume; })()")      # the call ends
         page.tap("#resume button")
-        page.wait_for_timeout(300)
-        check("audio interruption shows 'tap to resume', and tapping resumes", shown and page.evaluate("cratebox.A.ctx.state") == "running" and page.is_hidden("#resume"))
+        page.wait_for_timeout(500)
+        check("audio interruption: banner shows, decks stay usable, tapping resumes", shown and free and page.evaluate("cratebox.A.ctx.state") == "running" and page.is_hidden("#resume"), f"shown {shown}, decks free {free}")
 
         page.set_viewport_size({"width": 440, "height": 956})
         page.wait_for_timeout(200)

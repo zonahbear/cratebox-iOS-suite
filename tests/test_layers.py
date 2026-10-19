@@ -45,17 +45,21 @@ def main():
         vis = lambda sel: page.evaluate(f"(() => {{ const e = document.querySelector('{sel}'); return !!e && e.getBoundingClientRect().height > 0; }})()")
         check("2 decks: no layer toggles", not vis("#mixer .layers"))
         page.click("#fourBtn")
-        check("4 decks: toggles at the top of the mixer, left and right", vis("#mixer .layers") and page.evaluate("""(() => {
-            const m = document.querySelector('#mixer').getBoundingClientRect(), [l, r] = [...document.querySelectorAll('#mixer .layerbtn')].map(e => e.getBoundingClientRect());
-            const top = Math.min(...[...document.querySelectorAll('#mixer > .strip')].map(e => e.getBoundingClientRect().top));
-            return l.left - m.left < 20 && m.right - r.right < 20 && l.bottom <= top + 1 && r.bottom <= top + 1; })()"""))
-        check("starts on decks 1 and 2", page.evaluate("cratebox.MIDI.side.join()") == "0,1" and page.inner_text("#mixer .layerbtn >> nth=0").split() == ["1", "3"])
+        check("4 decks: each deck's number over its own channel strip (3 1 | 2 4), above the knobs", vis("#mixer .layers") and page.evaluate("""(() => {
+            const strip = (i) => document.querySelector(`#mixer > .strip[data-i="${i}"]`).getBoundingClientRect();
+            return [0, 1, 2, 3].every((d) => { const c = document.querySelector(`#mixer .layercell[data-d="${d}"]`).getBoundingClientRect(), s = strip(d), mid = c.left + c.width / 2;
+              return c.width > 0 && mid > s.left && mid < s.right && c.bottom <= s.top + 1; }); })()"""))
+        cells = page.evaluate("[...document.querySelectorAll('#mixer .layercell')].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left).map(c => c.textContent)")
+        check("left to right: 3 1 2 4", cells == ["3", "1", "2", "4"], str(cells))
+        check("starts on decks 1 and 2, those lit", page.evaluate("cratebox.MIDI.side.join()") == "0,1" and page.evaluate("[...document.querySelectorAll('#mixer .layercell.on')].map(c => c.textContent).sort().join()") == "1,2")
+        pulse = page.evaluate("getComputedStyle(document.querySelector('#mixer .layercell.on')).animationName")
+        check("the lit ones pulse (gently: brightness, not on/off)", pulse == "layerpulse", pulse)
         load_all(page, 4)
 
         # ---- left side to deck 3
-        page.click("#mixer .layerbtn >> nth=0")
-        st = page.evaluate("({ side: cratebox.MIDI.side.join(), on: document.querySelector('#mixer .layerbtn span.on').textContent, hw: [...document.querySelectorAll('.deck.hw')].map(e => +e.dataset.i).sort().join() })")
-        check("clicking the left toggle: the controller's left side plays deck 3, marked on screen", st == {"side": "2,1", "on": "3", "hw": "1,2"}, str(st))
+        page.click("#mixer .layercell[data-side='0']:not(.on)")
+        st = page.evaluate("({ side: cratebox.MIDI.side.join(), on: [...document.querySelectorAll('#mixer .layercell.on')].map(c => c.textContent).sort().join(), hw: [...document.querySelectorAll('.deck.hw')].map(e => +e.dataset.i).sort().join() })")
+        check("clicking the left toggle: the controller's left side plays deck 3, marked on screen", st == {"side": "2,1", "on": "2,3", "hw": "1,2"}, str(st))
         midi(play0[0], play0[1], 127); midi(play0[0], play0[1], 0)
         page.wait_for_timeout(200)
         pl = page.evaluate("cratebox.decks.map(d => d.playing)")
@@ -83,7 +87,7 @@ def main():
 
         # ---- soft takeover: deck 3's fader is at 0.2, the hardware fader at the top (deck 1 was full)
         page.evaluate("cratebox.M.fader[2] = 0.2; cratebox.M.fader[0] = 1")
-        page.click("#mixer .layerbtn >> nth=0"); page.click("#mixer .layerbtn >> nth=0")   # 1 then back to 3: takeover armed again
+        page.click("#mixer .layercell[data-side='0']:not(.on)"); page.click("#mixer .layercell[data-side='0']:not(.on)")   # 1 then back to 3: takeover armed again
         midi(fader0[0], fader0[1], 120)
         f = page.evaluate("[cratebox.M.fader[0], cratebox.M.fader[2]]")
         check("fader far from deck 3's level: ignored (no jump)", abs(f[1] - 0.2) < 1e-6 and f[0] == 1, str(f))
@@ -98,7 +102,7 @@ def main():
         check("...and keeps following", abs(page.evaluate("cratebox.M.fader[2]") - 100 / 127) < 0.01)
         # tempo: deck 3 at +0, the hardware tempo fader at -4% (deck 1's): deck 3's pitch must not move until it's crossed
         page.evaluate("cratebox.decks[2].setPitch(0); cratebox.decks[0].setPitch(-0.5)")
-        page.click("#mixer .layerbtn >> nth=0"); page.click("#mixer .layerbtn >> nth=0")
+        page.click("#mixer .layercell[data-side='0']:not(.on)"); page.click("#mixer .layercell[data-side='0']:not(.on)")
         lsb = tempo0[2]
         def tempo(v14):
             midi(tempo0[0], tempo0[1], v14 >> 7)
@@ -110,14 +114,14 @@ def main():
         check("past deck 3's tempo it takes over; deck 1 keeps its own", abs(pt[1] - 0.04) < 0.01 and pt[0] == -0.5, str(pt))
         # EQ knob, same idea
         page.evaluate("cratebox.M.hi[2] = 0.5")
-        page.click("#mixer .layerbtn >> nth=0"); page.click("#mixer .layerbtn >> nth=0")
+        page.click("#mixer .layercell[data-side='0']:not(.on)"); page.click("#mixer .layercell[data-side='0']:not(.on)")
         midi(hi0[0], hi0[1], 10)
         h1 = page.evaluate("cratebox.M.hi[2]")
         midi(hi0[0], hi0[1], 63); midi(hi0[0], hi0[1], 70)
         check("EQ knob: ignored until it reaches deck 3's setting, then follows", h1 == 0.5 and abs(page.evaluate("cratebox.M.hi[2]") - 70 / 127) < 0.01, str(h1))
 
         # ---- the right side: 4
-        page.click("#mixer .layerbtn >> nth=1")
+        page.click("#mixer .layercell[data-side='1']:not(.on)")
         midi(play1[0], play1[1], 127); midi(play1[0], play1[1], 0)
         pl = page.evaluate("cratebox.decks.map(d => d.playing)")
         check("right toggle: PLAY on the right plays deck 4", pl[3] and pl[1], str(pl))
@@ -125,18 +129,40 @@ def main():
         lever = msg("fxCh:0", -1)
         midi(lever[0], lever[1], 127)
         check("BEAT FX lever on CH1 picks the deck the left side plays (3)", page.evaluate("cratebox.FX.beat.ch") == 2, str(page.evaluate("cratebox.FX.beat.ch")))
-        page.click("#mixer .layerbtn >> nth=0")
+        page.click("#mixer .layercell[data-side='0']:not(.on)")
         check("...and follows when the side switches back to 1", page.evaluate("cratebox.FX.beat.ch") == 0)
         midi(lever[0], lever[1], 0)
 
         # ---- learn the left toggle onto a spare button (note 0x7A on channel 16)
         page.evaluate("cratebox.startLearn()")
-        page.click("#mixer .layerbtn >> nth=0")
+        page.click("#mixer .layercell[data-side='0']:not(.on)")
         midi(0x9F, 0x7A, 127); midi(0x9F, 0x7A, 0)
         page.evaluate("cratebox.stopLearn()")
         before = page.evaluate("cratebox.MIDI.side[0]")
         midi(0x9F, 0x7A, 127); midi(0x9F, 0x7A, 0)
         check("a learned hardware button toggles the left side", page.evaluate("cratebox.MIDI.side[0]") != before, f"{before} -> {page.evaluate('cratebox.MIDI.side[0]')}")
+        # ---- SMART CFX / SMART FADER as layer buttons (their real messages aren't published: stand-ins)
+        SCFX, SFAD = (0x96, 0x5A), (0x96, 0x5B)
+        page.evaluate("cratebox.MIDI.side = [0, 1]; cratebox.setFour(true)")
+        page.evaluate("cratebox.setupLayerButtons()")
+        check("setup asks for SMART CFX first", "SMART CFX" in page.inner_text("#status"), page.inner_text("#status"))
+        midi(play0[0], play0[1], 127); midi(play0[0], play0[1], 0)       # wrong button by mistake
+        check("a button that already does something (PLAY) is refused", "already does" in page.inner_text("#status") and not page.evaluate("cratebox.decks[0].playing") is None, page.inner_text("#status")[:80])
+        midi(*SCFX, 127); midi(*SCFX, 0)
+        check("then SMART FADER", "SMART FADER" in page.inner_text("#status"), page.inner_text("#status"))
+        midi(*SFAD, 127); midi(*SFAD, 0)
+        check("done, and kept with the learned controls", "Done" in page.inner_text("#status") and page.evaluate("cratebox.MIDI.learned.filter(e => e[2] === 'layer').map(e => e[3]).sort().join()") == "0,1")
+        s0 = page.evaluate("cratebox.MIDI.side.join()")
+        midi(*SCFX, 127); midi(*SCFX, 0)
+        s1 = page.evaluate("cratebox.MIDI.side.join()")
+        midi(*SFAD, 127); midi(*SFAD, 0)
+        s2 = page.evaluate("cratebox.MIDI.side.join()")
+        check("SMART CFX switches the left side 1 -> 3, SMART FADER the right 2 -> 4", (s0, s1, s2) == ("0,1", "2,1", "2,3"), f"{s0} {s1} {s2}")
+        lights = lambda: page.evaluate(f"""new Promise(r => {{ cratebox.MIDI.ledCache.clear(); cratebox.MIDI.log.length = 0; setTimeout(() => r(
+            [{SCFX[0]}, {SFAD[0]}].map((st, k) => [...new Set(cratebox.MIDI.log.filter(m => m[0] === st && m[1] === [{SCFX[1]}, {SFAD[1]}][k]).map(m => m[2]))].sort())), 1300); }})""")
+        check("their lights flash while on deck 3 / 4", lights() == [[0, 127], [0, 127]], str(lights()))
+        midi(*SCFX, 127); midi(*SCFX, 0); midi(*SFAD, 127); midi(*SFAD, 0)
+        check("...and stay off on decks 1 / 2", lights() == [[0], [0]], str(lights()))
         if len(sys.argv) > 1:
             page.screenshot(path=sys.argv[1])
 
