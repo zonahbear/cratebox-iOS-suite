@@ -50,3 +50,22 @@ final class PDBTests: XCTestCase {
         }
     }
 }
+
+final class ANLZTests: XCTestCase {
+    func file(_ n: String) throws -> [UInt8] { [UInt8](try Data(contentsOf: Bundle.module.url(forResource: "Fixtures/anlz/" + n, withExtension: nil)!)) }
+    /// the same numbers tests/test_rekordbox.js checks on the web app's parser
+    func testDemoTrack1() throws {
+        let dat = RekordboxANLZ.parse(try file("ANLZ0000.DAT")), ext = RekordboxANLZ.parse(try file("ANLZ0000.EXT"))
+        XCTAssertEqual(dat.beats.count, 368)
+        let g = RekordboxANLZ.grid(dat.beats)!
+        XCTAssertEqual(g.bpm, 128); XCTAssertEqual(g.firstBeat, 0.025, accuracy: 1e-9)
+        var a = ext; a.beats = dat.beats
+        let ph = RekordboxANLZ.phrases(a)!
+        XCTAssertEqual(ph.count, 19); XCTAssertEqual(ph[0].start, 0.025, accuracy: 1e-9)
+        XCTAssertTrue(ph.allSatisfy { $0.bars >= 1 })
+    }
+    func testKeyNames() {
+        XCTAssertEqual(RekordboxANLZ.keyIndex("Fm"), 17); XCTAssertEqual(RekordboxANLZ.keyIndex("Am"), 21); XCTAssertEqual(RekordboxANLZ.keyIndex("8A"), 21)
+        XCTAssertEqual(RekordboxANLZ.keyIndex("C"), 0); XCTAssertEqual(RekordboxANLZ.keyIndex("Ebm"), 15); XCTAssertEqual(RekordboxANLZ.keyIndex(""), -1)
+    }
+}

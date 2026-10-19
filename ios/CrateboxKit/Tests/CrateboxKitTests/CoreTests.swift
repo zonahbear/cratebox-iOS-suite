@@ -74,8 +74,9 @@ final class CoreTests: XCTestCase {
         c.decks[0].togglePlay(); render(e, c, secs: 0.5)
         let d = c.decks[1]
         d.setSync(true)
-        XCTAssertEqual(d.syncMult, 2, "70 against 140: double time, locked on every other beat... measured against our beats")
+        XCTAssertEqual(d.syncMult, 0.5, "70.5 against 140: half the master's tempo (halftime), not sped up to 140")
         XCTAssertEqual(d.bpm * d.rate(), 70, accuracy: 0.05)
+        d.seek(5); render(e, c, secs: 0.05)       // into the track, so lining up the beat never needs a seek before 0:00
         d.togglePlay(); render(e, c, secs: 4)
         XCTAssertNotNil(d.phaseErr)
         XCTAssertLessThan(abs(d.phaseErr ?? 1), 0.005, "beat lock holds the phase")

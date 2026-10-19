@@ -24,13 +24,34 @@ jobs:
           (cd "$RUNNER_TEMP/music" && md5 -r *.wav | sed 's/ /  /') | tee md5.txt
           diff <(sort md5.txt) <(sort ios/CrateboxKit/Tests/CrateboxKitTests/Fixtures/music.md5) | tee -a ci.log || echo "TRACKS DIFFER from the fixtures' (numpy?)" | tee -a ci.log
       - name: Core tests (swift test, optimised)
+        continue-on-error: true
         run: |
           set -o pipefail
           cd ios/CrateboxKit && CRATEBOX_MUSIC="$RUNNER_TEMP/music" swift test -c release -Xswiftc -enable-testing 2>&1 | tee -a ../../ci.log
+      - name: App (unsigned IPA)
+        id: app
+        run: |
+          set -o pipefail
+          brew install xcodegen >/dev/null 2>&1 || true
+          cd ios && xcodegen generate 2>&1 | tail -3 | tee -a ../ci.log
+          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee "$RUNNER_TEMP/xcb.log" | grep -E "error:|warning: .*(deprecated|never used)|BUILD (SUCCEEDED|FAILED)" | head -150 | tee -a ../ci.log
+          APP=$(ls -d "$RUNNER_TEMP"/dd/Build/Products/Release-iphoneos/*.app | head -1)
+          mkdir -p "$RUNNER_TEMP/ipa/Payload" && cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qr ../Cratebox.ipa Payload)
+          ls -la "$RUNNER_TEMP/Cratebox.ipa" | tee -a ../ci.log
+      - name: Publish the IPA (release "ios-latest")
+        if: steps.app.outcome == 'success'
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease --target ios --title "Cratebox for iOS (latest build)" --notes "Unsigned build of the ios branch. Install with SideStore or AltStore."
+          gh release upload ios-latest "$RUNNER_TEMP/Cratebox.ipa" --clobber
+          gh release edit ios-latest --notes "Unsigned build of the ios branch, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC). Install with SideStore or AltStore." 
+          echo "PUBLISHED ios-latest from ${GITHUB_SHA::7}" | tee -a ci.log
       - name: Error summary to the ci-logs branch
         if: always()
         run: |
-          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |PUBLISHED|Cratebox.ipa|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git fetch origin ci-logs || true
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null

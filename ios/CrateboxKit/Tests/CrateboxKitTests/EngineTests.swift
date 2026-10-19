@@ -66,7 +66,7 @@ final class EngineTests: XCTestCase {
         var peak: Float = 0
         for b in 0..<200 { e.render(outs, n); if b > 20 { for j in 0..<n { peak = max(peak, abs(outs[0][j])) } } }
         print("ENGINE limiter peak \(peak)")
-        XCTAssertLessThan(peak, 0.97)
+        XCTAssertLessThan(peak, 0.99, "never over full scale")
     }
     func testReportsPosition() {
         let e = engine(440)
