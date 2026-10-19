@@ -787,7 +787,7 @@ html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme=
             <select class="hsel" id="ctlProfile"></select>
             <p id="ctlNote" class="ctlnote"></p>
             <div class="ctlrow"><button class="hbtn" id="ctlLearn">Learn…</button><button class="hbtn" id="ctlClear">Clear learned</button>
-              <button class="hbtn" id="ctlSmart" title="Use two spare buttons (on the FLX4: SMART CFX and SMART FADER) to switch the controller's sides between decks 1/3 and 2/4 in 4-deck mode. Their lights flash while a side is on deck 3 or 4.">Deck layers on SMART CFX / FADER…</button>
+              <button class="hbtn" id="ctlSmart" title="Use two spare buttons (on the FLX4: SMART CFX and SMART FADER) to switch the controller's sides between decks 1/3 and 2/4 in 4-deck mode. The deck numbers over the mixer show which decks it plays.">Deck layers on SMART CFX / FADER…</button>
               <button class="hbtn" id="ctlExport">Export</button><button class="hbtn" id="ctlImport">Import</button>
               <input type="file" id="ctlImportFile" accept=".json,application/json" class="pick"></div>
           </div>
@@ -5359,7 +5359,9 @@ function updateLeds() {
   for (const e of MIDI.ledEntries) {
     const [st, no, action] = e;
     if (action === "fxOn") { led(st, no, FX.beat.on); continue; }
-    if (action === "layer") { led(st, no, FOUR && MIDI.side[e[3]] !== e[3] ? blinkOn : false); continue; }
+    // a deck layer button's light stays off: on the FLX4, SMART CFX's and SMART FADER's lights switch the
+    // controller's own Smart CFX / Smart Fader on, which then moves the EQ and BEAT FX by itself
+    if (action === "layer") { led(st, no, false); continue; }
     if (e[3] < 0) continue;
     const deck = hwDeck(e[3]), d = decks[deck];
     const colon = action.indexOf(":"), name = colon < 0 ? action : action.slice(0, colon), arg = action.slice(colon + 1);
@@ -5405,7 +5407,7 @@ function setupLayerButtons() {
     useProfile(p);
     if (++k < steps.length) return ask();
     MIDI.capture = null;
-    status(`Done: ${steps[0][1]} switches the left side 1 ⇄ 3, ${steps[1][1]} the right side 2 ⇄ 4 (in 4-deck mode). Their lights flash while a side is on deck 3 or 4.`, 10000);
+    status(`Done: ${steps[0][1]} switches the left side 1 ⇄ 3, ${steps[1][1]} the right side 2 ⇄ 4 (in 4-deck mode). The deck numbers over the mixer show which decks it plays.`, 10000);
   };
   ask();
 }

@@ -8,7 +8,7 @@ All notable changes to Cratebox (the web app). Version numbers follow `MAJOR.MIN
 - **Deck layers: play decks 3 and 4 from the FLX4** (or any 2-channel controller). In 4-deck mode, toggles at the top of the mixer switch the controller's left side between decks 1 and 3 and its right side between 2 and 4. Every control on that side follows (transport, jog, pads, loops, LOAD, tempo, the channel's fader, EQ, TRIM, CFX and CUE), and so do the lights, the VU meter and the BEAT FX CH SELECT lever. The decks being played get an outline in their colour.
 - **Soft takeover** after a switch: faders and knobs only take over once they reach the new deck's setting, so nothing jumps.
 - The toggles are learnable onto hardware buttons. 2 DECKS puts the controller back on decks 1 and 2.
-- **SMART CFX / SMART FADER as deck layer buttons**: Settings → Controller → *Deck layers on SMART CFX / FADER…*, press each once. SMART CFX switches the left side 1 ⇄ 3, SMART FADER the right side 2 ⇄ 4; their lights flash while a side is on deck 3 or 4. (Pioneer doesn't publish those two buttons' messages, so they're picked up by pressing them; a button that already does something is refused.)
+- **SMART CFX / SMART FADER as deck layer buttons**: Settings → Controller → *Deck layers on SMART CFX / FADER…*, press each once. SMART CFX switches the left side 1 ⇄ 3, SMART FADER the right side 2 ⇄ 4. Their lights stay off: on the FLX4 they switch the controller's own Smart CFX / Smart Fader on, which then moves the EQ and BEAT FX by itself. (Pioneer doesn't publish those two buttons' messages, so they're picked up by pressing them; a button that already does something is refused.)
 - `tests/test_layers.py`, `tests/test_header.py`, `tests/test_resume.py`.
 
 ### Changed

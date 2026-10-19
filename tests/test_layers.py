@@ -160,9 +160,11 @@ def main():
         check("SMART CFX switches the left side 1 -> 3, SMART FADER the right 2 -> 4", (s0, s1, s2) == ("0,1", "2,1", "2,3"), f"{s0} {s1} {s2}")
         lights = lambda: page.evaluate(f"""new Promise(r => {{ cratebox.MIDI.ledCache.clear(); cratebox.MIDI.log.length = 0; setTimeout(() => r(
             [{SCFX[0]}, {SFAD[0]}].map((st, k) => [...new Set(cratebox.MIDI.log.filter(m => m[0] === st && m[1] === [{SCFX[1]}, {SFAD[1]}][k]).map(m => m[2]))].sort())), 1300); }})""")
-        check("their lights flash while on deck 3 / 4", lights() == [[0, 127], [0, 127]], str(lights()))
+        # their lights stay off: on the FLX4 they switch its own Smart CFX / Smart Fader on, which then
+        # moves the EQ and BEAT FX by itself (seen on the hardware)
+        check("their lights stay off on deck 3 / 4 (lighting them starts the FLX4's own Smart Fader)", lights() == [[0], [0]], str(lights()))
         midi(*SCFX, 127); midi(*SCFX, 0); midi(*SFAD, 127); midi(*SFAD, 0)
-        check("...and stay off on decks 1 / 2", lights() == [[0], [0]], str(lights()))
+        check("...and on decks 1 / 2", lights() == [[0], [0]], str(lights()))
         if len(sys.argv) > 1:
             page.screenshot(path=sys.argv[1])
 
