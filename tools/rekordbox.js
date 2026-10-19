@@ -2,7 +2,9 @@
 //  rekordbox: USB/SD exports (export.pdb + ANLZ files) and rekordbox XML
 // =====================================================================================
 // export.pdb ("Device Library") and ANLZ layouts follow Deep Symmetry's reverse-engineering in
-// crate-digger (rekordbox_pdb.ksy / rekordbox_anlz.ksy). Read-only: Cratebox never writes to a stick.
+// crate-digger (rekordbox_pdb.ksy / rekordbox_anlz.ksy). The only thing Cratebox ever writes to a stick is
+// the playlist tables of export.pdb (RB.writePlaylists); tracks, analysis files and everything else stay as
+// rekordbox wrote them.
 
 const RB = {};
 RB.pdbString = function (dv, pos) {
@@ -80,7 +82,7 @@ RB.parsePdb = function (buf) {
   });
   const tree = [];
   RB.pdbRows(dv, RB.PAGE.playlistTree, (v, o) => {
-    try { tree.push({ parent: v.getUint32(o, true), sort: v.getUint32(o + 8, true), id: v.getUint32(o + 12, true), folder: v.getUint32(o + 16, true) !== 0, name: S(v, o + 20) }); } catch (e) {}
+    try { tree.push({ parent: v.getUint32(o, true), unk: v.getUint32(o + 4, true), sort: v.getUint32(o + 8, true), id: v.getUint32(o + 12, true), folder: v.getUint32(o + 16, true) !== 0, name: S(v, o + 20) }); } catch (e) {}
   });
   const entries = [];
   RB.pdbRows(dv, RB.PAGE.playlistEntries, (v, o) => {
@@ -94,6 +96,137 @@ RB.parsePdb = function (buf) {
 };
 
 // ANLZ (.DAT/.EXT): beat grid, hot and memory cues, rekordbox's own phrase analysis
+// ---- writing playlists back to export.pdb ----
+// A DeviceSQL string: short ASCII (up to 126 chars), long ASCII (0x40) or long UTF-16LE (0x90)
+RB.pdbStringBytes = function (s) {
+  s = String(s == null ? "" : s);
+  const ascii = /^[\x00-\x7f]*$/.test(s);
+  if (ascii && s.length <= 126) {
+    const b = new Uint8Array(1 + s.length); b[0] = ((s.length + 1) << 1) | 1;
+    for (let i = 0; i < s.length; i++) b[1 + i] = s.charCodeAt(i);
+    return b;
+  }
+  const n = ascii ? s.length : s.length * 2, b = new Uint8Array(4 + n), v = new DataView(b.buffer);
+  b[0] = ascii ? 0x40 : 0x90; v.setUint16(1, n + 4, true); b[3] = 0;
+  for (let i = 0; i < s.length; i++) ascii ? (b[4 + i] = s.charCodeAt(i)) : v.setUint16(4 + 2 * i, s.charCodeAt(i), true);
+  return b;
+};
+// Rewrites the playlist tree and playlist entry tables of an export.pdb and returns the new file
+// (a new ArrayBuffer; the input is untouched). nodes: [{ id, parent, folder, name, tracks: [rekordbox
+// track id], unk? }] in the order they should show (siblings are numbered in that order). Each table's
+// rows are packed afresh into the data pages it already has, like a fresh export (no deleted rows);
+// when they don't fit, the table grows by a page the way rekordbox grows it (its "empty candidate"
+// page becomes the new last page and a new candidate is taken from the header's next unused page).
+// The index pages and every other table are left exactly as they were.
+RB.writePlaylists = function (buf, nodes) {
+  const src = new DataView(buf);
+  const PS = src.getUint32(4, true), NT = src.getUint32(8, true);
+  if (PS < 512 || PS > 65536 || NT < 9 || NT > 64) throw new Error("not an export.pdb");
+  const HEAP = 0x28;
+  // rows for each table
+  const ids = new Set();
+  for (const n of nodes) {
+    if (!(n.id > 0) || ids.has(n.id)) throw new Error("bad playlist id " + n.id);
+    ids.add(n.id);
+  }
+  for (const n of nodes) if (n.parent && !ids.has(n.parent)) throw new Error("playlist parent missing");
+  const sortOf = new Map(), seenParent = new Map();
+  for (const n of nodes) { const k = n.parent || 0, c = seenParent.get(k) || 0; sortOf.set(n.id, c); seenParent.set(k, c + 1); }
+  const treeRows = nodes.map((n) => {
+    const name = RB.pdbStringBytes(n.name), r = new Uint8Array(20 + name.length), v = new DataView(r.buffer);
+    v.setUint32(0, n.parent || 0, true); v.setUint32(4, n.unk || 0, true); v.setUint32(8, sortOf.get(n.id), true);
+    v.setUint32(12, n.id, true); v.setUint32(16, n.folder ? 1 : 0, true); r.set(name, 20);
+    return r;
+  });
+  const entryRows = [];
+  for (const n of nodes) {
+    if (n.folder) continue;
+    (n.tracks || []).forEach((tid, i) => {
+      const r = new Uint8Array(12), v = new DataView(r.buffer);
+      v.setUint32(0, i + 1, true); v.setUint32(4, tid, true); v.setUint32(8, n.id, true);
+      entryRows.push(r);
+    });
+  }
+  // the new file: a copy, grown when a table needs a page more
+  let out = new Uint8Array(buf.slice(0)), dv = new DataView(out.buffer);
+  const grow = (pages) => {
+    if (pages * PS <= out.length) return;
+    const o = new Uint8Array(pages * PS); o.set(out); out = o; dv = new DataView(out.buffer);
+  };
+  const seq = () => { const s = dv.getUint32(20, true); dv.setUint32(20, s + 1, true); return s; };
+  const pack = (type, rows) => {
+    let tp = -1;
+    for (let t = 0; t < NT; t++) if (dv.getUint32(28 + t * 16, true) === type) tp = 28 + t * 16;
+    if (tp < 0) throw new Error("export.pdb has no table " + type);
+    // the table's data pages, in order (its first page is an index page)
+    const pages = [], seen = new Set();
+    let page = dv.getUint32(tp + 8, true);
+    const last = dv.getUint32(tp + 12, true);
+    for (;;) {
+      if (seen.has(page) || (page + 1) * PS > dv.byteLength || dv.getUint32(page * PS + 8, true) !== type) throw new Error("export.pdb: broken page chain in table " + type);
+      seen.add(page);
+      if (!(dv.getUint8(page * PS + 27) & 0x40)) pages.push(page);
+      if (page === last) break;
+      page = dv.getUint32(page * PS + 12, true);
+    }
+    if (!pages.length) throw new Error("export.pdb: table " + type + " has no data pages");
+    // share the rows out over pages: heap from the start, row index (groups of 16) from the end
+    const fits = (used, n, len) => {
+      const idx = Math.floor((n + 1) / 16) * 36 + ((n + 1) % 16 ? 4 + 2 * ((n + 1) % 16) : 0);
+      return HEAP + used + ((len + 3) & ~3) + idx <= PS;
+    };
+    const plan = [[]];
+    let used = 0;
+    for (const r of rows) {
+      if (r.length + HEAP + 6 > PS) throw new Error("row too big");
+      if (!fits(used, plan[plan.length - 1].length, r.length)) { plan.push([]); used = 0; }
+      plan[plan.length - 1].push(r); used += (r.length + 3) & ~3;
+    }
+    while (plan.length > pages.length) {
+      // a new last page, the way rekordbox adds one
+      const cand = dv.getUint32(tp + 4, true), nextU = dv.getUint32(12, true);
+      if (seen.has(cand) || cand <= 0 || cand >= nextU) throw new Error("export.pdb: no free page for table " + type);
+      grow(cand + 1);
+      const prev = pages[pages.length - 1];
+      dv.setUint32(prev * PS + 12, cand, true);
+      out.fill(0, cand * PS, (cand + 1) * PS);
+      dv.setUint32(cand * PS + 4, cand, true); dv.setUint32(cand * PS + 8, type, true); dv.setUint32(cand * PS + 12, nextU, true);
+      dv.setUint32(tp + 4, nextU, true); dv.setUint32(tp + 12, cand, true); dv.setUint32(12, nextU + 1, true);
+      pages.push(cand); seen.add(cand);
+    }
+    pages.forEach((pg, k) => {
+      const o = pg * PS, list = plan[k] || [], n = list.length;
+      out.fill(0, o + 0x10, o + PS);                     // keep page index, type and next page
+      dv.setUint32(o + 0x10, seq(), true);
+      const packed = n | (n << 13);
+      dv.setUint8(o + 0x18, packed & 0xff); dv.setUint8(o + 0x19, (packed >> 8) & 0xff); dv.setUint8(o + 0x1a, (packed >> 16) & 0xff);
+      dv.setUint8(o + 0x1b, 0x24);
+      let at = 0;
+      list.forEach((r, i) => {
+        out.set(r, o + HEAP + at);
+        const g = Math.floor(i / 16), j = i % 16, base = o + PS - g * 36;
+        dv.setUint16(base - 6 - 2 * j, at, true);
+        const bit = dv.getUint16(base - 4, true) | (1 << j);
+        dv.setUint16(base - 4, bit, true); dv.setUint16(base - 2, bit, true);
+        at += (r.length + 3) & ~3;
+      });
+      const idx = Math.floor(n / 16) * 36 + (n % 16 ? 4 + 2 * (n % 16) : 0);
+      dv.setUint16(o + 0x1c, PS - HEAP - at - idx, true); dv.setUint16(o + 0x1e, at, true);
+      dv.setUint16(o + 0x20, n ? n : 0x1fff, true); dv.setUint16(o + 0x22, n ? 0 : 0x1fff, true);
+    });
+  };
+  pack(RB.PAGE.playlistTree, treeRows);
+  pack(RB.PAGE.playlistEntries, entryRows);
+  // read it back: the playlists must come out as asked and the tracks as they were
+  const before = RB.parsePdb(buf), after = RB.parsePdb(out.buffer);
+  const want = nodes.map((n) => [n.id, n.parent || 0, !!n.folder, String(n.name == null ? "" : n.name), n.folder ? [] : (n.tracks || []).slice()]);
+  const got = new Map(after.playlists.map((p) => [p.id, [p.id, p.parent, p.folder, p.name, p.tracks]]));
+  for (const w of want) if (JSON.stringify(got.get(w[0])) !== JSON.stringify(w)) throw new Error("export.pdb: playlist didn't read back: " + w[3]);
+  if (after.playlists.length !== nodes.length) throw new Error("export.pdb: playlist count didn't read back");
+  if (JSON.stringify(after.tracks) !== JSON.stringify(before.tracks)) throw new Error("export.pdb: tracks changed");
+  return out.buffer;
+};
+
 RB.parseAnlz = function (buf) {
   const dv = new DataView(buf), out = { beats: [], hot: [], memory: [], phrases: null };
   if (dv.byteLength < 12 || dv.getUint32(0) !== 0x504d4149) return out;            // "PMAI"

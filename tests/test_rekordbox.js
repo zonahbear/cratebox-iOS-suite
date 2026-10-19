@@ -87,5 +87,59 @@ check("PCO2 (.EXT, NXS2): wins over PCOB, comments skipped correctly, hot cues u
 check("junk instead of an ANLZ file: empty result, no throw", (() => { const r = RB.parseAnlz(new ArrayBuffer(40)); return !r.beats.length && !r.hot.length; })());
 check("keyName for XML export", RB.keyName(5) === "F" && RB.keyName(17) === "Fm" && RB.keyName(-1) === "");
 
+// ---- writing playlists back into export.pdb
+// (also cross-checked by hand with rekordcrate, an independent Rust reader: its strict parser takes the
+// written files and it re-serializes every rewritten page byte for byte)
+{
+  const orig = ab(USB + "/PIONEER/rekordbox/export.pdb"), PS = 4096;
+  const nodesOf = (d) => d.playlists.map((p) => ({ id: p.id, parent: p.parent, folder: p.folder, name: p.name, unk: p.unk, tracks: p.tracks.slice() }));
+  const plOf = (buf) => RB.parsePdb(buf).playlists.map((p) => [p.id, p.parent, p.folder, p.name, p.tracks.join(",")].join("|")).sort();
+  const pageOfType = (u8, i) => new DataView(u8.buffer).getUint32(i * PS + 8, true);
+  const same = RB.writePlaylists(orig, nodesOf(db));
+  check("write: unchanged playlists read back the same", JSON.stringify(plOf(same)) === JSON.stringify(plOf(orig)));
+  const o8 = new Uint8Array(orig), s8 = new Uint8Array(same);
+  let others = 0;
+  for (let i = 1; i < o8.length / PS; i++) {
+    const ty = pageOfType(o8, i);
+    if (ty === 7 || ty === 8) continue;
+    for (let k = i * PS; k < (i + 1) * PS; k++) if (o8[k] !== s8[k]) { others++; break; }
+  }
+  check("write: every other page (tracks, artists, history...) left byte for byte", others === 0 && s8.length === o8.length, `${others} pages changed`);
+  check("write: the original buffer is untouched", new Uint8Array(ab(USB + "/PIONEER/rekordbox/export.pdb")).every((b, i) => b === o8[i]));
+  // edit: reorder, add, remove, rename (unicode and a long name), a new playlist in the folder, a new folder, delete one
+  const n = nodesOf(db), byName = (x) => n.find((p) => p.name === x);
+  byName("Playlist 1").tracks = [2, 1, 5, 3];
+  byName("Sub Playlist").name = "Sub Playlist — ünïcode ✓";
+  n.push({ id: 4, parent: byName("Folder").id, folder: false, name: "Warmup", tracks: [6, 4] });
+  n.push({ id: 5, parent: 0, folder: true, name: "L".repeat(200), tracks: [] });
+  n.push({ id: 6, parent: 5, folder: false, name: "Gone soon", tracks: [1] });
+  n.splice(n.findIndex((p) => p.id === 6), 1);
+  const ed = RB.parsePdb(RB.writePlaylists(orig, n)), ep = Object.fromEntries(ed.playlists.map((p) => [p.name, p]));
+  check("write: reorder, add and remove tracks", JSON.stringify(ep["Playlist 1"].tracks) === "[2,1,5,3]", JSON.stringify(ep["Playlist 1"]));
+  check("write: renamed (UTF-16 name) and a 200-character name", ep["Sub Playlist — ünïcode ✓"] && ep["L".repeat(200)] && ep["L".repeat(200)].folder, Object.keys(ep).join(" / "));
+  check("write: a new playlist inside a folder, a deleted one gone", ep.Warmup && ep.Warmup.parent === ep.Folder.id && JSON.stringify(ep.Warmup.tracks) === "[6,4]" && !ep["Gone soon"] && ed.playlists.length === 5);
+  check("write: tracks unchanged", JSON.stringify(ed.tracks) === JSON.stringify(db.tracks));
+  // big: more rows than the pages hold, so both tables grow by pages
+  const big = nodesOf(db);
+  big.find((p) => p.name === "Playlist 1").tracks = Array.from({ length: 900 }, (_, i) => 1 + (i % 6));
+  for (let k = 0; k < 300; k++) big.push({ id: 10 + k, parent: 0, folder: false, name: "Playlist number " + k, tracks: [1, 2, 3] });
+  const bb = RB.writePlaylists(orig, big), bd = RB.parsePdb(bb);
+  const hv = new DataView(bb);
+  check("write: tables grow by new pages when full (rekordbox's way: the empty candidate page, then next unused)",
+    bd.playlists.length === 303 && bd.playlists.find((p) => p.name === "Playlist 1").tracks.length === 900 && bb.byteLength > orig.byteLength
+    && hv.getUint32(12, true) > new DataView(orig).getUint32(12, true), `${bd.playlists.length} lists, ${bb.byteLength} bytes`);
+  check("write: ...and tracks still read the same", JSON.stringify(bd.tracks) === JSON.stringify(db.tracks));
+  // and shrinking back down after growing
+  const back = RB.writePlaylists(bb, nodesOf(db));
+  check("write: shrinking again leaves empty pages behind, playlists as asked", JSON.stringify(plOf(back)) === JSON.stringify(plOf(orig)));
+  const bad = (f) => { try { f(); return false; } catch (e) { return true; } };
+  check("write: refuses junk, duplicate ids and missing parents", bad(() => RB.writePlaylists(new ArrayBuffer(8192), [])) && bad(() => RB.writePlaylists(orig, [{ id: 1, name: "a" }, { id: 1, name: "b" }]))
+    && bad(() => RB.writePlaylists(orig, [{ id: 2, parent: 99, name: "x" }])));
+  check("write: DeviceSQL strings (short ASCII, long ASCII, UTF-16)", (() => {
+    const t = (s) => { const b = RB.pdbStringBytes(s); return RB.pdbString(new DataView(b.buffer), 0) === s; };
+    return t("") && t("Peak time") && t("x".repeat(126)) && t("x".repeat(127)) && t("Ünïcödé 🎧");
+  })());
+}
+
 console.log(`\n${pass}/${pass + fail} checks passed`);
 process.exit(fail ? 1 : 0);

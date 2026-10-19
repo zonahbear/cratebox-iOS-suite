@@ -47,19 +47,27 @@ MOCK_USB = """async () => {
     const a = list(true, [ent(1, 2000), ent(3, 9000)]), m = list(false, [ent(0, 500)]);
     const out = new Uint8Array(a.length + m.length); out.set(a); out.set(m, a.length); return out;
   };
+  // writable: what Cratebox writes lands in window.usbWritten (path -> bytes) and is read back from there
+  const W = window.usbWritten = window.usbWritten || new Map();
+  window.usbAsked = 0;
   const dir = (path, name) => ({
     kind: 'directory', name,
     async getDirectoryHandle(n) { const p = path ? path + '/' + n : n; if (![...files.keys()].some((k) => k.startsWith(p + '/'))) throw new DOMException('no ' + p, 'NotFoundError'); return dir(p, n); },
-    async getFileHandle(n) {
+    async getFileHandle(n, opt) {
       const p = path ? path + '/' + n : n, f = files.get(p);
-      if (!f) throw new DOMException('no ' + p, 'NotFoundError');
-      return { kind: 'file', name: n, async getFile() {
+      if (!f && !W.has(p) && !(opt && opt.create)) throw new DOMException('no ' + p, 'NotFoundError');
+      return { kind: 'file', name: n,
+        async createWritable() { const parts = []; return { async write(d) { parts.push(new Uint8Array(d.buffer ? d.buffer.slice(d.byteOffset || 0, (d.byteOffset || 0) + d.byteLength) : d)); },
+          async close() { const n2 = parts.reduce((a, x) => a + x.length, 0), o = new Uint8Array(n2); let k = 0; for (const x of parts) { o.set(x, k); k += x.length; } W.set(p, o); } }; },
+        async getFile() {
+        if (W.has(p)) return new File([W.get(p)], n);
         let b = new Uint8Array(await (await fetch(f.url)).arrayBuffer());
         if (f.fix) { const c = cueTag(), o = new Uint8Array(b.length + c.length); o.set(b); o.set(c, b.length); new DataView(o.buffer).setUint32(8, o.length); b = o; }
         return new File([b], n);
       } };
     },
     async queryPermission() { return 'granted'; },
+    async requestPermission() { window.usbAsked++; return window.usbPerm || 'granted'; },
   });
   await cratebox.mountDevice(dir('', 'SANDISK'), false);
 }"""
@@ -140,6 +148,23 @@ def main():
         n_all = page.evaluate("cratebox.lib.tracks.length")
         check("Delete removes the selected row from the playlist only", order3 == order2[1:] and n_all == len(NAMES), f"{order3}, collection {n_all}")
 
+        # ---- each list keeps its own sort: sort the playlist, go elsewhere, come back
+        hdr = lambda label: page.locator("#list .hdr div", has_text=label).first
+        hdr("Title").click(); hdr("Title").click()
+        s1 = page.evaluate("[cratebox.lib.sort, cratebox.lib.dir]")
+        tree_row(page, "Collection").click()
+        s2 = page.evaluate("cratebox.lib.sort")
+        hdr("Artist").click()
+        tree_row(page, "Bangers").click()
+        s3 = page.evaluate("[cratebox.lib.sort, cratebox.lib.dir, cratebox.lib.view.map(t => t.title)]")
+        check("sort is kept per list: the playlist comes back sorted (title, Z to A), the collection has its own",
+              s1 == ["title", -1] and s2 is None and s3[:2] == ["title", -1] and s3[2] == sorted(s3[2], reverse=True) and len(s3[2]) == 2, f"{s1} {s2} {s3}")
+        tree_row(page, "Collection").click()
+        check("...and the collection's sort (artist) is still there", page.evaluate("cratebox.lib.sort") == "artist")
+        tree_row(page, "Bangers").click()
+        page.locator("#list .hdr div", has_text="#").first.click()
+        check("# puts the playlist back in its own order, and that's remembered too", view_titles(page) == order3 and "pl:" + bangers not in page.evaluate("localStorage.getItem('cb.sorts')"))
+
         # ---- rename (double-click), a folder, and moving the playlist into it
         tree_row(page, "Bangers").dblclick()
         page.keyboard.press("Control+A"); page.keyboard.type("Peak time"); page.keyboard.press("Enter")
@@ -157,6 +182,8 @@ def main():
         page.reload()
         start(page)
         page.wait_for_function("cratebox.PL.lists.length === 3")
+        check("after a reload: the collection opens sorted the way you left it", page.evaluate("cratebox.lib.sort") == "artist")
+        page.locator("#list .hdr div", has_text="#").first.click()
         tree_row(page, "Peak time").click()
         check("after a reload: folder, playlist and its order are back", view_titles(page) == order3 and tree(page) == ["Collection", "Saturday", "Peak time", "Throwaway"],
               f"{view_titles(page)} {tree(page)}")
@@ -246,7 +273,8 @@ def main():
         tree_row(page, "Folder").click()
         tree_row(page, "Sub Playlist").click()
         check("USB: nested playlist opens, in rekordbox's order", view_titles(page) == ["Demo Track 1", "Demo Track 2"], str(view_titles(page)))
-        check("USB: rows are read-only (no remove button)", page.is_hidden("#plRemove"))
+        check("USB: read-only until editing is turned on (no remove button, no + on the stick)",
+              page.is_hidden("#plRemove") and page.locator(".tx[title^='New playlist on']").count() == 0)
         page.evaluate("cratebox.lib.sel = 0; cratebox.loadSelected(0)")
         page.wait_for_function("cratebox.decks[0].loaded && cratebox.decks[0].track.title === 'Demo Track 1'", timeout=60000)
         d = page.evaluate("""(() => { const d = cratebox.decks[0]; return { bpm: d.bpm, first: d.ana.firstBeat, rb: d.track.rbRead, ph: d.ana.phrases.length,
@@ -255,9 +283,78 @@ def main():
               d["bpm"] == 128 and abs(d["first"] - 0.025) < 1e-9 and d["rb"] and d["ph"] == 19 and d["key"] == "4A", str(d))
         check("USB track: rekordbox hot cues A and C and the memory cue", d["hot"][0] == 2 and d["hot"][2] == 9 and d["hot"][1] is None and d["cue"] == 0.5, str(d))
         r = tree_row(page, "Playlist 1")
-        r.hover(); r.locator(".tx").click()
+        r.hover(); r.locator(".tx[title='Copy to my playlists']").click()
         cp = page.evaluate("(() => { const p = cratebox.PL.lists.find(p => p.name === 'Playlist 1' && !p.folder); return p && p.items.length; })()")
         check("USB: ⧉ copies a device playlist into your own", cp == 2, str(cp))
+
+        # ---- editing the stick's playlists: off by default, on after a disclaimer, then written into export.pdb
+        page.click("#setBtn")
+        page.select_option("#rbEditSel", "1")
+        page.wait_for_selector(".rbwarn")
+        check("turning editing on shows the disclaimer first", "may damage your USB" in page.inner_text(".rbwarn") and page.evaluate("localStorage.getItem('cb.rbEdit')") != "1")
+        page.click(".rbwarn button:has-text('Cancel')")
+        check("Cancel leaves it read-only", page.input_value("#rbEditSel") == "0" and page.is_hidden("#plRemove"))
+        page.click("#setBtn")                  # clicking the dialog closed the settings
+        page.select_option("#rbEditSel", "1")
+        page.click(".rbwarn button:has-text('I understand')")
+        check("accepting turns editing on (and it's remembered)", page.input_value("#rbEditSel") == "1" and page.evaluate("localStorage.getItem('cb.rbEdit')") == "1"
+              and page.is_visible("#plRemove") and page.locator(".tx[title^='New playlist on']").count() == 1)
+        PDB = "cratebox.RB.parsePdb(window.usbWritten.get('PIONEER/rekordbox/export.pdb').buffer)"
+        LISTS = PDB + ".playlists.map(p => [p.name, p.parent, p.folder, p.tracks])"
+        saved = "(() => { const d = cratebox.PL.devices[0]; return !d.saving && !d.unsaved; })()"
+        page.evaluate("cratebox.plDelete(cratebox.PL.lists.find(p => p.name === 'Playlist 1' && !p.folder))")     # the ⧉ copy, same name
+        tree_row(page, "Playlist 1").click()
+        rows = page.locator("#list .trow")
+        rows.nth(0).click(); page.keyboard.press("Delete")
+        page.wait_for_function("window.usbWritten.has('PIONEER/rekordbox/export.pdb') && " + saved, timeout=10000)
+        check("USB: Delete removes a track from the stick's playlist and saves it to export.pdb",
+              page.evaluate(PDB + ".playlists.find(p => p.name === 'Playlist 1').tracks") == [2] and view_titles(page) == ["Demo Track 2"], str(page.evaluate(LISTS)))
+        orig = page.evaluate("(async () => Array.from(new Uint8Array(await (await fetch('tests/fixtures/rekordbox_usb/PIONEER/rekordbox/export.pdb')).arrayBuffer())).join(','))()")
+        bak = page.evaluate("Array.from(window.usbWritten.get('PIONEER/rekordbox/export.pdb.cratebox-backup') || []).join(',')")
+        check("USB: first save backs up the stick's database as it was (export.pdb.cratebox-backup)", bak == orig and page.evaluate("window.usbAsked") >= 1)
+        # add: drag a stick track onto the playlist, then one from the computer (refused)
+        tree_row(page, "SANDISK").click()
+        page.locator("#list .trow", has_text="SINEWAVE").first.drag_to(tree_row(page, "Playlist 1"))
+        tree_row(page, "Collection").click()
+        page.locator("#list .trow").nth(0).drag_to(tree_row(page, "Playlist 1"))
+        refused = page.inner_text("#status")
+        page.wait_for_function(saved, timeout=10000)
+        pl1 = page.evaluate(PDB + ".playlists.find(p => p.name === 'Playlist 1').tracks")
+        sid = page.evaluate(PDB + ".tracks.find(t => t.title === 'SINEWAVE').id")
+        check("USB: dragging a stick track onto its playlist adds it; a computer track is refused", pl1 == [2, sid] and "Only tracks on SANDISK" in refused, f"{pl1} / {refused}")
+        # reorder by dragging rows
+        tree_row(page, "Playlist 1").click()
+        rows.nth(0).drag_to(rows.nth(1), target_position={"x": 40, "y": 20})
+        page.wait_for_function(saved, timeout=10000)
+        check("USB: drag rows to reorder the stick's playlist", page.evaluate(PDB + ".playlists.find(p => p.name === 'Playlist 1').tracks") == [sid, 2] and view_titles(page) == ["SINEWAVE", "Demo Track 2"], str(view_titles(page)))
+        # new playlist (+ on the device), rename by double-click, delete with ×
+        r = tree_row(page, "SANDISK"); r.hover(); r.locator(".tx[title^='New playlist']").click()
+        page.keyboard.press("Control+A"); page.keyboard.type("Club set"); page.keyboard.press("Enter")
+        check("USB: + makes a playlist on the stick and opens it", page.evaluate("cratebox.PL.view.kind") == "devpl" and page.inner_text("#viewName").endswith("Club set"))
+        tree_row(page, "Sub Playlist").dblclick()
+        page.keyboard.press("Control+A"); page.keyboard.type("Sub — Ünïcode"); page.keyboard.press("Enter")
+        page.wait_for_function(saved, timeout=10000)
+        r = tree_row(page, "Club set"); r.hover(); r.locator(".tx[title^='Delete']").click(); page.click(".tconfirm .danger")
+        page.wait_for_function(saved + " && !" + PDB + ".playlists.some(p => p.name === 'Club set')", timeout=10000)
+        lists = sorted(page.evaluate(LISTS), key=lambda x: x[0])
+        fid = page.evaluate(PDB + ".playlists.find(p => p.name === 'Folder').id")
+        want = sorted([["Playlist 1", 0, False, [sid, 2]], ["Folder", 0, True, []], ["Sub — Ünïcode", fid, False, [1, 2]]], key=lambda x: x[0])
+        check("USB: rename (unicode) and delete written to the stick", lists == want, str(lists))
+        # the stick opened again shows the edits
+        page.evaluate("cratebox.setView({ kind: 'all' }); cratebox.lib.sel = 0; cratebox.loadSelected(0)")    # the stick's track off the deck
+        page.wait_for_function("cratebox.decks[0].loaded && !cratebox.decks[0].track.device", timeout=60000)
+        page.evaluate(MOCK_USB)
+        page.wait_for_function("cratebox.PL.devices.length === 1 && cratebox.PL.devices[0].tree.some(n => n.name === 'Sub — Ünïcode')")
+        tree_row(page, "Playlist 1").click()
+        check("USB: opened again, the stick shows the saved playlists", view_titles(page) == ["SINEWAVE", "Demo Track 2"] and "Club set" not in tree(page), f"{view_titles(page)} {tree(page)}")
+        # rekordbox wrote the stick meanwhile: refuse to save over it
+        page.evaluate("(() => { const b = window.usbWritten.get('PIONEER/rekordbox/export.pdb'); new DataView(b.buffer).setUint32(20, new DataView(b.buffer).getUint32(20, true) + 5, true); })()")
+        before = page.evaluate("Array.from(window.usbWritten.get('PIONEER/rekordbox/export.pdb')).join(',')")
+        rows.nth(0).click(); page.keyboard.press("Delete")
+        page.wait_for_function("document.querySelector('#status').textContent.includes('Not saved')", timeout=10000)
+        check("USB: if the stick changed since it was opened, nothing is written and it says so",
+              "changed since Cratebox opened it" in page.inner_text("#status") and page.evaluate("Array.from(window.usbWritten.get('PIONEER/rekordbox/export.pdb')).join(',')") == before
+              and "not saved" in " ".join(tree(page)), page.inner_text("#status"))
 
         # ---- FLX4 browse: press = tree/list, turn = move through the tree
         res = page.evaluate("""async () => {
