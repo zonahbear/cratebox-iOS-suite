@@ -55,9 +55,9 @@ jobs:
         timeout-minutes: 12
         run: |
           cd ios
-          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
+          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/dds" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|BUILD" | tee -a ../ci.log
-          APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Debug-iphonesimulator/*.app | head -1)
+          APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Release-iphonesimulator/*.app | head -1)
           mkdir -p "$RUNNER_TEMP/shots"
           for dev in "iPhone 16 Pro" "iPad Pro 13-inch (M4)"; do
             UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for r in d.values() for x in r if x['name']=='$dev'), ''))")
@@ -68,7 +68,7 @@ jobs:
             gtimeout 240 xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1 || true
             xcrun simctl install "$UDID" "$APP"
             xcrun simctl launch "$UDID" com.zonahbear.cratebox -demo | tee -a ../ci.log
-            sleep 12
+            sleep 25
             xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q cratebox && echo "SIM RUNNING $dev" | tee -a ../ci.log || echo "SIM NOT RUNNING $dev (crashed?)" | tee -a ../ci.log
             n=$(echo "$dev" | tr ' ()' '___')
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$n.png" || true

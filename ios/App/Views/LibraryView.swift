@@ -244,9 +244,9 @@ struct LibraryPane: View {
             Section {
                 ForEach(treeRows(nil, 0), id: \.0.id) { p, depth in plRow(p, depth) }
             } header: {
-                HStack {
-                    Text("PLAYLISTS")
-                    Spacer()
+                HStack(spacing: 10) {
+                    Text("PLAYLISTS").lineLimit(1).fixedSize()
+                    Spacer(minLength: 2)
                     Button { let p = playlists.new(playlists.nextName("Playlist")); renaming = "pl:" + p.id; renameText = p.name } label: { Image(systemName: "plus") }
                     Button { let p = playlists.new(playlists.nextName("Folder"), folder: true); renaming = "pl:" + p.id; renameText = p.name } label: { Image(systemName: "folder.badge.plus") }
                     Menu {
