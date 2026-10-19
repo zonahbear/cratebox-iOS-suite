@@ -73,6 +73,37 @@ final class AppModel: ObservableObject, ControlTarget {
         for f in library.folders where !f.device { library.scan(f) }
         Devices.shared.app = self
         Devices.shared.restore()
+        if CommandLine.arguments.contains("-demo") { demo() }
+    }
+
+    /// For the simulator screenshots: a synthetic house loop on decks 1 and 2, deck 1 playing
+    func demo() {
+        Task.detached {
+            let sr = AudioHost.sampleRate, n = Int(sr * 90), bpm = 124.0, spb = 60 / bpm
+            let t = PCMTrack(count: n, sampleRate: sr)
+            for i in 0..<n {
+                let s = Double(i) / sr, ph = s.truncatingRemainder(dividingBy: spb), bar = Int(s / (4 * spb))
+                let kick = ph < 0.25 ? sin(2 * .pi * (50 + 120 * exp(-ph * 30)) * ph) * exp(-ph * 9) : 0
+                let hat = (s + spb / 2).truncatingRemainder(dividingBy: spb) < 0.03 ? Double.random(in: -0.25...0.25) : 0
+                let bass = bar % 8 < 4 ? 0.25 * sin(2 * .pi * 55 * s) * (ph > spb / 2 ? 1 : 0.2) : 0
+                let pad = 0.08 * sin(2 * .pi * 220 * s) + 0.06 * sin(2 * .pi * 329.6 * s)
+                let v = Float(0.8 * kick + hat + bass + pad)
+                t.left[i] = v; t.right[i] = v
+            }
+            let m = AudioDecoder.mono(t, 11025), w = AudioDecoder.mono(t, 22050)
+            let r = Analysis.analyze(m.x, fs: m.fs, waveSource: w)
+            await MainActor.run {
+                for k in 0..<2 {
+                    let info = TrackInfo(id: "demo\(k)", title: k == 0 ? "Demo Groove" : "Demo Groove (dub)", artist: "Cratebox")
+                    let d = self.core.decks[k]
+                    d.beginLoad(info)
+                    d.finishLoad(info, pcm: t, analysis: DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: r.key, phrases: r.phrases, wave: r.wave, duration: 90), mono: m)
+                }
+                self.core.decks[0].seek(20); self.core.decks[0].togglePlay()
+                self.core.decks[0].hotcue(0)
+                self.core.decks[1].seek(12)
+            }
+        }
     }
 
     @objc func tick() {

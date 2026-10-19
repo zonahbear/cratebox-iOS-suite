@@ -10,9 +10,57 @@ struct DeckView: View {
     @EnvironmentObject var app: AppModel
     @ObservedObject var deck: DeckModel
     var compact = false
+    var phone = false
     var color: Color { Theme.deck[deck.i] }
 
     var body: some View {
+        if phone { phoneBody } else { fullBody }
+    }
+    /// iPhone landscape: everything in about 350 points of height
+    var phoneBody: some View {
+        VStack(spacing: 4) {
+            header
+            WaveformView(deck: deck, color: color).frame(height: 48)
+            OverviewView(deck: deck, color: color).frame(height: 12)
+            HStack(spacing: 6) {
+                if deck.i % 2 == 0 { VFader(value: (deck.pitch + 1) / 2, color: color, height: 92, inverted: true) { deck.setPitch($0 * 2 - 1) } }
+                JogView(deck: deck, color: color).frame(width: 84, height: 84)
+                VStack(spacing: 4) {
+                    HStack(spacing: 4) {
+                        LitButton(label: "SYNC", on: deck.sync, color: color) { deck.setSync(!deck.sync) }
+                        LitButton(label: "MT", on: deck.mt, color: color) { deck.setMT(!deck.mt) }
+                        LitButton(label: "Q", on: deck.quant, color: color) { deck.quant.toggle() }
+                    }
+                    HStack(spacing: 6) {
+                        HoldButton(down: { deck.cueDown() }, up: { deck.cueUp() }) {
+                            Text("CUE").font(.system(size: 12, weight: .bold)).frame(width: 46, height: 34)
+                                .background(Capsule().fill(Theme.raise)).overlay(Capsule().stroke(Theme.cue, lineWidth: 2))
+                        }
+                        Button { deck.togglePlay() } label: {
+                            Image(systemName: deck.playing ? "pause.fill" : "play.fill").frame(width: 46, height: 34)
+                                .background(Capsule().fill(Theme.raise)).overlay(Capsule().stroke(Theme.ok, lineWidth: 2))
+                        }.buttonStyle(.plain)
+                    }
+                    Menu {
+                        Button("Loop in") { deck.loopIn() }; Button("Loop out") { deck.loopOut() }; Button(deck.loop.on ? "Exit loop" : "Reloop") { deck.reloopExit() }
+                        Button("Loop ½") { deck.loopScale(0.5) }; Button("Loop ×2") { deck.loopScale(2) }
+                        Button("Jump back 4 beats") { deck.beatJump(-4) }; Button("Jump ahead 4 beats") { deck.beatJump(4) }
+                        Button("Tap tempo") { deck.tap() }; Button("Tempo range ±\(deck.range == 100 ? "W" : String(Int(deck.range)))") { deck.cycleRange() }
+                        Button("Beat grid…") { app.gridDeck = deck.i }
+                    } label: { Text("⋯ LOOP / GRID").font(.system(size: 10, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 22).background(RoundedRectangle(cornerRadius: 5).fill(deck.loop.on ? Theme.loop.opacity(0.4) : Theme.raise)) }
+                }
+                if deck.i % 2 == 1 { VFader(value: (deck.pitch + 1) / 2, color: color, height: 92, inverted: true) { deck.setPitch($0 * 2 - 1) } }
+            }
+            Picker("", selection: $deck.padMode) {
+                Text("CUES").tag(PadMode.hotcue); Text("LOOP").tag(PadMode.beatloop); Text("JUMP").tag(PadMode.beatjump)
+                Text("FX1").tag(PadMode.padfx); Text("FX2").tag(PadMode.padfx2)
+            }.pickerStyle(.segmented).controlSize(.mini)
+            HStack(spacing: 3) { ForEach(0..<8, id: \.self) { p in pad(p) } }
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+    }
+    var fullBody: some View {
         VStack(spacing: 6) {
             header
             WaveformView(deck: deck, color: color).frame(height: compact ? 70 : 96)
@@ -142,7 +190,7 @@ struct DeckView: View {
         let c: Color = deck.padMode == .hotcue ? Theme.hot : deck.padMode == .beatloop ? Theme.loop : color
         return HoldButton(down: { deck.padPress(p) }, up: { deck.padRelease(p) }) {
             Text(padLabel(p)).font(.system(size: 11, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.5)
-                .frame(maxWidth: .infinity, minHeight: compact ? 30 : 38)
+                .frame(maxWidth: .infinity, minHeight: phone ? 28 : compact ? 30 : 38)
                 .foregroundStyle(on ? Color.black : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 6).fill(on ? c : Theme.raise))
         }

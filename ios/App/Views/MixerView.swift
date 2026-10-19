@@ -6,10 +6,45 @@ struct MixerView: View {
     @EnvironmentObject var core: Core
     @EnvironmentObject var fx: FxController
     var compact = false
+    var phone = false
+    @State private var fxSheet = false
 
     var order: [Int] { core.four ? [2, 0, 1, 3] : [0, 1] }
 
     var body: some View {
+        if phone { phoneBody } else { fullBody }
+    }
+    var phoneBody: some View {
+        VStack(spacing: 4) {
+            if core.four { layers }
+            HStack(alignment: .top, spacing: 2) { ForEach(order, id: \.self) { i in phoneStrip(i) } }
+            crossfader
+            HStack(spacing: 6) {
+                Knob(label: "Cue/Mst", value: core.mixer.headMix, size: 22, center: 0) { core.mixer.headMix = $0 }
+                Knob(label: "Master", value: core.mixer.master, size: 22, center: 0.8) { core.mixer.master = $0 }
+                LitButton(label: fx.on ? "FX ●" : "FX", on: fx.on, color: Theme.hot) { fxSheet = true }
+            }
+        }
+        .padding(5)
+        .frame(width: core.four ? 236 : 150)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .sheet(isPresented: $fxSheet) { BeatFXView().padding().presentationDetents([.height(220)]) }
+    }
+    func phoneStrip(_ i: Int) -> some View {
+        let c = Theme.deck[i]
+        return VStack(spacing: 2) {
+            Knob(label: "Hi", value: core.mixer.hi[i], color: c, size: 20) { core.setMixer("hi", i, $0) }
+            Knob(label: "Mid", value: core.mixer.mid[i], color: c, size: 20) { core.setMixer("mid", i, $0) }
+            Knob(label: "Low", value: core.mixer.low[i], color: c, size: 20) { core.setMixer("low", i, $0) }
+            Knob(label: "CFX", value: core.mixer.cfx[i], color: Theme.loop, size: 20) { core.setMixer("cfx", i, $0) }
+            Button { core.togglePfl(i) } label: {
+                Text("CUE").font(.system(size: 9, weight: .bold)).frame(width: 34, height: 20).foregroundStyle(core.mixer.pfl[i] ? Color.black : Theme.fg)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.pfl[i] ? Theme.cue : Theme.raise))
+            }.buttonStyle(.plain)
+            VFader(value: core.mixer.fader[i], color: c, height: 78) { core.setMixer("fader", i, $0) }
+        }.frame(maxWidth: .infinity)
+    }
+    var fullBody: some View {
         VStack(spacing: 8) {
             if core.four { layers }
             HStack(alignment: .top, spacing: 6) {

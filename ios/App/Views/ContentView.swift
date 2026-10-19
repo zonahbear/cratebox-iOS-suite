@@ -12,13 +12,13 @@ struct ContentView: View {
             VStack(spacing: 6) {
                 topBar(phone)
                 if phone {
-                    if app.tab == 0 { mix(compact: true) } else { LibraryPane() }
+                    if app.tab == 0 { phoneMix } else { LibraryPane() }
                 } else {
                     mix(compact: g.size.height < 900)
                     LibraryPane().frame(minHeight: 180)
                 }
             }
-            .padding(6)
+            .padding(phone ? 2 : 6)
             .background(Theme.bg)
         }
         .sheet(isPresented: $settings) { SettingsView() }
@@ -26,6 +26,15 @@ struct ContentView: View {
     }
     struct GridTarget: Identifiable { let id: Int }
 
+    /// iPhone: two decks around a small mixer (4-deck mode: the decks the controller plays, switchable)
+    var phoneMix: some View {
+        let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
+        return HStack(alignment: .top, spacing: 4) {
+            DeckView(deck: core.decks[l], phone: true).id(l)
+            MixerView(phone: true)
+            DeckView(deck: core.decks[r], phone: true).id(r)
+        }
+    }
     func mix(compact: Bool) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(spacing: 6) { DeckView(deck: core.decks[0], compact: compact || core.four); if core.four { DeckView(deck: core.decks[2], compact: true) } }
@@ -36,7 +45,7 @@ struct ContentView: View {
 
     func topBar(_ phone: Bool) -> some View {
         HStack(spacing: 8) {
-            Text("CRATEBOX").font(.system(size: 15, weight: .heavy)).tracking(3)
+            if !phone { Text("CRATEBOX").font(.system(size: 15, weight: .heavy)).tracking(3) }
             HStack(spacing: 4) {
                 Circle().fill(app.controllerName.isEmpty ? Theme.dim : Theme.ok).frame(width: 7, height: 7)
                 Text(app.controllerName.isEmpty ? "No controller" : app.controllerName).font(.system(size: 11)).lineLimit(1)
