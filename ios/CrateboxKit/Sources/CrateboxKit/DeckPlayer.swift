@@ -28,8 +28,8 @@ public final class DeckPlayer {
     public let sampleRate: Double
     // the track: owned by whoever loaded it, kept alive by `track`
     public private(set) var track: PCMTrack?
-    var L: UnsafePointer<Float>? { track?.left }
-    var R: UnsafePointer<Float>? { track?.right }
+    var L: UnsafePointer<Float>? { track.map { UnsafePointer($0.left) } }
+    var R: UnsafePointer<Float>? { track.map { UnsafePointer($0.right) } }
     public private(set) var len = 0
     public private(set) var pos = 0.0
     public private(set) var playing = false
