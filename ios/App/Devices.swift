@@ -94,8 +94,13 @@ final class Devices: ObservableObject {
         var ext = RekordboxANLZ.parse([UInt8]((try? Data(contentsOf: datURL.deletingPathExtension().appendingPathExtension("EXT"))) ?? Data()))
         ext.beats = a.beats
         if !t.info.gridManual { t.info.bpm = g.bpm; t.info.firstBeat = g.firstBeat; t.info.autoBpm = g.bpm; t.info.autoFirst = g.firstBeat }
-        t.info.rbBeats = a.beats.map { Double($0.ms) / 1000 }
-        t.info.rbBeat0 = a.beats.firstIndex { $0.n == 1 } ?? 0
+        t.info.rbGrid = true
+        // beat by beat only when rekordbox's grid actually changes tempo: an even grid is exact as BPM + first
+        // beat (its stored beat times are just that, rounded to the millisecond)
+        if Set(a.beats.map { $0.bpm }).count > 1 {
+            t.info.rbBeats = a.beats.map { Double($0.ms) / 1000 }
+            t.info.rbBeat0 = a.beats.firstIndex { $0.n == 1 } ?? 0
+        } else { t.info.rbBeats = nil }
         if let ph = RekordboxANLZ.phrases(ext) { t.info.phrases = ph }
         let cueSrc = !ext.hot.isEmpty || !ext.memory.isEmpty ? ext : a
         t.info.rbCues = RekordboxANLZ.cues(cueSrc)

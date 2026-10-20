@@ -315,7 +315,8 @@ struct PhoneLane: View {
                             Text(String(format: "%+.1f%%", (deck.rate() - 1) * 100)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
                             phaseTag(deck)
                             // whose beat grid this is: rekordbox's (beat by beat) or Cratebox's analysis
-                            Text(deck.ana?.beats != nil ? "RB GRID" : "AUTO GRID").font(.system(size: 8, weight: .heavy)).foregroundStyle(deck.ana?.beats != nil ? Theme.ok : Theme.cue)
+                            let rb = (deck.track?.rbGrid ?? false) && !(deck.track?.gridManual ?? false)
+                            Text(deck.ana?.beats != nil ? "RB GRID · VAR" : rb ? "RB GRID" : "AUTO GRID").font(.system(size: 8, weight: .heavy)).foregroundStyle(rb ? Theme.ok : Theme.cue)
                             Text("-" + clock(deck.duration - deck.now())).font(.system(size: 11, design: .monospaced))
                         }
                     }

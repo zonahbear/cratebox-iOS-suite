@@ -22,6 +22,7 @@ public final class TrackInfo: Identifiable, Equatable {
     /// rekordbox's own beat grid, beat by beat (seconds), and which beat is bar 1's first
     public var rbBeats: [Double]?
     public var rbBeat0 = 0
+    public var rbGrid = false            // the grid came from rekordbox
     public init(id: String, title: String, artist: String = "", bpm: Double? = nil, firstBeat: Double? = nil, key: Int = -1, duration: Double = 0, phrases: [Phrase] = []) {
         self.id = id; self.title = title; self.artist = artist; self.bpm = bpm; self.firstBeat = firstBeat; self.key = key; self.duration = duration; self.phrases = phrases
     }
@@ -101,11 +102,17 @@ public final class DeckModel: ObservableObject, Identifiable {
     public var bpm: Double { ana?.bpm ?? 0 }
     /// seconds per beat where the playhead is (a beat-by-beat grid's tempo varies along the track)
     public var spb: Double {
-        if let b = grid { return segment(b, now()) }
+        if let b = grid { return windowSpb(b, now()) }
         return bpm > 0 ? 60 / bpm : 0.5
     }
+    /// seconds per beat over the 16 beats around t. rekordbox stores beat times in whole milliseconds, so one
+    /// beat at 140 BPM is 428 or 429 ms (140.19 / 139.86 BPM): tempo comes from the span, not single beats
+    func windowSpb(_ b: [Double], _ t: Double) -> Double {
+        let i = seg(b, t), lo = max(0, i - 8), hi = min(b.count - 1, i + 9)
+        return max(0.05, (b[hi] - b[lo]) / Double(hi - lo))
+    }
     /// the tempo at the playhead, from the grid
-    public func tempoNow() -> Double { grid != nil ? 60 / spb : bpm }
+    public func tempoNow() -> Double { if let b = grid { return 60 / windowSpb(b, now()) }; return bpm }
     var grid: [Double]? { if let b = ana?.beats, b.count >= 2 { return b }; return nil }
     /// index of the beat segment holding t, and the segment's length
     func seg(_ b: [Double], _ t: Double) -> Int {
