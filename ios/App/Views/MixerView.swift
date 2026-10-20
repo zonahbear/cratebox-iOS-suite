@@ -61,7 +61,7 @@ struct MixerView: View {
         HStack(spacing: 6) {
             Knob(label: "", value: core.mixer.headMix, size: 24, center: 0) { core.mixer.headMix = $0 }
             Button { core.toggleMasterCue() } label: {
-                Text("MST CUE").font(.system(size: 9, weight: .bold)).padding(.horizontal, 5).frame(height: 24).foregroundStyle(core.mixer.masterCue ? Color.black : Theme.fg)
+                Text("MST").font(.system(size: 10, weight: .bold)).fixedSize().padding(.horizontal, 6).frame(height: 24).foregroundStyle(core.mixer.masterCue ? Color.black : Theme.fg)
                     .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.masterCue ? Theme.cue : Theme.raise))
             }.buttonStyle(.plain)
             Knob(label: "", value: core.mixer.master, size: 24, center: 0.8) { core.mixer.master = $0 }
