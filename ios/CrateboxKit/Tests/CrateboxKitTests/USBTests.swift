@@ -241,5 +241,8 @@ final class USBTests: XCTestCase {
         XCTAssertTrue(lines.contains { $0.hasPrefix("PAD1_HotCue,PAD1.HotCue.Call,Pad,9000,7,8,9,10,") })
         XCTAssertTrue(lines.contains { $0.hasPrefix("ChannelFader,ChannelFader,KnobSliderHiRes,B013,0,1,2,3,") })
         XCTAssertTrue(lines.contains { $0.hasPrefix("Load,Load,Button,,9646,9647,9648,9649,") })
+        // the copy in the repo (deckbridge/) is the same file
+        let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("../../../../deckbridge/Cratebox Deck Bridge.midi.csv").standardizedFileURL
+        XCTAssertEqual(try? String(contentsOf: repo, encoding: .utf8), csv)
     }
 }

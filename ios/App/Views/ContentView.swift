@@ -79,6 +79,7 @@ struct ContentView: View {
 
     func topBar(_ phone: Bool) -> some View {
         HStack(spacing: 8) {
+            ModeSwitcher()
             if !phone { Text("CRATEBOX").font(.system(size: 15, weight: .heavy)).tracking(3) }
             HStack(spacing: 4) {
                 Circle().fill(app.controllerName.isEmpty ? Theme.dim : Theme.ok).frame(width: 7, height: 7)

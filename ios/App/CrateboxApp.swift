@@ -5,7 +5,7 @@ struct CrateboxApp: App {
     @StateObject private var app = AppModel()
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            SuiteRoot()
                 .environmentObject(app)
                 .environmentObject(app.core)
                 .environmentObject(app.core.fx)

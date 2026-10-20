@@ -80,6 +80,18 @@ jobs:
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -browse > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_browse.png" || true
+            # the suite's other two modes: Deck Bridge, and Cratebox USB on a copy of the test stick (no audio: the scan flags it)
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -bridge > /dev/null || true
+            sleep 12
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_bridge.png" || true
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            DATA=$(xcrun simctl get_app_container "$UDID" com.zonahbear.cratebox.suite data 2>/dev/null || true)
+            if [ -n "$DATA" ]; then mkdir -p "$DATA/Documents/DemoUSB" && cp -R ../tests/fixtures/rekordbox_usb/PIONEER "$DATA/Documents/DemoUSB/"; fi
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -usb -demo > /dev/null || true
+            sleep 25
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_usb.png" || true
+            gtimeout 60 xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|crash|fatal" | head -10 | tee -a ../ci.log || true
             gtimeout 60 xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|error|crash|fatal|DEMO MIDI" | head -20 | tee -a ../ci.log || true
             xcrun simctl shutdown "$UDID" || true
           done

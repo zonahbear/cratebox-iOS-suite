@@ -26,6 +26,9 @@ final class AppModel: ObservableObject, ControlTarget {
     let library = Library()
     let recorder = Recorder()
     let playlists = Playlists()
+    /// the suite's other two modes (made on first use)
+    lazy var bridge = DeckBridge()
+    lazy var usb = USBSession(app: self)
     private var lastSec = 0.0
     @Published var statusText = ""
     @Published var controllerName = ""

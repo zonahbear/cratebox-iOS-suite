@@ -61,9 +61,12 @@ final class MIDIHost {
         if source != 0 { MIDIPortDisconnectSource(inPort, source); source = 0 }
         let srcs = (0..<MIDIGetNumberOfSources()).map { MIDIGetSource($0) }
         available = srcs.map(MIDIHost.name)
+        // Deck Bridge's own links (the network session, a Mac over USB, its virtual port) are never picked by
+        // themselves as Performance Mode's controller
+        let auto = srcs.filter { !MIDIHost.isBridgeEndpoint($0) }
         let pick = srcs.first { MIDIHost.name($0) == preferred }
-            ?? srcs.first { let n = MIDIHost.name($0); return Profiles.pioneerish.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)) != nil }
-            ?? srcs.first
+            ?? auto.first { let n = MIDIHost.name($0); return Profiles.pioneerish.firstMatch(in: n, range: NSRange(n.startIndex..., in: n)) != nil }
+            ?? auto.first
         guard let src = pick else { deviceName = ""; dest = 0; onChange(""); return }
         source = src
         MIDIPortConnectSource(inPort, src, nil)
@@ -73,6 +76,12 @@ final class MIDIHost {
         let base = deviceName.replacingOccurrences(of: "\\s*(MIDI|IN|OUT|\\d+)\\s*$", with: "", options: [.regularExpression, .caseInsensitive])
         dest = dsts.first { MIDIHost.name($0) == deviceName } ?? dsts.first { !base.isEmpty && MIDIHost.name($0).hasPrefix(base) } ?? 0
         onChange(deviceName)
+    }
+
+    static func isBridgeEndpoint(_ e: MIDIEndpointRef) -> Bool {
+        let s = MIDINetworkSession.default()
+        if e == s.sourceEndpoint() || e == s.destinationEndpoint() { return true }
+        return MIDIHost.name(e).range(of: "Cratebox Deck Bridge|IDAM|Network Session", options: [.regularExpression, .caseInsensitive]) != nil
     }
 
     func send(_ bytes: [UInt8]) {

@@ -7,6 +7,17 @@ import CrateboxKit
 final class AudioHost {
     static let sampleRate = 48000.0
     let engine = Engine(sampleRate: AudioHost.sampleRate)
+    /// Cratebox USB's preview player: a second engine mixed in on top of the decks, only while it's on
+    let preview = Engine(sampleRate: AudioHost.sampleRate)
+    private let previewFlag: UnsafeMutablePointer<Bool> = { let p = UnsafeMutablePointer<Bool>.allocate(capacity: 1); p.initialize(to: false); return p }()
+    private static let previewChunk = 1024
+    private let previewScratch: [UnsafeMutablePointer<Float>] = (0..<8).map { _ in
+        let p = UnsafeMutablePointer<Float>.allocate(capacity: AudioHost.previewChunk); p.initialize(repeating: 0, count: AudioHost.previewChunk); return p
+    }
+    var previewOn: Bool {
+        get { previewFlag.pointee }
+        set { previewFlag.pointee = newValue }
+    }
     private var av = AVAudioEngine()
     private var source: AVAudioSourceNode?
     private(set) var outputChannels = 2
@@ -86,15 +97,30 @@ final class AudioHost {
             guard let layout = AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_Stereo) else { return false }
             fmt = AVAudioFormat(standardFormatWithSampleRate: AudioHost.sampleRate, channelLayout: layout)
         }
-        let eng = engine
+        let eng = engine, prev = preview, flag = previewFlag, scratch = previewScratch, chunk = AudioHost.previewChunk
         var ptrs = [UnsafeMutablePointer<Float>]()
         ptrs.reserveCapacity(8)
+        var sp = [UnsafeMutablePointer<Float>]()
+        sp.reserveCapacity(8)
         let node = AVAudioSourceNode(format: fmt) { _, _, frames, abl -> OSStatus in
             let list = UnsafeMutableAudioBufferListPointer(abl)
             ptrs.removeAll(keepingCapacity: true)
             for b in list { if let d = b.mData { ptrs.append(d.assumingMemoryBound(to: Float.self)) } }
             if ptrs.isEmpty { return noErr }
             eng.render(ptrs, Int(frames))
+            // Cratebox USB's preview, added on top (in chunks through preallocated buffers: nothing allocated here)
+            if flag.pointee {
+                let nch = min(ptrs.count, scratch.count)
+                var done = 0
+                while done < Int(frames) {
+                    let n = min(chunk, Int(frames) - done)
+                    sp.removeAll(keepingCapacity: true)
+                    for c in 0..<nch { sp.append(scratch[c]) }
+                    prev.render(sp, n)
+                    for c in 0..<nch { let o = ptrs[c] + done, x = scratch[c]; for k in 0..<n { o[k] += x[k] } }
+                    done += n
+                }
+            }
             return noErr
         }
         var started = false
@@ -112,6 +138,7 @@ final class AudioHost {
         }
         source = node
         engine.post(.output(outputMode(ch)))
+        preview.post(.output(outputMode(ch)))
         describe(); measureLatency()
         return true
     }
@@ -124,7 +151,7 @@ final class AudioHost {
         build()
     }
     /// headphones on a plain stereo output: mono master left, mono cue right (a splitter cable)
-    func setSplit(_ on: Bool) { engine.post(.output(on ? .split : outputMode(outputChannels))) }
+    func setSplit(_ on: Bool) { engine.post(.output(on ? .split : outputMode(outputChannels))); preview.post(.output(on ? .split : outputMode(outputChannels))) }
     func outputMode(_ ch: Int) -> OutputMode {
         if ch >= 4 { return routing == "swapped" ? .quadSwapped : .quad }
         return UserDefaults.standard.bool(forKey: "cb.split") ? .split : .stereo

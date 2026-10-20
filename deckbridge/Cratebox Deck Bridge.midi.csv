@@ -1,0 +1,60 @@
+@file,1,Cratebox Deck Bridge
+#name,function,type,input,deck1,deck2,deck3,deck4,output,deck1,deck2,deck3,deck4,option,comment
+PlayPause,PlayPause,Button,900B,0,1,2,3,900B,0,1,2,3,Fast;Blink=1000;Priority=50,Play/Pause
+Cue,Cue,Button,900C,0,1,2,3,900C,0,1,2,3,Fast;Blink=500;Priority=50,Cue
+JumpToTrackStart,Cue+Shift,Button,9048,0,1,2,3,9048,0,1,2,3,Fast;Priority=50,Jump to track start
+Sync,Sync,Button,9058,0,1,2,3,9058,0,1,2,3,Blink=600,Sync On/Off
+MasterTempo,MasterTempo,Button,901A,0,1,2,3,901A,0,1,2,3,,Master Tempo (key lock) On/Off
+Quantize,Quantize,Button,9035,0,1,2,3,9035,0,1,2,3,,Quantize On/Off
+Slip,Slip,Button,9040,0,1,2,3,9040,0,1,2,3,,Slip On/Off
+LoopIn,LoopIn,Button,9010,0,1,2,3,9010,0,1,2,3,Fast,Loop in
+LoopOut,LoopOut,Button,9011,0,1,2,3,9011,0,1,2,3,Fast,Loop out
+ReloopExit,LoopOut+Shift,Button,904D,0,1,2,3,904D,0,1,2,3,Fast,Reloop/Exit
+4BeatLoop,4BeatLoop,Button,9014,0,1,2,3,9014,0,1,2,3,Fast,Auto Loop On/Off
+LoopHalf,LoopHalf,Button,9012,0,1,2,3,9012,0,1,2,3,Fast,Loop 1/2
+LoopDouble,LoopDouble,Button,9013,0,1,2,3,9013,0,1,2,3,Fast,Loop x2
+HeadphoneCue,HeadphoneCue,Button,9054,0,1,2,3,9054,0,1,2,3,,Headphone cue
+HotCue,HotCueMode,Button,901B,0,1,2,3,901B,0,1,2,3,Fast,HOT CUE pad mode
+PAD1_HotCue,PAD1.HotCue.Call,Pad,9000,7,8,9,10,9000,7,8,9,10,Fast,Hot cue 1
+PAD1_HotCue+Shift,PAD1.HotCue.Delete,Pad,9008,7,8,9,10,,,,,,Fast,Delete hot cue 1
+PAD2_HotCue,PAD2.HotCue.Call,Pad,9001,7,8,9,10,9001,7,8,9,10,Fast,Hot cue 2
+PAD2_HotCue+Shift,PAD2.HotCue.Delete,Pad,9009,7,8,9,10,,,,,,Fast,Delete hot cue 2
+PAD3_HotCue,PAD3.HotCue.Call,Pad,9002,7,8,9,10,9002,7,8,9,10,Fast,Hot cue 3
+PAD3_HotCue+Shift,PAD3.HotCue.Delete,Pad,900A,7,8,9,10,,,,,,Fast,Delete hot cue 3
+PAD4_HotCue,PAD4.HotCue.Call,Pad,9003,7,8,9,10,9003,7,8,9,10,Fast,Hot cue 4
+PAD4_HotCue+Shift,PAD4.HotCue.Delete,Pad,900B,7,8,9,10,,,,,,Fast,Delete hot cue 4
+PAD5_HotCue,PAD5.HotCue.Call,Pad,9004,7,8,9,10,9004,7,8,9,10,Fast,Hot cue 5
+PAD5_HotCue+Shift,PAD5.HotCue.Delete,Pad,900C,7,8,9,10,,,,,,Fast,Delete hot cue 5
+PAD6_HotCue,PAD6.HotCue.Call,Pad,9005,7,8,9,10,9005,7,8,9,10,Fast,Hot cue 6
+PAD6_HotCue+Shift,PAD6.HotCue.Delete,Pad,900D,7,8,9,10,,,,,,Fast,Delete hot cue 6
+PAD7_HotCue,PAD7.HotCue.Call,Pad,9006,7,8,9,10,9006,7,8,9,10,Fast,Hot cue 7
+PAD7_HotCue+Shift,PAD7.HotCue.Delete,Pad,900E,7,8,9,10,,,,,,Fast,Delete hot cue 7
+PAD8_HotCue,PAD8.HotCue.Call,Pad,9007,7,8,9,10,9007,7,8,9,10,Fast,Hot cue 8
+PAD8_HotCue+Shift,PAD8.HotCue.Delete,Pad,900F,7,8,9,10,,,,,,Fast,Delete hot cue 8
+TempoSlider,TempoSlider,KnobSliderHiRes,B000,0,1,2,3,,,,,,Fast,Tempo
+Gain,Gain,KnobSliderHiRes,B004,0,1,2,3,,,,,,Fast,Trim
+EQHigh,EQHigh,KnobSliderHiRes,B007,0,1,2,3,,,,,,Fast,EQ high
+EQMid,EQMid,KnobSliderHiRes,B00B,0,1,2,3,,,,,,Fast,EQ mid
+EQLow,EQLow,KnobSliderHiRes,B00F,0,1,2,3,,,,,,Fast,EQ low
+ChannelFader,ChannelFader,KnobSliderHiRes,B013,0,1,2,3,,,,,,Fast,Channel fader
+JogScratch,JogScratch,JogRotate,B022,0,1,2,3,,,,,,,Jog: scratch (touching)
+JogPitchBend,JogPitchBend,JogRotate,B023,0,1,2,3,,,,,,,Jog: pitch bend (edge)
+JogTouch,JogTouch,JogTouch,9036,0,1,2,3,,,,,,,Jog: touch
+CFXParameterCH1,CFXParameterCH1,KnobSliderHiRes,B617,,,,,,,,,,Fast,CH1 filter (Sound Color FX)
+FX1Assign.CH1,,Button,9410,,,,,,,,,,,Beat FX on CH1
+CFXParameterCH2,CFXParameterCH2,KnobSliderHiRes,B618,,,,,,,,,,Fast,CH2 filter (Sound Color FX)
+FX1Assign.CH2,,Button,9411,,,,,,,,,,,Beat FX on CH2
+CFXParameterCH3,CFXParameterCH3,KnobSliderHiRes,B619,,,,,,,,,,Fast,CH3 filter (Sound Color FX)
+FX1Assign.CH3,,Button,9412,,,,,,,,,,,Beat FX on CH3
+CFXParameterCH4,CFXParameterCH4,KnobSliderHiRes,B61A,,,,,,,,,,Fast,CH4 filter (Sound Color FX)
+FX1Assign.CH4,,Button,9413,,,,,,,,,,,Beat FX on CH4
+CFX4On,CFX4On,Button,9603,,,,,9603,,,,,Fast,Sound Color FX: FILTER
+CrossFader,CrossFader,KnobSliderHiRes,B61F,,,,,,,,,,Fast,Crossfader
+Browse,Browse,Rotary,B640,,,,,,,,,,,Browse
+Back,Back,Button,9665,,,,,,,,,,,Library back
+Load,Load,Button,,9646,9647,9648,9649,,,,,,,Load to deck
+FX1-1,FX1-1,KnobSliderHiRes,B402,,,,,,,,,,,Beat FX depth
+FX1-1On,FX1-1On,Button,9447,,,,,9447,,,,,,Beat FX on/off
+FX1-1Select,FX1-1Select,Button,9463,,,,,,,,,,,Beat FX select
+FX1BeatDown,FX1BeatDown,Button,944A,,,,,,,,,,,Beat FX beat -
+FX1BeatUp,FX1BeatUp,Button,944B,,,,,,,,,,,Beat FX beat +

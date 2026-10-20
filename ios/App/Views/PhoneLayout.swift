@@ -83,6 +83,7 @@ struct PhoneTopBar: View {
     @Binding var settings: Bool
     var body: some View {
         HStack(spacing: 8) {
+            ModeSwitcher(compact: true)
             HStack(spacing: 4) {
                 Circle().fill(app.controllerName.isEmpty ? Theme.dim : Theme.ok).frame(width: 7, height: 7)
                 Text(app.controllerName.isEmpty ? "No controller" : app.controllerName).font(.system(size: 11)).lineLimit(1)

@@ -152,6 +152,16 @@ public struct USBLibrary {
         differences = diffs
     }
 
+    /// bit rate / bit depth from export.pdb's track rows (PDB.trackFormats), where the merge left them unknown
+    public mutating func setFormats(_ f: [UInt32: PDBTrackFormat]) {
+        for i in tracks.indices {
+            guard let id = tracks[i].pdbId, let x = f[id] else { continue }
+            if tracks[i].bitDepth == 0 { tracks[i].bitDepth = x.bitDepth }
+            if tracks[i].bitrate == 0 { tracks[i].bitrate = x.bitrate }
+            if tracks[i].sampleRate == 0 { tracks[i].sampleRate = x.sampleRate }
+        }
+    }
+
     public var inSync: Bool { differences.isEmpty }
     public func playlist(_ id: String) -> USBPlaylist? { playlists.first { $0.id == id } }
     /// tracks of a playlist, or of a folder and everything under it

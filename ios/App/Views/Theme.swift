@@ -10,6 +10,9 @@ enum Theme {
     static let phrase: [String: Color] = ["Intro": hex(0x4cc9f0), "Build": hex(0xffd23f), "Drop": hex(0xff4d6d), "Breakdown": hex(0x9b7bff), "Groove": hex(0x3ddc84), "Outro": hex(0x5b7cfa)]
     static func keyColor(_ num: Int, _ letter: String) -> Color { Color(hue: Double((num * 30 + 150) % 360) / 360, saturation: 0.7, brightness: letter == "A" ? 0.95 : 1) }
     static let mono = Font.system(.caption, design: .monospaced)
+    /// the suite's accent (mode selector, Deck Bridge, Cratebox USB): cyan, between decks 1 and 3's colours
+    static let accent = hex(0x2ad4f0)
+    static let warn = hex(0xffaa00)
 }
 
 /// A button with a light, like the hardware's

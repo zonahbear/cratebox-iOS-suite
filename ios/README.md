@@ -1,4 +1,44 @@
-# Cratebox for iOS
+# Cratebox iOS Suite
+
+A fork of Cratebox for iOS (the `ios` branch of zonahbear/Cratebox, left untouched) with three modes behind one
+selector (the cyan capsule, top left):
+
+- **Performance Mode**: the Cratebox DJ app as it was: decks, mixer, FX, controller, library, recording.
+- **Deck Bridge**: a touch controller for rekordbox's decks 3 and 4 over standard MIDI (network, USB to a Mac,
+  or Bluetooth), with a rekordbox mapping file to import. See [`deckbridge/`](../deckbridge/README.md).
+- **Cratebox USB**: a rekordbox USB stick manager: both libraries (Device Library `export.pdb` and OneLibrary
+  `exportLibrary.db`), preview playback with rekordbox's waveform and grid, cue / loop / grid / info editing,
+  playlist editing, preflight scans for the players at the gig, quick fixes, staged and recoverable writes.
+
+It installs beside Cratebox (its own bundle ID, `com.zonahbear.cratebox.suite`).
+
+### Cratebox USB: what it writes, and what it won't (yet)
+
+Nothing is written to a stick unless that kind of write is *proven*: Cratebox USB → ⚙ → Proving Ground.
+
+| Write | State | Until then |
+| --- | --- | --- |
+| Playlists → Device Library | writer tested byte for byte, not yet on a player | staged |
+| Playlists → OneLibrary | writer tested (SQLite + read-back + re-encrypt), not yet on a player | staged |
+| Cues, loops, grid → analysis files | no writer | kept in Cratebox: Performance Mode uses them; rekordbox XML export |
+| Track info → both libraries | no writer | same |
+
+On a stick with both libraries, playlists go to both or neither. Every write: backup (stick and app), journal,
+staged file, read-back, checks, one rename, read-back; a cut-off write is recovered next time the stick opens.
+
+### Cratebox USB: the scans
+
+| | |
+| --- | --- |
+| Emergency | the set (Set Priority) only: files there, formats the players read, the libraries they need. Seconds. |
+| Standard | the whole stick, set first: file headers (codec, kHz, bits), export.pdb structure, OneLibrary integrity, the two libraries against each other, FAT32 names |
+| Deep | + decodes every file, parses every analysis file, hot cues older players can't show |
+
+Players: CDJ-3000X, CDJ-3000, CDJ-2000NXS2, CDJ-2000NXS, CDJ-900NXS, XDJ-1000MK2, XDJ-700, XDJ-XZ, XDJ-RX3,
+XDJ-RX2, XDJ-AZ, OPUS-QUAD, OMNIS-DUO, and "Unknown" (needs both libraries, FAT32, MP3/AAC/WAV/AIFF at
+16-bit / 48 kHz). Models marked ? in the app weren't confirmed against their manuals and are checked strictly.
+
+## Cratebox for iOS (Performance Mode)
 
 A native iPhone and iPad version of Cratebox: Swift, AVAudioEngine, CoreMIDI, SwiftUI. Up to 4 decks, the
 DDJ-FLX4 (and the other Pioneer / AlphaTheta profiles) over USB, music folders and rekordbox USB sticks
@@ -17,7 +57,7 @@ and are tested against it (`swift test` in `CrateboxKit`):
 
 ## Install (free Apple ID, re-signed every 7 days)
 
-1. Download **Cratebox.ipa** from the [`ios-latest` release](https://github.com/zonahbear/Cratebox/releases/tag/ios-latest) (every push to the `ios` branch rebuilds it).
+1. Download **CrateboxSuite.ipa** from the [`ios-latest` release](https://github.com/zonahbear/cratebox-iOS-suite/releases/tag/ios-latest) (every push to `main` rebuilds it).
 2. Install **SideStore** on the iPhone/iPad once (its setup needs a computer one time, to make a pairing file; its own guide covers Windows, macOS and Linux). AltStore works too.
 3. In SideStore: **My Apps → +** and pick `Cratebox.ipa`. Sign in with your Apple ID when it asks.
 4. SideStore refreshes the app every few days (a free Apple ID's signature lasts 7 days). Your library, cues and settings stay.
