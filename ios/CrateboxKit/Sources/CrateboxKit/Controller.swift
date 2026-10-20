@@ -149,6 +149,8 @@ public final class MIDIEngine {
     public private(set) var profile: ControllerProfile?
     public private(set) var learned: [MapEntry] = []
     var table = [Int: MapEntry](), lsbTable = [Int: MapEntry](), msb = [MapEntry: Int]()
+    /// whether the current mapping has a control for this action (the FLX4 has no MASTER LEVEL message)
+    public func hasAction(_ a: String) -> Bool { table.values.contains { $0.action == a } }
     var ledEntries = [MapEntry]()
     var ledCache = [Int: Int]()
     /// which deck each side of the controller plays (deck layers, 4-deck mode)

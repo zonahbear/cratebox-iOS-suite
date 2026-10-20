@@ -1,4 +1,5 @@
 import SwiftUI
+import AVKit
 import CrateboxKit
 
 struct ContentView: View {
@@ -152,6 +153,18 @@ struct SettingsView: View {
                             Text("Stereo only (master on 1/2)").tag("stereo")
                         }
                     }
+                    HStack {
+                        Text("Output")
+                        Spacer()
+                        Text(app.audio.outputName).foregroundStyle(Theme.muted).lineLimit(1)
+                        RoutePicker().frame(width: 34, height: 30)
+                    }
+                    if app.audio.wireless {
+                        Text("Bluetooth / AirPlay: about \(Int(app.audio.latency * 1000)) ms behind. The waveforms are shifted to match, SYNC still locks, but mixing by ear and scratching feel late, and there's no separate headphone cue.")
+                            .font(.caption).foregroundStyle(Theme.cue)
+                    } else {
+                        Text("Delay to the speakers: \(Int(app.audio.latency * 1000)) ms (the waveforms are shifted to match)").font(.caption2).foregroundStyle(Theme.muted)
+                    }
                     Button("Test master (three beeps on the speakers only)") { app.audio.engine.post(.testMaster) }
                     Button("Test cue (three beeps in the headphones only)") { app.audio.engine.post(.testCue) }
                     Button("Restart audio") { app.audio.restart() }
@@ -203,6 +216,14 @@ struct SettingsView: View {
 }
 
 /// MIDI learn: pick a control, then move or press it on the controller
+/// the system's output picker (Bluetooth speakers and headphones, AirPlay)
+struct RoutePicker: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let v = AVRoutePickerView(); v.tintColor = .white; v.activeTintColor = .systemOrange; v.prioritizesVideoDevices = false; return v
+    }
+    func updateUIView(_ v: AVRoutePickerView, context: Context) {}
+}
+
 struct LearnView: View {
     @EnvironmentObject var app: AppModel
     @State private var hint = "Pick a control, then move or press it on the controller."

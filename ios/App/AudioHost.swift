@@ -48,11 +48,24 @@ final class AudioHost {
             if attach(channels: ch) { outputChannels = ch; lastError = ""; onRoute?(); return }
         }
         outputChannels = 2
+        measureLatency()
         onRoute?()
     }
     /// what iOS reports about the output, for Settings (and for working out a wrong routing)
     private(set) var diagnostics = ""
     var routing: String { UserDefaults.standard.string(forKey: "cb.routing") ?? "auto" }      // auto, swapped, stereo
+    /// how far behind the audio clock you hear things (the output's latency plus a buffer): with Bluetooth
+    /// this is 150-300 ms. The screen shows positions this much later, so waveforms match what you hear.
+    private(set) var latency = 0.0
+    private(set) var wireless = false
+    private(set) var outputName = ""
+    private func measureLatency() {
+        let s = AVAudioSession.sharedInstance()
+        latency = min(0.6, max(0, s.outputLatency + s.ioBufferDuration))
+        let kinds: Set<AVAudioSession.Port> = [.bluetoothA2DP, .bluetoothLE, .bluetoothHFP, .airPlay]
+        wireless = s.currentRoute.outputs.contains { kinds.contains($0.portType) }
+        outputName = s.currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
+    }
     private func describe() {
         let s = AVAudioSession.sharedInstance(), hw = av.outputNode.outputFormat(forBus: 0)
         let chans = s.currentRoute.outputs.flatMap { p in (p.channels ?? []).map { "\($0.channelNumber): \($0.channelName)" } }
@@ -99,7 +112,7 @@ final class AudioHost {
         }
         source = node
         engine.post(.output(outputMode(ch)))
-        describe()
+        describe(); measureLatency()
         return true
     }
     func restart() {

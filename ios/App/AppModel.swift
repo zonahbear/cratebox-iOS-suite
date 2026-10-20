@@ -80,6 +80,7 @@ final class AppModel: ObservableObject, ControlTarget {
         midi.onFxLever = { [weak self] d in self?.core.fx.channel(d ?? 4) }
         midiHost.onMessage = { [weak self] m in self?.midi.receive(m) }
         midiHost.onChange = { [weak self] name in self?.controllerConnected(name) }
+        audio.onRoute = { [weak self] in DispatchQueue.main.async { self?.routeChanged() } }
     }
 
     func start() {
@@ -161,7 +162,8 @@ final class AppModel: ObservableObject, ControlTarget {
         let err = raw - t
         if abs(err) > 0.08 { t = raw } else { t += err * min(1, dt * 2) }
         cAudio = t; cHost = now
-        return t
+        // what you hear lags the audio clock by the output's latency (a lot, on Bluetooth): show that moment
+        return t - audio.latency
     }
 
     @objc func tick() {
@@ -182,12 +184,26 @@ final class AppModel: ObservableObject, ControlTarget {
         statusUntil = secs > 0 ? hostSeconds() + secs : 0
     }
 
+    private var toldWireless = ""
+    /// output changed: tell about Bluetooth's delay once per device
+    func routeChanged() {
+        objectWillChange.send()
+        if audio.wireless {
+            if toldWireless != audio.outputName {
+                toldWireless = audio.outputName
+                status("Bluetooth: \(audio.outputName) plays about \(Int(audio.latency * 1000)) ms late. The waveforms are shifted to match what you hear, and SYNC still locks, but mixing by ear and scratching will feel late, and there's no separate headphone cue. For gigs, use the controller's outputs or a cable.", 14)
+            }
+        } else { toldWireless = "" }
+    }
     func controllerConnected(_ name: String) {
         controllerName = name
         guard !name.isEmpty else { status("Controller disconnected"); return }
         let forced = UserDefaults.standard.string(forKey: "cb.profileFor.\(name)") ?? ""
         let p = midi.use(Profiles.byId(forced) ?? Profiles.profile(for: name))
         midi.connected()
+        // a controller whose MASTER LEVEL works in its own hardware: Cratebox's master goes to its default level, so the
+        // knob on the controller is the only master
+        if !midi.hasAction("master") { core.mixer.master = 0.8 }
         status("\(name) connected · \(p.name)\(p.src == .tested ? "" : " (see Settings → Controller)")")
     }
     func useProfile(_ id: String) {
@@ -245,7 +261,11 @@ final class AppModel: ObservableObject, ControlTarget {
         load(t, deck: deck)
     }
     // ---- browsing from the controller: the knob walks the tracks, or (press it) the playlist tree ----
-    struct BrowseSource: Identifiable { let view: LibraryView; let name: String; let depth: Int; let group: String; var id: String { LibraryPane.key(view) } }
+    struct BrowseSource: Identifiable {
+        let view: LibraryView; let name: String; let depth: Int; let group: String
+        var id: String { LibraryPane.key(view) }
+        var deviceId: String? { switch view { case .device(let d), .devicePlaylist(let d, _): return d; default: return nil } }
+    }
     /// Collection, your playlists, then each USB and its rekordbox playlists, in tree order (folders are
     /// walked through, not stopped on). `group` is the heading the browser shows above each lot.
     func browseSources() -> [BrowseSource] {

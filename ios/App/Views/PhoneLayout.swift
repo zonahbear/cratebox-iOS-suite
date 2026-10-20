@@ -49,6 +49,11 @@ struct PhoneScreen: View {
         }
         .background(Theme.bg)
         .ignoresSafeArea()
+        // locked in: no status bar or home bar, and swipes from any edge (home, notifications, Control
+        // Center) need a second swipe, so a hand on the edge mid-mix doesn't leave the app
+        .statusBarHidden(true)
+        .persistentSystemOverlays(.hidden)
+        .defersSystemGestures(on: .all)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             DispatchQueue.main.async { islandLeft = PhoneScreen.islandOnLeft() }
         }
@@ -61,7 +66,7 @@ struct PhoneScreen: View {
                 if core.four {
                     HStack(spacing: 4) { ForEach([0, 1, 2, 3].filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
                 }
-            }.frame(minHeight: 80, maxHeight: .infinity)
+            }.frame(minHeight: 120, maxHeight: .infinity)
             HStack(alignment: .top, spacing: 4) {
                 PhoneDeck(deck: core.decks[l], side: 0).id(l)
                 MixerView(phone: true)
@@ -197,22 +202,22 @@ struct PhoneDeck: View {
             HStack(spacing: 0) {
                 if side == 0 { TempoFader(deck: deck).frame(width: 30); Spacer(minLength: 10) }
                 else { loopCol; Spacer(minLength: 6); transport; Spacer(minLength: 6) }
-                JogView(deck: deck, color: color).frame(width: 112, height: 112)
+                JogView(deck: deck, color: color).frame(width: 100, height: 100)
                 if side == 0 { Spacer(minLength: 6); transport; Spacer(minLength: 6); loopCol }
                 else { Spacer(minLength: 10); TempoFader(deck: deck).frame(width: 30) }
-            }.frame(height: 116)
+            }.frame(height: 102)
             HStack(spacing: 4) {
                 ForEach([(PadMode.hotcue, "CUES"), (.beatloop, "LOOP"), (.beatjump, "JUMP"), (.padfx, "FX1"), (.padfx2, "FX2")], id: \.1) { m, s in
                     Button { deck.padMode = m } label: {
-                        Text(s).font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 24)
+                        Text(s).font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 22)
                             .foregroundStyle(deck.padMode == m ? Theme.fg : Theme.muted)
                             .background(RoundedRectangle(cornerRadius: 6).fill(deck.padMode == m ? Theme.line2 : Theme.raise))
                     }.buttonStyle(.plain)
                 }
             }
             VStack(spacing: 4) {
-                HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? 34 : 38) } }
-                HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? 34 : 38) } }
+                HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? 30 : 33) } }
+                HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? 30 : 33) } }
             }
         }
         .padding(6)
@@ -222,11 +227,11 @@ struct PhoneDeck: View {
     var transport: some View {
         VStack(spacing: 6) {
             HoldButton(down: { deck.cueDown() }, up: { deck.cueUp() }) {
-                Text("CUE").font(.system(size: 13, weight: .bold)).frame(width: 70, height: 50)
+                Text("CUE").font(.system(size: 13, weight: .bold)).frame(width: 70, height: 44)
                     .background(Capsule().fill(Theme.raise)).overlay(Capsule().stroke(Theme.cue, lineWidth: 2))
             }
             Button { deck.togglePlay() } label: {
-                Image(systemName: deck.playing ? "pause.fill" : "play.fill").font(.system(size: 17)).frame(width: 70, height: 50)
+                Image(systemName: deck.playing ? "pause.fill" : "play.fill").font(.system(size: 17)).frame(width: 70, height: 44)
                     .background(Capsule().fill(deck.playing ? Theme.ok.opacity(0.25) : Theme.raise)).overlay(Capsule().stroke(Theme.ok, lineWidth: 2))
             }.buttonStyle(.plain)
         }
@@ -240,7 +245,7 @@ struct PhoneDeck: View {
     }
     func loopBtn(_ s: String, _ on: Bool, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
-            Text(s).font(.system(size: 12, weight: .bold)).frame(maxWidth: .infinity, minHeight: 34)
+            Text(s).font(.system(size: 12, weight: .bold)).frame(maxWidth: .infinity, minHeight: 30)
                 .foregroundStyle(on ? Color.white : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.loop : Theme.raise))
         }.buttonStyle(.plain)

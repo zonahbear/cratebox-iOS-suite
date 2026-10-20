@@ -20,7 +20,7 @@ struct MixerView: View {
     /// section (CUE/MST, MST, MASTER, FX) is in the bar along the top.
     var phoneBody: some View {
         let sh = core.four ? [app.midi.side[0], app.midi.side[1]] : [0, 1]
-        let k: CGFloat = 24
+        let k: CGFloat = 22
         let names: [(String, String)] = [("TRIM", "trim"), ("HI", "hi"), ("MID", "mid"), ("LOW", "low"), ("CFX", "cfx")]
         return VStack(spacing: 4) {
             // a row per control: channel 1's knob, the name, channel 2's knob
@@ -43,7 +43,7 @@ struct MixerView: View {
                 Color.clear.frame(width: 30, height: 1)
                 faderCol(sh[1]).frame(maxWidth: .infinity)
             }
-            crossfader.frame(height: 20)
+            crossfader.frame(height: 18)
         }
         .padding(4)
         .frame(width: 140)
@@ -61,22 +61,37 @@ struct MixerView: View {
     }
     func faderCol(_ i: Int) -> some View {
         HStack(spacing: 2) {
-            MeterView(level: { let r = app.core.lastSnapshot.decks[i]; return Double(max(r.peakL, r.peakR)) }).frame(width: 5, height: 78)
-            VFader(value: core.mixer.fader[i], color: Theme.deck[i], height: 78) { core.setMixer("fader", i, $0) }
+            MeterView(level: { let r = app.core.lastSnapshot.decks[i]; return Double(max(r.peakL, r.peakR)) }).frame(width: 5, height: 70)
+            VFader(value: core.mixer.fader[i], color: Theme.deck[i], height: 70) { core.setMixer("fader", i, $0) }
         }
     }
     /// iPhone: the master section, for the bar along the top
     var phoneMaster: some View {
         HStack(spacing: 6) {
-            Knob(label: "", value: core.mixer.headMix, size: 24, center: 0) { core.mixer.headMix = $0 }
+            VStack(spacing: 0) {
+                Knob(label: "", value: core.mixer.headMix, size: 20, center: 0) { core.mixer.headMix = $0 }
+                Text("CUE/MST").font(.system(size: 6.5, weight: .bold)).foregroundStyle(Theme.muted)
+            }
             Button { core.toggleMasterCue() } label: {
                 Text("MST").font(.system(size: 10, weight: .bold)).fixedSize().padding(.horizontal, 6).frame(height: 24).foregroundStyle(core.mixer.masterCue ? Color.black : Theme.fg)
                     .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.masterCue ? Theme.cue : Theme.raise))
             }.buttonStyle(.plain)
-            Knob(label: "", value: core.mixer.master, size: 24, center: 0.8) { core.mixer.master = $0 }
+            if app.midi.hasAction("master") || app.controllerName.isEmpty {
+                VStack(spacing: 0) {
+                    Knob(label: "", value: core.mixer.master, size: 20, center: 0.8) { core.mixer.master = $0 }
+                    Text("MASTER").font(.system(size: 6.5, weight: .bold)).foregroundStyle(Theme.muted)
+                }
+            } else {
+                // the controller's MASTER LEVEL works in its own hardware (it sends nothing), so it's the master
+                Button { core.mixer.master = 0.8; app.status("Master volume: the MASTER LEVEL knob on the \(app.controllerName). Cratebox's own master stays at its default level.", 6) } label: {
+                    Text("MASTER\nON \(app.controllerName.contains("FLX4") ? "FLX4" : "CTRL")").font(.system(size: 7, weight: .bold)).multilineTextAlignment(.center).foregroundStyle(Theme.muted)
+                        .padding(.horizontal, 5).frame(height: 26).background(RoundedRectangle(cornerRadius: 4).stroke(Theme.line2))
+                }.buttonStyle(.plain)
+            }
             MeterView(level: { let p = app.core.lastSnapshot.masterPeak; return Double(max(p.0, p.1)) }).frame(width: 5, height: 24)
         }
     }
+
     var fullBody: some View {
         VStack(spacing: 8) {
             if core.four { layers }

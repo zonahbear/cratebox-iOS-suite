@@ -322,16 +322,18 @@ struct LibraryPane: View {
             Text(d.name + (d.saving ? " · saving…" : d.unsaved ? " · not saved" : "")).lineLimit(1)
             Spacer()
             Text("\(d.byRbId.count)").font(Theme.mono).foregroundStyle(Theme.dim)
+            Button { devices.eject(d) } label: { Image(systemName: "eject.fill").font(.system(size: 12)) }.buttonStyle(.borderless)
         }
         .font(.system(size: 12)).contentShape(Rectangle()).onTapGesture { app.view = .device(d.id) }
         .listRowBackground(app.view == .device(d.id) ? Theme.raise : Theme.panel)
         .contextMenu {
             if devices.editable {
-                Button("New playlist on \(d.name)") { let id = devices.newNode("Playlist \(d.tree.count + 1)", folder: false, in: d); renaming = "dev:\(d.id):\(id)"; renameText = "Playlist \(d.tree.count)" }
-                Button("New folder on \(d.name)") { devices.newNode("Folder", folder: true, in: d) }
+                Button("New playlist on \(d.name)") { let id = devices.newNode("Playlist", folder: false, in: d); renaming = "dev:\(d.id):\(id)"; renameText = "Playlist" }
+                Button("New folder on \(d.name)") { let id = devices.newNode("Folder", folder: true, in: d); renaming = "dev:\(d.id):\(id)"; renameText = "Folder" }
                 if d.unsaved && !d.saving { Button("Try saving again") { devices.write(d) } }
             }
-            Button("Close", role: .destructive) { devices.close(d) }
+            Button("Name it in Cratebox…") { renaming = "devname:\(d.id)"; renameText = d.name }
+            Button("Eject", role: .destructive) { devices.eject(d) }
         }
         ForEach(devTree(d, 0, 1), id: \.0.id) { n, depth in
             let cur = app.view == .devicePlaylist(d.id, n.id)
@@ -345,12 +347,11 @@ struct LibraryPane: View {
             .contentShape(Rectangle())
             .onTapGesture { if !n.folder { app.view = .devicePlaylist(d.id, n.id) } }
             .listRowBackground(cur ? Theme.raise : Theme.panel)
-            .contextMenu {
-                if !n.folder { Button("Copy to my playlists") { copy(n, d) } }
-                if devices.editable {
-                    Button("Rename") { renaming = "dev:\(d.id):\(n.id)"; renameText = n.name }
-                    Button("Delete from \(d.name)", role: .destructive) { devices.delete(n.id, in: d) }
-                }
+            .contextMenu { devNodeMenu(n, d) }
+            .overlay(alignment: .trailing) {
+                // the same as a long press, for finding it
+                Menu { devNodeMenu(n, d) } label: { Image(systemName: "ellipsis").font(.system(size: 12)).frame(width: 28, height: 24).contentShape(Rectangle()) }
+                    .padding(.trailing, n.folder ? 0 : 26)
             }
         }
     }
@@ -362,12 +363,33 @@ struct LibraryPane: View {
         playlists.add(devices.tracks(of: n, in: d), to: p.id)
         app.status("Copied \"\(n.name)\" to your playlists. It plays from \(d.name) while that's plugged in.")
     }
+    /// everything you can do to a rekordbox playlist or folder on a stick (editing: Settings, behind the disclaimer)
+    @ViewBuilder func devNodeMenu(_ n: PDBPlaylist, _ d: Device) -> some View {
+        if !n.folder { Button("Copy to my playlists") { copy(n, d) } }
+        if devices.editable {
+            Button("Rename") { renaming = "dev:\(d.id):\(n.id)"; renameText = n.name }
+            if n.folder {
+                Button("New playlist in \(n.name)") { let id = devices.newNode("Playlist", folder: false, parent: n.id, in: d); renaming = "dev:\(d.id):\(id)"; renameText = "Playlist" }
+                Button("New folder in \(n.name)") { let id = devices.newNode("Folder", folder: true, parent: n.id, in: d); renaming = "dev:\(d.id):\(id)"; renameText = "Folder" }
+            } else {
+                Button("Duplicate") { devices.duplicate(n.id, in: d) }
+            }
+            Menu("Move to") {
+                if n.parent != 0 { Button("Top level") { devices.moveNode(n.id, into: 0, in: d) } }
+                ForEach(d.tree.filter { $0.folder && $0.id != n.id && $0.id != n.parent }, id: \.id) { f in Button(f.name) { devices.moveNode(n.id, into: f.id, in: d) } }
+            }
+            Button("Delete from \(d.name)", role: .destructive) { if app.view == .devicePlaylist(d.id, n.id) { app.view = .device(d.id) }; devices.delete(n.id, in: d) }
+        } else {
+            Button("Turn on editing (Settings → rekordbox USB playlists)") { app.status("Settings → rekordbox USB playlists → Editable (untested: back up the stick first)", 7) }
+        }
+    }
     func commitRename() {
         guard let r = renaming else { return }
         let name = renameText.trimmingCharacters(in: .whitespaces)
         renaming = nil
         guard !name.isEmpty else { return }
         if r.hasPrefix("pl:") { playlists.rename(String(r.dropFirst(3)), name); return }
+        if r.hasPrefix("devname:") { if let d = devices.list.first(where: { $0.id == String(r.dropFirst(8)) }) { devices.nickname(d, name) }; return }
         let parts = r.split(separator: ":")
         if parts.count >= 3, let id = UInt32(parts.last!) {
             let dv = parts.dropFirst().dropLast().joined(separator: ":")

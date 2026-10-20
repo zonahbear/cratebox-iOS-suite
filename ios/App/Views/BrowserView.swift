@@ -23,8 +23,16 @@ struct BrowserOverlay: View {
                         LazyVStack(alignment: .leading, spacing: 1) {
                             ForEach(Array(sources.enumerated()), id: \.element.id) { k, s in
                                 if k == 0 || sources[k - 1].group != s.group {
-                                    Text(s.group.uppercased()).font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(Theme.dim).lineLimit(1)
-                                        .padding(.top, k == 0 ? 0 : 8).padding(.leading, 6)
+                                    HStack {
+                                        Text(s.group.uppercased()).font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(Theme.dim).lineLimit(1)
+                                        Spacer()
+                                        if let dv = s.deviceId, let d = devices.list.first(where: { $0.id == dv }) {
+                                            Button { devices.eject(d); app.showBrowser() } label: {
+                                                Label("EJECT", systemImage: "eject.fill").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.muted)
+                                            }.buttonStyle(.plain)
+                                        }
+                                    }
+                                    .padding(.top, k == 0 ? 0 : 8).padding(.horizontal, 6)
                                 }
                                 let cur = s.view == app.view, cursor = app.browseFocusTree && s.view == (app.treeCursor ?? app.view)
                                 Text(s.name).font(.system(size: 13, weight: cur ? .bold : .regular)).lineLimit(1)
@@ -101,6 +109,17 @@ struct BrowserOverlay: View {
         .background(RoundedRectangle(cornerRadius: 5).fill(sel ? (app.browseFocusTree ? Theme.raise : Theme.loop.opacity(0.3)) : .clear))
         .contentShape(Rectangle())
         .onTapGesture { app.selection = t.id; app.browseFocusTree = false; app.showBrowser() }
+        .contextMenu {
+            // add to a playlist: your own, or (editing on) one on the stick the track is on
+            Menu("Add to my playlist") {
+                ForEach(app.playlists.lists.filter { !$0.folder }) { p in Button(app.playlists.path(p)) { app.playlists.add([t], to: p.id); app.status("Added to \(p.name)") } }
+            }
+            if devices.editable, let d = devices.list.first(where: { $0.id == t.device }) {
+                Menu("Add to \(d.name) playlist") {
+                    ForEach(d.tree.filter { !$0.folder }, id: \.id) { n in Button(n.name) { devices.add([t], to: n.id, in: d) } }
+                }
+            }
+        }
         .id(t.id)
     }
 }
