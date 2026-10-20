@@ -13,7 +13,7 @@ struct CrateboxUSBView: View {
     @State private var settingsSheet = false
     @State private var selectedNode: String? = nil            // nil = all tracks
     @State private var selectedTrack: String?
-    @State private var tab = 1                                // phones: 0 playlists, 1 tracks, 2 track
+    @State private var tab = 1 // phones: 0 playlists, 1 tracks, 2 track
     var body: some View {
         VStack(spacing: 4) {
             ModeBar(title: "CRATEBOX USB", subtitle: subtitle) { bar }

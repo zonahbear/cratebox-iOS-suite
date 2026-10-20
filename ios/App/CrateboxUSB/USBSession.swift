@@ -45,7 +45,7 @@ final class USBSession: ObservableObject {
     @Published private(set) var library: USBLibrary?
     @Published private(set) var fileSystem = ""
     @Published private(set) var loading = false
-    @Published var message = ""                     // the last thing that happened, for the status line
+    @Published var message = "" // the last thing that happened, for the status line
     private(set) var pdbBytes: [UInt8]?, olBytes: [UInt8]?
     var stickId: String { root.map { "usb-" + $0.lastPathComponent } ?? "" }
 

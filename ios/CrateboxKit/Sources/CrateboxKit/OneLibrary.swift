@@ -20,6 +20,9 @@ public struct OLPlaylist: Equatable, Codable {
     public var folder: Bool, name: String
     public var tracks: [Int64]
     public var attribute: Int64
+    public init(id: Int64, parent: Int64, seq: Int64, folder: Bool, name: String, tracks: [Int64], attribute: Int64) {
+        self.id = id; self.parent = parent; self.seq = seq; self.folder = folder; self.name = name; self.tracks = tracks; self.attribute = attribute
+    }
 }
 public struct OLCue: Equatable, Codable {
     public var id: Int64, track: Int64, kind: Int64

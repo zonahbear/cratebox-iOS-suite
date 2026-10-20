@@ -176,7 +176,11 @@ struct USBTrackPanel: View {
 struct USBMetaEditor: View {
     @ObservedObject var usb: USBSession
     let t: USBTrack
-    @State private var title = "", artist = "", album = "", genre = "", comment = ""
+    @State private var title = ""
+    @State private var artist = ""
+    @State private var album = ""
+    @State private var genre = ""
+    @State private var comment = ""
     @State private var rating = 0
     var body: some View {
         VStack(spacing: 6) {

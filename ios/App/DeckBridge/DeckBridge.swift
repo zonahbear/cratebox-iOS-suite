@@ -16,11 +16,26 @@ import CrateboxKit
 
 final class BridgeDeckState: ObservableObject {
     let deck: Int                       // rekordbox's deck, 0-3
-    @Published var playing = false, cueLit = false, sync = false, keylock = false, quantize = false, slip = false
-    @Published var loopIn = false, loopOut = false, reloop = false, autoLoop = false, headphoneCue = false
+    @Published var playing = false
+    @Published var cueLit = false
+    @Published var sync = false
+    @Published var keylock = false
+    @Published var quantize = false
+    @Published var slip = false
+    @Published var loopIn = false
+    @Published var loopOut = false
+    @Published var reloop = false
+    @Published var autoLoop = false
+    @Published var headphoneCue = false
     @Published var hot = [Bool](repeating: false, count: 8)
     // what the touch controls are at (rekordbox doesn't send faders back)
-    @Published var tempo = 0.5, trim = 0.5, hi = 0.5, mid = 0.5, low = 0.5, fader = 1.0, filter = 0.5
+    @Published var tempo = 0.5
+    @Published var trim = 0.5
+    @Published var hi = 0.5
+    @Published var mid = 0.5
+    @Published var low = 0.5
+    @Published var fader = 1.0
+    @Published var filter = 0.5
     @Published var jogTouched = false
     var jogAngle = 0.0                  // drawn rotation of the platter
     init(deck: Int) { self.deck = deck }
@@ -66,7 +81,8 @@ final class DeckBridge: ObservableObject {
     @Published private(set) var sides: [BridgeDeckState]
     static func makeSides(_ pair: Int) -> [BridgeDeckState] { [BridgeDeckState(deck: pair * 2), BridgeDeckState(deck: pair * 2 + 1)] }
     @Published var shift = false
-    @Published var xfader = 0.5, fxDepth = 0.5
+    @Published var xfader = 0.5
+    @Published var fxDepth = 0.5
     @Published var fxOn = false
     @Published var fxAssign = [false, false, false, false]
     @Published var invertTempo = UserDefaults.standard.bool(forKey: "cb.bridge.invertTempo") { didSet { UserDefaults.standard.set(invertTempo, forKey: "cb.bridge.invertTempo") } }
