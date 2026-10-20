@@ -27,7 +27,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Cratebox
+        CFBundleDisplayName: Cratebox Suite
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -42,7 +42,7 @@ targets:
         UIUserInterfaceStyle: Dark
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.zonahbear.cratebox
+        PRODUCT_BUNDLE_IDENTIFIER: com.zonahbear.cratebox.suite
         SWIFT_OBJC_BRIDGING_HEADER: App/Cratebox-Bridging-Header.h
         ASSETCATALOG_COMPILER_APPICON_NAME: ""
         ENABLE_PREVIEWS: "NO"

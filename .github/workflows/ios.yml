@@ -1,7 +1,7 @@
 name: iOS build
 on:
   push:
-    branches: [ios]
+    branches: [main]
     paths: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 permissions:
@@ -39,15 +39,15 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee "$RUNNER_TEMP/xcb.log" | grep -E "error:|warning: .*(deprecated|never used)|BUILD (SUCCEEDED|FAILED)" | head -150 | tee -a ../ci.log
           APP=$(ls -d "$RUNNER_TEMP"/dd/Build/Products/Release-iphoneos/*.app | head -1)
           mkdir -p "$RUNNER_TEMP/ipa/Payload" && cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
-          (cd "$RUNNER_TEMP/ipa" && zip -qr ../Cratebox.ipa Payload)
-          ls -la "$RUNNER_TEMP/Cratebox.ipa" | tee -a ../ci.log
+          (cd "$RUNNER_TEMP/ipa" && zip -qr ../CrateboxSuite.ipa Payload)
+          ls -la "$RUNNER_TEMP/CrateboxSuite.ipa" | tee -a ../ci.log
       - name: Publish the IPA (release "ios-latest")
         if: steps.app.outcome == 'success'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
-          gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease --target ios --title "Cratebox for iOS (latest build)" --notes "Unsigned build of the ios branch. Install with SideStore or AltStore."
-          gh release upload ios-latest "$RUNNER_TEMP/Cratebox.ipa" --clobber
-          gh release edit ios-latest --notes "Unsigned build of the ios branch, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC). Install with SideStore or AltStore." 
+          gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease --target main --title "Cratebox iOS Suite (latest build)" --notes "Unsigned build of cratebox-iOS-suite main. Install with SideStore or AltStore."
+          gh release upload ios-latest "$RUNNER_TEMP/CrateboxSuite.ipa" --clobber
+          gh release edit ios-latest --notes "Unsigned build of cratebox-iOS-suite main, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC). Install with SideStore or AltStore." 
           echo "PUBLISHED ios-latest from ${GITHUB_SHA::7}" | tee -a ci.log
       - name: Launch in the simulators (screenshots)
         if: steps.app.outcome == 'success'
@@ -67,17 +67,17 @@ jobs:
             [ "${dev%% *}" = iPhone ] && xcrun simctl ui "$UDID" appearance dark || true
             gtimeout 240 xcrun simctl bootstatus "$UDID" -b > /dev/null 2>&1 || true
             xcrun simctl install "$UDID" "$APP"
-            xcrun simctl launch "$UDID" com.zonahbear.cratebox -demo | tee -a ../ci.log
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo | tee -a ../ci.log
             sleep 25
             xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q cratebox && echo "SIM RUNNING $dev" | tee -a ../ci.log || echo "SIM NOT RUNNING $dev (crashed?)" | tee -a ../ci.log
             n=$(echo "$dev" | tr ' ()' '___')
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$n.png" || true
-            xcrun simctl terminate "$UDID" com.zonahbear.cratebox || true
-            xcrun simctl launch "$UDID" com.zonahbear.cratebox -demo -four > /dev/null || true
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -four > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_4decks.png" || true
-            xcrun simctl terminate "$UDID" com.zonahbear.cratebox || true
-            xcrun simctl launch "$UDID" com.zonahbear.cratebox -demo -browse > /dev/null || true
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -browse > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_browse.png" || true
             gtimeout 60 xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|error|crash|fatal|DEMO MIDI" | head -20 | tee -a ../ci.log || true
@@ -87,7 +87,7 @@ jobs:
       - name: Error summary to the ci-logs branch
         if: always()
         run: |
-          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |SYNC |PUBLISHED|Cratebox.ipa|SIM |DEMO MIDI|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |SYNC |PUBLISHED|CrateboxSuite.ipa|SIM |DEMO MIDI|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git fetch origin ci-logs || true
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
