@@ -26,7 +26,7 @@ struct DeckView: View {
                     ForEach([deck.i % 2, deck.i % 2 + 2], id: \.self) { d in
                         let on = d == deck.i
                         Button { app.midi.setSide(d % 2, d); app.objectWillChange.send() } label: {
-                            Text("DECK \(d + 1)").font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 24)
+                            Text("DECK \(d + 1)").font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 20)
                                 .foregroundStyle(on ? Color.black : Theme.deck[d])
                                 .background(RoundedRectangle(cornerRadius: 5).fill(on ? Theme.deck[d] : Theme.raise))
                         }.buttonStyle(.plain)
@@ -35,7 +35,7 @@ struct DeckView: View {
             }
             HStack(spacing: 8) {
                 if deck.i % 2 == 0 { phoneTempo }
-                JogView(deck: deck, color: color).frame(width: 84, height: 84)
+                JogView(deck: deck, color: color).frame(width: app.core.four ? 74 : 84, height: app.core.four ? 74 : 84)
                 VStack(spacing: 6) {
                     HStack(spacing: 4) {
                         LitButton(label: "SYNC", on: deck.sync, color: color) { deck.setSync(!deck.sync) }
@@ -81,7 +81,7 @@ struct DeckView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
     }
     var phoneTempo: some View {
-        VFader(value: (deck.pitch + 1) / 2, color: color, height: 84, inverted: true) { deck.setPitch($0 * 2 - 1) }
+        VFader(value: (deck.pitch + 1) / 2, color: color, height: app.core.four ? 74 : 84, inverted: true) { deck.setPitch($0 * 2 - 1) }
             .onTapGesture(count: 2) { deck.setPitch(0) }
     }
     var fullBody: some View {
@@ -263,7 +263,7 @@ struct PhoneLane: View {
     var body: some View {
         if active { full } else {
             // a deck the controller isn't on: just its readouts over the track overview
-            OverviewView(deck: deck, color: color).frame(height: 18).overlay(alignment: .topLeading) { info }
+            OverviewView(deck: deck, color: color).frame(height: 16).overlay(alignment: .topLeading) { info }
                 .opacity(0.75)
         }
     }

@@ -32,8 +32,10 @@ struct ContentView: View {
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
         return VStack(spacing: 4) {
             VStack(spacing: 3) {
-                ForEach(core.four ? [0, 1, 2, 3] : [0, 1], id: \.self) { i in
-                    PhoneLane(deck: core.decks[i], active: !core.four || i == l || i == r)
+                PhoneLane(deck: core.decks[l]); PhoneLane(deck: core.decks[r])
+                if core.four {
+                    // the two decks the controller isn't on, side by side in one thin row (tap a number to switch)
+                    HStack(spacing: 4) { ForEach([0, 1, 2, 3].filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
                 }
             }.frame(minHeight: 70, maxHeight: .infinity)
             HStack(alignment: .top, spacing: 4) {
