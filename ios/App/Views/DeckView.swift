@@ -1,6 +1,16 @@
 import SwiftUI
 import CrateboxKit
 
+/// how far a synced deck's beats are from the master's, like the desktop: green within 6 ms, amber within 20
+@ViewBuilder func phaseTag(_ d: DeckModel, size: CGFloat = 11) -> some View {
+    if d.sync, let pe = d.phaseErr {
+        let ms = Int(jsRoundUI(abs(pe) * 1000))
+        Text("\(pe >= 0 ? "+" : "−")\(ms) ms").font(.system(size: size, weight: .bold, design: .monospaced))
+            .foregroundStyle(abs(pe) < 0.006 ? Theme.ok : abs(pe) < 0.02 ? Theme.hex(0xffb020) : Theme.hex(0xff3b55))
+    }
+}
+func jsRoundUI(_ x: Double) -> Double { (x + 0.5).rounded(.down) }
+
 func clock(_ t: Double) -> String {
     let s = max(0, t)
     return String(format: "%d:%02d.%d", Int(s) / 60, Int(s) % 60, Int(s * 10) % 10)
@@ -122,6 +132,7 @@ struct DeckView: View {
             if deck.loaded {
                 let k = deck.keyNow()
                 if let c = Keys.camelot(k) { Text(c.label).font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(Theme.keyColor(c.num, c.letter)) }
+                phaseTag(deck, size: 12)
                 VStack(alignment: .trailing, spacing: 0) {
                     Text(String(format: "%.2f", deck.effBpm())).font(.system(size: 16, weight: .bold, design: .monospaced))
                     Text(String(format: "%+.2f%%", (deck.rate() - 1) * 100) + " ±\(deck.range == 100 ? "W" : String(Int(deck.range)))").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.muted)
@@ -289,6 +300,7 @@ struct PhoneLane: View {
                             if let c = Keys.camelot(deck.keyNow()) { Text(c.label).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Theme.keyColor(c.num, c.letter)) }
                             Text(String(format: "%.2f", deck.effBpm())).font(.system(size: 12, weight: .bold, design: .monospaced))
                             Text(String(format: "%+.1f%%", (deck.rate() - 1) * 100)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
+                            phaseTag(deck)
                             Text("-" + clock(deck.duration - deck.now())).font(.system(size: 11, design: .monospaced))
                         }
                     }
