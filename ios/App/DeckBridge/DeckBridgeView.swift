@@ -28,7 +28,7 @@ struct DeckBridgeView: View {
         }
         .background(Theme.bg)
         .sheet(isPresented: $setup) { DeckBridgeSetup(bridge: bridge) }
-        .onAppear { if !bridge.linked && bridge.sentCount == 0 && !UserDefaults.standard.bool(forKey: "cb.bridge.setupSeen") { UserDefaults.standard.set(true, forKey: "cb.bridge.setupSeen"); setup = true } }
+        .onAppear { if !CommandLine.arguments.contains("-bridge") && !bridge.linked && bridge.sentCount == 0 && !UserDefaults.standard.bool(forKey: "cb.bridge.setupSeen") { UserDefaults.standard.set(true, forKey: "cb.bridge.setupSeen"); setup = true } }
     }
     var linkPill: some View {
         HStack(spacing: 5) {
