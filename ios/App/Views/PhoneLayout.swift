@@ -26,7 +26,8 @@ struct PhoneScreen: View {
         let ins = PhoneScreen.windowInsets()
         let band = max(46, min(ins.left, ins.right))
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
-        return HStack(spacing: 0) {
+        // the whole screen: a reader that itself ignores the safe area gets the full size
+        return GeometryReader { g in HStack(spacing: 0) {
             EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band).zIndex(1)
             VStack(spacing: 4) {
                 PhoneTopBar(settings: $settings).frame(height: 30)
@@ -44,7 +45,8 @@ struct PhoneScreen: View {
             EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band).zIndex(1)
         }
         .padding(.top, ins.top)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(width: g.size.width, height: g.size.height)
+        }
         .background(Theme.bg)
         .ignoresSafeArea()
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
@@ -98,13 +100,30 @@ struct EdgeStrip: View {
     let center: Bool              // this strip is away from the island: FX and REC go in its middle
     let top: CGFloat, bottom: CGFloat
     @State private var fxSheet = false
+    @State private var tools = false
     var color: Color { Theme.deck[deck.i] }
     var body: some View {
         VStack(spacing: 5) {
             Color.clear.frame(height: top)
-            edge("±\(deck.range == 100 ? "W" : String(Int(deck.range)))", false, color) { deck.cycleRange() }
-            edge("TAP", false, color) { deck.tap() }
-            edge("GRID", false, color) { app.gridDeck = deck.i }
+            // tempo range, TAP and GRID, under one button: a small panel that stays open while you tap
+            Button { tools = true } label: {
+                VStack(spacing: 1) {
+                    Text("±\(deck.range == 100 ? "W" : String(Int(deck.range)))").font(.system(size: 11, weight: .heavy))
+                    Text("TAP · GRID").font(.system(size: 6.5, weight: .bold)).foregroundStyle(Theme.muted).lineLimit(1).minimumScaleFactor(0.6)
+                }.frame(maxWidth: .infinity, minHeight: 44).background(RoundedRectangle(cornerRadius: 7).fill(Theme.raise))
+            }.buttonStyle(.plain)
+            .popover(isPresented: $tools, arrowEdge: side == 0 ? .leading : .trailing) {
+                HStack(spacing: 8) {
+                    LitButton(label: "RANGE ±\(deck.range == 100 ? "W" : String(Int(deck.range)))") { deck.cycleRange() }
+                    Button { deck.tap() } label: {
+                        Text("TAP").font(.system(size: 15, weight: .heavy)).frame(width: 84, height: 56).background(RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.85))).foregroundStyle(Color.black)
+                    }.buttonStyle(.plain)
+                    LitButton(label: "BEAT GRID…") { tools = false; app.gridDeck = deck.i }
+                    LitButton(label: "TEMPO 0") { deck.setPitch(0) }
+                }
+                .padding(10)
+                .presentationCompactAdaptation(.popover)
+            }
             Spacer(minLength: 4)
             if center {
                 Button { fxSheet = true } label: {

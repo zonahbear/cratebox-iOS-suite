@@ -7,9 +7,16 @@ struct ContentView: View {
     @State private var settings = false
 
     var body: some View {
+        // a phone: the whole screen, edge to edge (PhoneScreen keeps the controls clear of the island itself)
+        if UIDevice.current.userInterfaceIdiom == .phone {
+            PhoneScreen(settings: $settings)
+                .sheet(isPresented: $settings) { SettingsView() }
+                .sheet(item: Binding(get: { app.gridDeck.map { GridTarget(id: $0) } }, set: { app.gridDeck = $0?.id })) { t in GridEditor(deck: core.decks[t.id]) }
+        } else { pad }
+    }
+    var pad: some View {
         GeometryReader { g in
-            let phone = g.size.height < 600
-            if phone { PhoneScreen(settings: $settings) } else {
+            let phone = false
             VStack(spacing: 6) {
                 topBar(phone)
                 if phone {
@@ -23,7 +30,6 @@ struct ContentView: View {
             }
             .padding(6)
             .background(Theme.bg)
-            }
         }
         .sheet(isPresented: $settings) { SettingsView() }
         .sheet(item: Binding(get: { app.gridDeck.map { GridTarget(id: $0) } }, set: { app.gridDeck = $0?.id })) { t in GridEditor(deck: core.decks[t.id]) }
