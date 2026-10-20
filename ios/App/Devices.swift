@@ -29,7 +29,14 @@ final class Devices: ObservableObject {
 
     static func stamp(_ b: [UInt8]) -> String { b.count >= 24 ? "\(b.count):\(UInt32(b[20]) | UInt32(b[21]) << 8 | UInt32(b[22]) << 16 | UInt32(b[23]) << 24)" : "\(b.count)" }
 
-    func restore() { for f in app?.library.folders ?? [] where f.device { if let u = app?.library.url(of: f) { mount(u, folder: f) } } }
+    func restore() {
+        guard let lib = app?.library else { return }
+        for f in lib.folders where f.device { if let u = lib.url(of: f) { mount(u, folder: f) } }
+        // sticks added as plain music folders (before the + USB fix): open them as rekordbox devices now
+        for f in lib.folders where !f.device {
+            if let u = lib.url(of: f), Library.isRekordboxExport(u) { lib.removeFolder(f); open(u) }
+        }
+    }
 
     func open(_ url: URL) {
         guard let lib = app?.library else { return }

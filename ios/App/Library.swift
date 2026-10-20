@@ -62,6 +62,8 @@ final class Library: ObservableObject {
         }
     }
     func track(_ id: String) -> LibTrack? { byId[id] }
+    /// the simulator screenshots only
+    func setDemoTracks(_ ts: [LibTrack]) { for t in ts { t.rec.ver = Library.ANALYSIS_VER; tracks.append(t); byId[t.id] = t } }
 
     // ---- folders ----
     func url(of folder: MusicFolder) -> URL? {
@@ -72,8 +74,11 @@ final class Library: ObservableObject {
         open[folder.id] = u
         return u
     }
+    static func isRekordboxExport(_ u: URL) -> Bool { FileManager.default.fileExists(atPath: u.appendingPathComponent("PIONEER/rekordbox/export.pdb").path) }
     func addFolder(_ u: URL, device: Bool = false) -> MusicFolder? {
         _ = u.startAccessingSecurityScopedResource()
+        // a rekordbox USB/SD picked as a music folder: open it as the device it is (playlists, grids, keys, cues)
+        if !device && Library.isRekordboxExport(u) { Devices.shared.open(u); return nil }
         guard let bm = try? u.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) else { status("Couldn't keep access to \(u.lastPathComponent)"); return nil }
         let id = (device ? "usb-" : "dir-") + u.lastPathComponent
         let f = MusicFolder(id: id, name: u.lastPathComponent, bookmark: bm, device: device)

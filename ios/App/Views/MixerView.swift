@@ -7,61 +7,71 @@ struct MixerView: View {
     @EnvironmentObject var fx: FxController
     var compact = false
     var phone = false
+    var masterBar = false               // iPhone: just the master section, for the top bar
     @State private var fxSheet = false
 
     var order: [Int] { core.four ? [2, 0, 1, 3] : [0, 1] }
 
     var body: some View {
-        if phone { phoneBody } else { fullBody }
+        if masterBar { phoneMaster } else if phone { phoneBody } else { fullBody }
     }
-    /// iPhone: the strips of the two decks on screen (4-deck mode: whichever each side plays)
+    /// iPhone: a club mixer, straight down: each channel's TRIM, HI, MID, LOW, CFX, CUE and fader in a column,
+    /// the names between the two (4-deck mode: the channels of the decks each side plays). The master
+    /// section (CUE/MST, MST, MASTER, FX) is in the bar along the top.
     var phoneBody: some View {
         let shown = core.four ? [app.midi.side[0], app.midi.side[1]] : [0, 1]
+        let k: CGFloat = 27
         return VStack(spacing: 4) {
-            HStack(alignment: .top, spacing: 4) { ForEach(shown, id: \.self) { i in phoneStrip(i) } }
-            crossfader.frame(height: 26)
-            HStack(spacing: 4) {
-                Knob(label: "Cue/Mst", value: core.mixer.headMix, size: 20, center: 0) { core.mixer.headMix = $0 }
-                Button { core.toggleMasterCue() } label: {
-                    Text("MST").font(.system(size: 9, weight: .bold)).frame(width: 30, height: 22).foregroundStyle(core.mixer.masterCue ? Color.black : Theme.fg)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.masterCue ? Theme.cue : Theme.raise))
-                }.buttonStyle(.plain)
-                Knob(label: "Master", value: core.mixer.master, size: 20, center: 0.8) { core.mixer.master = $0 }
-                Button { fxSheet = true } label: {
-                    Text("FX").font(.system(size: 10, weight: .bold)).frame(width: 30, height: 22).foregroundStyle(fx.on ? Color.black : Theme.fg)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(fx.on ? Theme.hot : Theme.raise))
-                }.buttonStyle(.plain)
+            HStack(alignment: .top, spacing: 2) {
+                phoneStrip(shown[0], k)
+                VStack(spacing: 3) {
+                    ForEach(["TRIM", "HI", "MID", "LOW", "CFX"], id: \.self) { n in
+                        Text(n).font(.system(size: 8, weight: .semibold)).foregroundStyle(Theme.muted).frame(height: k)
+                    }
+                    Text("CUE").font(.system(size: 8, weight: .semibold)).foregroundStyle(Theme.muted).frame(height: 22)
+                }.frame(width: 26)
+                phoneStrip(shown[1], k)
             }
+            crossfader.frame(height: 24)
         }
         .padding(5)
-        .frame(width: 168)
+        .frame(width: 150)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .sheet(isPresented: $fxSheet) { BeatFXView().padding().presentationDetents([.height(220)]) }
     }
-    func phoneStrip(_ i: Int) -> some View {
+    func phoneStrip(_ i: Int, _ k: CGFloat) -> some View {
         let c = Theme.deck[i]
         return VStack(spacing: 3) {
-            Text("CH \(i + 1)").font(.system(size: 9, weight: .bold)).foregroundStyle(c)
+            Knob(label: "", value: core.mixer.trim[i], color: c, size: k) { core.setMixer("trim", i, $0) }
+            Knob(label: "", value: core.mixer.hi[i], color: c, size: k) { core.setMixer("hi", i, $0) }
+            Knob(label: "", value: core.mixer.mid[i], color: c, size: k) { core.setMixer("mid", i, $0) }
+            Knob(label: "", value: core.mixer.low[i], color: c, size: k) { core.setMixer("low", i, $0) }
+            Knob(label: "", value: core.mixer.cfx[i], color: Theme.loop, size: k) { core.setMixer("cfx", i, $0) }
+            Button { core.togglePfl(i) } label: {
+                Text("\(i + 1)").font(.system(size: 10, weight: .heavy)).frame(width: 40, height: 22).foregroundStyle(core.mixer.pfl[i] ? Color.black : c)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.pfl[i] ? Theme.cue : Theme.raise))
+            }.buttonStyle(.plain)
             HStack(spacing: 2) {
-                Knob(label: "Trim", value: core.mixer.trim[i], color: c, size: 22) { core.setMixer("trim", i, $0) }
-                Knob(label: "Hi", value: core.mixer.hi[i], color: c, size: 22) { core.setMixer("hi", i, $0) }
-            }
-            HStack(spacing: 2) {
-                Knob(label: "Mid", value: core.mixer.mid[i], color: c, size: 22) { core.setMixer("mid", i, $0) }
-                Knob(label: "Low", value: core.mixer.low[i], color: c, size: 22) { core.setMixer("low", i, $0) }
-            }
-            HStack(spacing: 2) {
-                Knob(label: "CFX", value: core.mixer.cfx[i], color: Theme.loop, size: 22) { core.setMixer("cfx", i, $0) }
-                Button { core.togglePfl(i) } label: {
-                    Text("CUE").font(.system(size: 9, weight: .bold)).frame(width: 30, height: 22).foregroundStyle(core.mixer.pfl[i] ? Color.black : Theme.fg)
-                        .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.pfl[i] ? Theme.cue : Theme.raise))
-                }.buttonStyle(.plain)
-            }
-            HStack(spacing: 2) {
-                MeterView(level: { let r = app.core.lastSnapshot.decks[i]; return Double(max(r.peakL, r.peakR)) }).frame(width: 5, height: 54)
-                VFader(value: core.mixer.fader[i], color: c, height: 54) { core.setMixer("fader", i, $0) }
+                MeterView(level: { let r = app.core.lastSnapshot.decks[i]; return Double(max(r.peakL, r.peakR)) }).frame(width: 5, height: 62)
+                VFader(value: core.mixer.fader[i], color: c, height: 62) { core.setMixer("fader", i, $0) }
             }
         }.frame(maxWidth: .infinity)
+    }
+    /// iPhone: the master section, for the bar along the top
+    var phoneMaster: some View {
+        HStack(spacing: 6) {
+            Knob(label: "", value: core.mixer.headMix, size: 24, center: 0) { core.mixer.headMix = $0 }
+            Button { core.toggleMasterCue() } label: {
+                Text("MST CUE").font(.system(size: 9, weight: .bold)).padding(.horizontal, 5).frame(height: 24).foregroundStyle(core.mixer.masterCue ? Color.black : Theme.fg)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.masterCue ? Theme.cue : Theme.raise))
+            }.buttonStyle(.plain)
+            Knob(label: "", value: core.mixer.master, size: 24, center: 0.8) { core.mixer.master = $0 }
+            MeterView(level: { let p = app.core.lastSnapshot.masterPeak; return Double(max(p.0, p.1)) }).frame(width: 5, height: 24)
+            Button { fxSheet = true } label: {
+                Text("FX").font(.system(size: 10, weight: .bold)).frame(width: 32, height: 24).foregroundStyle(fx.on ? Color.black : Theme.fg)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(fx.on ? Theme.hot : Theme.raise))
+            }.buttonStyle(.plain)
+        }
+        .sheet(isPresented: $fxSheet) { BeatFXView().padding().presentationDetents([.height(220)]) }
     }
     var fullBody: some View {
         VStack(spacing: 8) {

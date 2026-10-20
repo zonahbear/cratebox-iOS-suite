@@ -29,13 +29,32 @@ final class AppModel: ObservableObject, ControlTarget {
     private var lastSec = 0.0
     @Published var statusText = ""
     @Published var controllerName = ""
-    @Published var selection: String?           // the library row the browse knob and LOAD use
-    @Published var view: LibraryView = .collection
+    // the library row the browse knob and LOAD use, and the list it's in: remembered (per list, and across
+    // restarts) so the browser opens where you left it
+    @Published var selection: String? { didSet { if oldValue != selection { remember() } } }
+    @Published var view: LibraryView = .collection {
+        didSet { if oldValue != view { selection = lastSelection[LibraryPane.key(view)]; remember() } }
+    }
+    private var lastSelection = (UserDefaults.standard.dictionary(forKey: "cb.browseSel") as? [String: String]) ?? [:]
+    private func remember() {
+        let k = LibraryPane.key(view)
+        lastSelection[k] = selection
+        UserDefaults.standard.set(lastSelection, forKey: "cb.browseSel")
+        UserDefaults.standard.set(k, forKey: "cb.browseView")
+    }
+    /// back to the list and track the browser was on last time (once the library and USBs are loaded)
+    func restoreBrowse() {
+        guard let k = UserDefaults.standard.string(forKey: "cb.browseView"), let src = browseSources().first(where: { $0.id == k }) else { return }
+        view = src.view
+    }
     @Published var browseFocusTree = false
     @Published var zoomSecs = 8.0
     @Published var tab = 0                       // phones: 0 = mix, 1 = library
     @Published var gridDeck: Int?                // the deck whose beat grid editor is open
     var visibleTrackIds: [String] = []           // the library list as shown (for the browse knob)
+    var libraryShown = false                     // the library list is on screen (then the knob follows it, search included)
+    @Published var browserShown = false          // the controller's browser over the decks (phones)
+    private var browserUntil = 0.0
     private var statusUntil = 0.0
     private var timer: CADisplayLink?
     private var lastLed = 0.0, lastKeep = 0.0, frame = 0
@@ -70,9 +89,10 @@ final class AppModel: ObservableObject, ControlTarget {
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
         link.add(to: .main, forMode: .common)
         timer = link
-        for f in library.folders where !f.device { library.scan(f) }
+        for f in library.folders where !f.device && !(library.url(of: f).map(Library.isRekordboxExport) ?? false) { library.scan(f) }
         Devices.shared.app = self
         Devices.shared.restore()
+        restoreBrowse()
         if CommandLine.arguments.contains("-demo") { demo() }
     }
 
@@ -104,6 +124,13 @@ final class AppModel: ObservableObject, ControlTarget {
                 self.core.decks[0].seek(20); self.core.decks[0].togglePlay()
                 self.core.decks[0].hotcue(0)
                 self.core.decks[1].seek(12)
+                if CommandLine.arguments.contains("-browse") {
+                    // a stand-in library for the browser screenshot
+                    let recs = (0..<14).map { k in TrackRecord(id: "demo-lib-\(k)", folder: "demo", rel: "\(k).wav", title: ["Night Drive", "Low End Theory", "Sub Pressure", "Warehouse 4AM", "Glass Ceiling", "Rewind Selecta", "Deep Cuts", "Bassline Hustle", "Halftime Heat", "Afterhours", "Roller", "Steppa", "Dub Siren", "Last Call"][k], artist: "Demo Artist \(k % 4 + 1)", size: 0, mtime: 0, bpm: Double([124, 126, 174, 128, 122, 172, 124, 130, 87, 125, 174, 140, 140, 120][k]), firstBeat: 0, key: (k * 5) % 24, duration: 300 + Double(k * 13), phrases: [], gridManual: false, autoBpm: nil, autoFirst: nil, ver: Library.ANALYSIS_VER) }
+                    self.library.setDemoTracks(recs.map(LibTrack.init))
+                    self.selection = "demo-lib-3"
+                    self.showBrowser(600)
+                }
                 // a stand-in FLX4: connect, keep-alive, lights, then PLAY on deck 2 and its tempo fader
                 self.midiHost.makeVirtualFLX4()
                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
@@ -144,6 +171,7 @@ final class AppModel: ObservableObject, ControlTarget {
         if now - lastKeep > 0.2 { lastKeep = now; midi.keepAliveTick() }
         if now - lastSec > 1 { lastSec = now; recorder.noteAudible(core) }
         if statusUntil > 0 && now > statusUntil { statusUntil = 0; statusText = "" }
+        if browserShown && now > browserUntil { browserShown = false; browseFocusTree = false }
         frame += 1
         // the decks' readouts (time, beat, sync offset) follow the playhead: refresh ~20 times a second
         if frame % 3 == 0 { for d in core.decks where d.loaded { d.objectChanged() } }
@@ -207,15 +235,57 @@ final class AppModel: ObservableObject, ControlTarget {
         }
     }
     func loadSelected(_ deck: Int) {
-        guard let id = selection, let t = library.track(id) else { status("Select a track first"); return }
+        guard let id = selection, let t = library.track(id) else { showBrowser(); status("Turn the browse knob to pick a track (press it for playlists)"); return }
         load(t, deck: deck)
     }
+    // ---- browsing from the controller: the knob walks the tracks, or (press it) the playlist tree ----
+    struct BrowseSource: Identifiable { let view: LibraryView; let name: String; let depth: Int; var id: String { LibraryPane.key(view) } }
+    /// Collection, your playlists, then each USB and its rekordbox playlists, in tree order (folders are
+    /// walked through, not stopped on)
+    func browseSources() -> [BrowseSource] {
+        var out = [BrowseSource(view: .collection, name: "Collection", depth: 0)]
+        func local(_ parent: String?, _ depth: Int) {
+            for p in playlists.children(parent) {
+                if p.folder { local(p.id, depth + 1) } else { out.append(BrowseSource(view: .playlist(p.id), name: playlists.path(p), depth: depth)) }
+            }
+        }
+        local(nil, 0)
+        for d in Devices.shared.list {
+            out.append(BrowseSource(view: .device(d.id), name: "\(d.name) · all tracks", depth: 0))
+            func walk(_ parent: UInt32, _ path: String) {
+                for n in d.tree.filter({ $0.parent == parent }).sorted(by: { $0.sort < $1.sort }) {
+                    let name = path.isEmpty ? n.name : path + " / " + n.name
+                    if n.folder { walk(n.id, name) } else { out.append(BrowseSource(view: .devicePlaylist(d.id, n.id), name: "\(d.name) · \(name)", depth: 1)) }
+                }
+            }
+            walk(0, "")
+        }
+        return out
+    }
+    /// the tracks the knob moves through: the list on screen, or the current view with its saved sort
+    func browseTracks() -> [LibTrack] {
+        if libraryShown && !visibleTrackIds.isEmpty { return visibleTrackIds.compactMap { library.track($0) } }
+        return LibraryPane.build(view, library, playlists, Devices.shared, query: "", sort: LibraryPane.storedSort(view)).compactMap { $0.t }
+    }
+    func showBrowser(_ secs: Double = 8) {
+        browserUntil = hostSeconds() + secs
+        if !browserShown && !(tab == 1) { browserShown = true }
+    }
+    func hideBrowser() { browserUntil = 0; browserShown = false }
     func moveSelection(_ n: Int) {
-        let ids = visibleTrackIds
-        guard !ids.isEmpty else { return }
+        showBrowser()
+        if browseFocusTree {
+            let src = browseSources()
+            let i = src.firstIndex { $0.view == view } ?? 0
+            view = src[max(0, min(src.count - 1, i + n))].view     // its last selection comes back with it
+            return
+        }
+        let ids = browseTracks().map { $0.id }
+        guard !ids.isEmpty else { status("Nothing in \(browseTitle) yet: press the browse knob to pick a playlist"); return }
         let i = ids.firstIndex(of: selection ?? "") ?? -1
         selection = ids[max(0, min(ids.count - 1, i + n))]
     }
+    var browseTitle: String { browseSources().first { $0.view == view }?.name ?? "the list" }
 
     // ---- ControlTarget: what the controller's actions do ----
     var fourDecks: Bool { core.four }
@@ -274,8 +344,12 @@ final class AppModel: ObservableObject, ControlTarget {
         case "hot": if on, let k = Int(arg) { d?.hotcue(k) }
         case "hotClear": if on, let k = Int(arg) { d?.clearHot(k) }
         case "loop": if on, let b = Double(arg) { d?.beatLoop(b) }
-        case "load": if on, deck >= 0 { loadSelected(midi.side.indices.contains(deck) && core.four ? deck : deck) }
-        case "browsePress": if on { browseFocusTree.toggle() }
+        case "load":
+            if on, deck >= 0 {
+                if browseFocusTree { browseFocusTree = false; showBrowser(); status("Pick a track, then LOAD"); return }
+                loadSelected(deck); hideBrowser()
+            }
+        case "browsePress": if on { browseFocusTree.toggle(); showBrowser() }
         case "browseShift": if on { tab = tab == 0 ? 1 : 0 }
         case "browseUp": if on { moveSelection(-1) }
         case "browseDown": if on { moveSelection(1) }

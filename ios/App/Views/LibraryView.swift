@@ -12,24 +12,30 @@ struct LibraryPane: View {
     @State private var query = ""
     @State private var sorts: [String: [String]] = (UserDefaults.standard.dictionary(forKey: "cb.sorts") as? [String: [String]]) ?? [:]
     @State private var showSidebar = true
-    @State private var pickFolder = false
-    @State private var pickUSB = false
+    // what the Files picker was opened for: 0 a music folder, 1 a rekordbox USB, 2 rekordbox XML. Kept apart
+    // from `picking`, which SwiftUI clears when the sheet closes (before the result arrives)
+    @State private var pickMode = 0
+    @State private var picking = false
     @State private var renaming: String?
     @State private var renameText = ""
     @State private var editMode: EditMode = .inactive
-    @State private var pickXml = false
     @State private var exported: URL?
     @State private var askBase = false
     @State private var basePath = ""
 
     // ---- what the list shows ----
-    var viewKey: String {
-        switch app.view {
+    var viewKey: String { LibraryPane.key(app.view) }
+    static func key(_ v: AppModel.LibraryView) -> String {
+        switch v {
         case .collection: return "all"
         case .playlist(let id): return "pl:" + id
         case .device(let d): return "dev:" + d
         case .devicePlaylist(let d, let id): return "devpl:\(d):\(id)"
         }
+    }
+    static func storedSort(_ v: AppModel.LibraryView) -> (SortKey, Bool) {
+        let s = ((UserDefaults.standard.dictionary(forKey: "cb.sorts") as? [String: [String]]) ?? [:])[key(v)] ?? []
+        return (SortKey(rawValue: s.first ?? "") ?? .none, s.count > 1 && s[1] == "desc")
     }
     var sort: (SortKey, Bool) {
         let s = sorts[viewKey] ?? []
@@ -41,9 +47,11 @@ struct LibraryPane: View {
         UserDefaults.standard.set(sorts, forKey: "cb.sorts")
     }
     struct Row: Identifiable { let id: String; let pos: Int; let t: LibTrack? ; let title: String; let artist: String }
-    var rows: [Row] {
+    var rows: [Row] { LibraryPane.build(app.view, library, playlists, devices, query: query, sort: sort) }
+    /// the list for a view: also what the controller's browse knob walks when the library isn't on screen
+    static func build(_ view: AppModel.LibraryView, _ library: Library, _ playlists: Playlists, _ devices: Devices, query: String, sort: (SortKey, Bool)) -> [Row] {
         var base: [Row]
-        switch app.view {
+        switch view {
         case .collection: base = library.tracks.filter { $0.device == nil }.enumerated().map { Row(id: $0.element.id, pos: $0.offset, t: $0.element, title: $0.element.info.title, artist: $0.element.info.artist) }
         case .playlist(let id):
             let p = playlists.get(id)
@@ -81,6 +89,7 @@ struct LibraryPane: View {
         }
         return base
     }
+    func pick(_ m: Int) { pickMode = m; picking = true }
     var editable: Bool {
         switch app.view {
         case .playlist: return sort.0 == .none && query.isEmpty
@@ -100,12 +109,10 @@ struct LibraryPane: View {
         }
         .background(Theme.panel)
         // one picker for all three (SwiftUI only honours one .fileImporter per view)
-        .fileImporter(isPresented: Binding(get: { pickFolder || pickUSB || pickXml }, set: { if !$0 { pickFolder = false; pickUSB = false; pickXml = false } }),
-                      allowedContentTypes: pickXml ? [.xml] : [.folder]) { r in
-            let usb = pickUSB, xml = pickXml
-            pickFolder = false; pickUSB = false; pickXml = false
+        .fileImporter(isPresented: $picking, allowedContentTypes: pickMode == 2 ? [.xml] : [.folder]) { r in
+            let mode = pickMode
             switch r {
-            case .success(let u): if xml { app.importXml(u) } else if usb { devices.open(u) } else { _ = library.addFolder(u) }
+            case .success(let u): if mode == 2 { app.importXml(u) } else if mode == 1 { devices.open(u) } else { _ = library.addFolder(u) }
             case .failure(let e): app.status("Couldn't open that: \(e.localizedDescription)")
             }
         }
@@ -126,6 +133,7 @@ struct LibraryPane: View {
         HStack(spacing: 6) {
             Button { showSidebar.toggle() } label: { Image(systemName: "sidebar.left") }.buttonStyle(.plain)
             Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
+                .padding(.horizontal, 4).background(RoundedRectangle(cornerRadius: 4).stroke(app.browseFocusTree ? Theme.loop : .clear, lineWidth: 1.5))
             TextField("Search title, artist or key (8A)", text: $query).textFieldStyle(.roundedBorder).font(.system(size: 12)).frame(maxWidth: 260)
             Spacer()
             if !library.progress.isEmpty { Text(library.progress).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1) }
@@ -163,10 +171,17 @@ struct LibraryPane: View {
     var list: some View {
         let rs = rows
         DispatchQueue.main.async { app.visibleTrackIds = rs.compactMap { $0.t?.id } }
-        return List(selection: Binding(get: { app.selection.map { Set([$0]) } ?? [] }, set: { app.selection = $0.first })) {
+        return ScrollViewReader { proxy in List(selection: Binding(get: { app.selection.map { Set([$0]) } ?? [] }, set: { app.selection = $0.first })) {
             ForEach(rs) { r in row(r).tag(r.t?.id ?? r.id).listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6)).listRowBackground(Theme.panel) }
                 .onMove(perform: editable ? { from, to in move(from, to) } : nil)
                 .onDelete(perform: editable ? { del($0) } : nil)
+        }
+        // the browse knob moves the selection: keep it in view
+        .onChange(of: app.selection) { _, sel in
+            if let sel, let r = rs.first(where: { $0.t?.id == sel }) { withAnimation(.easeOut(duration: 0.12)) { proxy.scrollTo(r.id, anchor: .center) } }
+        }
+        .onAppear { app.libraryShown = true }
+        .onDisappear { app.libraryShown = false }
         }
         .listStyle(.plain).environment(\.editMode, $editMode)
         .scrollContentBackground(.hidden)
@@ -175,7 +190,7 @@ struct LibraryPane: View {
                 VStack(spacing: 8) {
                     Text("No music yet").font(.headline)
                     Text("Add the folder you DJ from (on this iPhone/iPad, in iCloud Drive, or on a USB drive). Cratebox reads it in place: nothing is copied.").font(.caption).foregroundStyle(Theme.muted).multilineTextAlignment(.center).frame(maxWidth: 360)
-                    Button("Add music folder…") { pickFolder = true }.buttonStyle(.borderedProminent)
+                    Button("Add music folder…") { pick(0) }.buttonStyle(.borderedProminent)
                 }
             }
         }
@@ -257,7 +272,7 @@ struct LibraryPane: View {
                     Button { let p = playlists.new(playlists.nextName("Playlist")); renaming = "pl:" + p.id; renameText = p.name } label: { Image(systemName: "plus") }
                     Button { let p = playlists.new(playlists.nextName("Folder"), folder: true); renaming = "pl:" + p.id; renameText = p.name } label: { Image(systemName: "folder.badge.plus") }
                     Menu {
-                        Button("Import rekordbox XML…") { pickXml = true }
+                        Button("Import rekordbox XML…") { pick(2) }
                         Button("Export to rekordbox XML") { if let u = app.exportXml() { exported = u } }
                         Button("Music folder path for export…") { basePath = UserDefaults.standard.string(forKey: "cb.basePath") ?? ""; askBase = true }
                     } label: { Image(systemName: "ellipsis.circle") }
@@ -266,13 +281,13 @@ struct LibraryPane: View {
             Section {
                 ForEach(devices.list) { d in deviceRows(d) }
             } header: {
-                HStack { Text("DEVICES"); Spacer(); Button("+ USB") { pickUSB = true }.font(.system(size: 11)) }
+                HStack { Text("DEVICES"); Spacer(); Button("+ USB") { pick(1) }.font(.system(size: 11)) }
             }
             Section("FOLDERS") {
                 ForEach(library.folders.filter { !$0.device }) { f in
                     Text(f.name).font(.system(size: 12)).lineLimit(1).contextMenu { Button("Rescan") { library.scan(f) }; Button("Remove", role: .destructive) { library.removeFolder(f) } }
                 }
-                Button("Add music folder…") { pickFolder = true }.font(.system(size: 12))
+                Button("Add music folder…") { pick(0) }.font(.system(size: 12))
             }
         }
         .listStyle(.sidebar).scrollContentBackground(.hidden).background(Theme.panel)

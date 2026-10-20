@@ -63,7 +63,7 @@ struct Knob: View {
                 Rectangle().fill(Theme.fg).frame(width: 2, height: size * 0.32).offset(y: -size * 0.18)
                     .rotationEffect(.degrees(-135 + 270 * value))
             }.frame(width: size, height: size)
-            Text(label).font(.system(size: 9)).foregroundStyle(Theme.muted)
+            if !label.isEmpty { Text(label).font(.system(size: 9)).foregroundStyle(Theme.muted) }
         }
         .contentShape(Rectangle())
         .gesture(DragGesture(minimumDistance: 1)

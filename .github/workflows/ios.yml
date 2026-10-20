@@ -59,7 +59,7 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/dds" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|BUILD" | tee -a ../ci.log
           APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Release-iphonesimulator/*.app | head -1)
           mkdir -p "$RUNNER_TEMP/shots"
-          for dev in "iPhone 16 Pro" "iPad Pro 13-inch (M4)"; do
+          for dev in "iPhone 16 Pro Max" "iPad Pro 13-inch (M4)"; do
             UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for r in d.values() for x in r if x['name']=='$dev'), ''))")
             [ -z "$UDID" ] && UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for r in d.values() for x in r if x['name'].startswith('${dev%% *}')), ''))")
             echo "SIM $dev $UDID" | tee -a ../ci.log
@@ -76,6 +76,10 @@ jobs:
             xcrun simctl launch "$UDID" com.zonahbear.cratebox -demo -four > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_4decks.png" || true
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox -demo -browse > /dev/null || true
+            sleep 20
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_browse.png" || true
             gtimeout 60 xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|error|crash|fatal|DEMO MIDI" | head -20 | tee -a ../ci.log || true
             xcrun simctl shutdown "$UDID" || true
           done

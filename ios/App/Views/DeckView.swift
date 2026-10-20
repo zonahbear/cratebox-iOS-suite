@@ -35,7 +35,7 @@ struct DeckView: View {
             }
             HStack(spacing: 8) {
                 if deck.i % 2 == 0 { phoneTempo }
-                JogView(deck: deck, color: color).frame(width: app.core.four ? 74 : 84, height: app.core.four ? 74 : 84)
+                JogView(deck: deck, color: color).frame(width: app.core.four ? 92 : 104, height: app.core.four ? 92 : 104)
                 VStack(spacing: 6) {
                     HStack(spacing: 4) {
                         LitButton(label: "SYNC", on: deck.sync, color: color) { deck.setSync(!deck.sync) }
@@ -74,14 +74,18 @@ struct DeckView: View {
                 Text("CUES").tag(PadMode.hotcue); Text("LOOP").tag(PadMode.beatloop); Text("JUMP").tag(PadMode.beatjump)
                 Text("FX1").tag(PadMode.padfx); Text("FX2").tag(PadMode.padfx2)
             }.pickerStyle(.segmented).controlSize(.small)
-            HStack(spacing: 3) { ForEach(0..<8, id: \.self) { p in pad(p) } }
+            // the pads as on the controller: 4 across, 2 rows
+            VStack(spacing: 4) {
+                HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in pad(p) } }
+                HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in pad(p) } }
+            }
         }
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
         .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
     }
     var phoneTempo: some View {
-        VFader(value: (deck.pitch + 1) / 2, color: color, height: app.core.four ? 74 : 84, inverted: true) { deck.setPitch($0 * 2 - 1) }
+        VFader(value: (deck.pitch + 1) / 2, color: color, height: app.core.four ? 92 : 104, inverted: true) { deck.setPitch($0 * 2 - 1) }
             .onTapGesture(count: 2) { deck.setPitch(0) }
     }
     var fullBody: some View {
@@ -214,7 +218,7 @@ struct DeckView: View {
         let c: Color = deck.padMode == .hotcue ? Theme.hot : deck.padMode == .beatloop ? Theme.loop : color
         return HoldButton(down: { deck.padPress(p) }, up: { deck.padRelease(p) }) {
             Text(padLabel(p)).font(.system(size: 11, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.5)
-                .frame(maxWidth: .infinity, minHeight: phone ? 28 : compact ? 30 : 38)
+                .frame(maxWidth: .infinity, minHeight: phone ? 32 : compact ? 30 : 38)
                 .foregroundStyle(on ? Color.black : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 6).fill(on ? c : Theme.raise))
         }

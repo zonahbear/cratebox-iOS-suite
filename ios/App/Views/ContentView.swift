@@ -12,7 +12,9 @@ struct ContentView: View {
             VStack(spacing: 6) {
                 topBar(phone)
                 if phone {
-                    if app.tab == 0 { phoneMix } else { LibraryPane() }
+                    if app.tab == 0 {
+                        phoneMix.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
+                    } else { LibraryPane() }
                 } else {
                     mix(compact: g.size.height < 900)
                     LibraryPane().frame(minHeight: 180)
@@ -73,9 +75,10 @@ struct ContentView: View {
                 Circle().fill(app.controllerName.isEmpty ? Theme.dim : Theme.ok).frame(width: 7, height: 7)
                 Text(app.controllerName.isEmpty ? "No controller" : app.controllerName).font(.system(size: 11)).lineLimit(1)
             }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise))
-            Text(app.audio.outputChannels >= 4 ? "4 ch · cue on 3/4" : "2 ch").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
+            if !phone { Text(app.audio.outputChannels >= 4 ? "4 ch · cue on 3/4" : "2 ch").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted) }
             if phone {
-                Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: 170)
+                Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: 150)
+                MixerView(masterBar: true)
             }
             Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
             RecButton()
