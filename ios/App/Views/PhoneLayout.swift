@@ -28,7 +28,7 @@ struct PhoneScreen: View {
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
         // the whole screen: a reader that itself ignores the safe area gets the full size
         return GeometryReader { g in HStack(spacing: 0) {
-            EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band).zIndex(1)
+            EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
             VStack(spacing: 4) {
                 PhoneTopBar(settings: $settings).frame(height: 30)
                 if app.tab == 0 {
@@ -42,7 +42,7 @@ struct PhoneScreen: View {
                 }.frame(height: max(ins.bottom, 12))
             }
             .clipped()          // nothing in the middle may spill over the edge strips
-            EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band).zIndex(1)
+            EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
         }
         .padding(.top, ins.top)
         .frame(width: g.size.width, height: g.size.height)
@@ -141,7 +141,7 @@ struct EdgeStrip: View {
             edge("Q", deck.quant, color) { deck.quant.toggle() }
             Color.clear.frame(height: bottom)
         }
-        .padding(.horizontal, 5)
+        .padding(.horizontal, 7)
     }
     func edge(_ s: String, _ on: Bool, _ c: Color, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
