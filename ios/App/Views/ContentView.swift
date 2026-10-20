@@ -110,6 +110,8 @@ struct SettingsView: View {
                 Section("Sound") {
                     LabeledContent("Output", value: app.audio.routeName.isEmpty ? "—" : app.audio.routeName)
                     LabeledContent("Headphones", value: app.audio.outputChannels >= 4 ? "Controller's headphone jack (outputs 3/4)" : split ? "Split: master left, cue right" : "Master only (no cue)")
+                    if !app.audio.lastError.isEmpty { Text("Audio: \(app.audio.lastError)").font(.caption).foregroundStyle(Theme.hot) }
+                    Button("Restart audio") { app.audio.restart() }
                     Button("Test cue (three beeps in the headphones only)") { app.audio.engine.post(.testCue) }
                     if app.audio.outputChannels < 4 {
                         Toggle("Split (mono master left, mono cue right, with a splitter cable)", isOn: $split).onChange(of: split) { _, v in app.audio.setSplit(v) }

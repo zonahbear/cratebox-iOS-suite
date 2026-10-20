@@ -24,7 +24,7 @@ final class AudioHost {
         }
         NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] _ in self?.restart() }
         NotificationCenter.default.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.av = AVAudioEngine(); self?.source = nil; self?.restart()
+            self?.source = nil; self?.av = AVAudioEngine(); self?.restart()
         }
     }
     private func configureSession() {
@@ -37,34 +37,56 @@ final class AudioHost {
         if s.maximumOutputNumberOfChannels >= 4 { try? s.setPreferredOutputNumberOfChannels(4) }
         else { try? s.setPreferredOutputNumberOfChannels(2) }
     }
+    private(set) var lastError = ""
+    private var building = false
     private func build() {
         let s = AVAudioSession.sharedInstance()
-        outputChannels = max(1, min(s.outputNumberOfChannels, 4))
         routeName = s.currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
-        let ch = outputChannels >= 4 ? 4 : max(2, outputChannels)
-        let layout = AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | AudioChannelLayoutTag(ch))!
+        let hw = max(1, min(s.outputNumberOfChannels, 4))
+        // try the controller's 4 outputs first (master 1/2, headphones 3/4), then plain stereo
+        for ch in (hw >= 4 ? [4, 2] : [2]) {
+            if attach(channels: ch) { outputChannels = ch; lastError = ""; onRoute?(); return }
+        }
+        outputChannels = 2
+        onRoute?()
+    }
+    /// one try at a format; AVAudioEngine raises an Objective-C exception for one it can't use, caught here
+    private func attach(channels ch: Int) -> Bool {
+        guard let layout = AVAudioChannelLayout(layoutTag: (ch == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_DiscreteInOrder | AudioChannelLayoutTag(ch))) else { return false }
         let fmt = AVAudioFormat(standardFormatWithSampleRate: AudioHost.sampleRate, channelLayout: layout)
         let eng = engine
         var ptrs = [UnsafeMutablePointer<Float>]()
-        ptrs.reserveCapacity(4)
+        ptrs.reserveCapacity(8)
         let node = AVAudioSourceNode(format: fmt) { _, _, frames, abl -> OSStatus in
             let list = UnsafeMutableAudioBufferListPointer(abl)
             ptrs.removeAll(keepingCapacity: true)
             for b in list { if let d = b.mData { ptrs.append(d.assumingMemoryBound(to: Float.self)) } }
+            if ptrs.isEmpty { return noErr }
             eng.render(ptrs, Int(frames))
             return noErr
         }
-        if let old = source { av.detach(old) }
-        av.attach(node)
-        av.connect(node, to: av.outputNode, format: fmt)
+        var started = false
+        let ex = CBTry {
+            if let old = self.source { self.av.disconnectNodeOutput(old); self.av.detach(old); self.source = nil }
+            self.av.attach(node)
+            self.av.connect(node, to: self.av.outputNode, format: fmt)
+            self.av.prepare()
+            do { try self.av.start(); started = true } catch { self.lastError = error.localizedDescription }
+        }
+        if let ex { lastError = "\(ex.name.rawValue): \(ex.reason ?? "")" }
+        if ex != nil || !started {
+            _ = CBTry { self.av.stop(); self.av.disconnectNodeOutput(node); self.av.detach(node) }
+            return false
+        }
         source = node
         engine.post(.output(ch >= 4 ? .quad : .stereo))
-        av.prepare()
-        try? av.start()
-        onRoute?()
+        return true
     }
     func restart() {
-        av.stop()
+        if building { return }
+        building = true
+        defer { building = false }
+        _ = CBTry { self.av.stop() }
         configureSession()
         build()
     }

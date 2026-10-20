@@ -99,9 +99,16 @@ struct LibraryPane: View {
             }
         }
         .background(Theme.panel)
-        .fileImporter(isPresented: $pickFolder, allowedContentTypes: [.folder]) { r in if case .success(let u) = r { _ = library.addFolder(u) } }
-        .fileImporter(isPresented: $pickUSB, allowedContentTypes: [.folder]) { r in if case .success(let u) = r { devices.open(u) } }
-        .fileImporter(isPresented: $pickXml, allowedContentTypes: [.xml]) { r in if case .success(let u) = r { app.importXml(u) } }
+        // one picker for all three (SwiftUI only honours one .fileImporter per view)
+        .fileImporter(isPresented: Binding(get: { pickFolder || pickUSB || pickXml }, set: { if !$0 { pickFolder = false; pickUSB = false; pickXml = false } }),
+                      allowedContentTypes: pickXml ? [.xml] : [.folder]) { r in
+            let usb = pickUSB, xml = pickXml
+            pickFolder = false; pickUSB = false; pickXml = false
+            switch r {
+            case .success(let u): if xml { app.importXml(u) } else if usb { devices.open(u) } else { _ = library.addFolder(u) }
+            case .failure(let e): app.status("Couldn't open that: \(e.localizedDescription)")
+            }
+        }
         .sheet(item: Binding(get: { exported.map { Shared(url: $0) } }, set: { exported = $0?.url })) { s in ShareSheet(items: [s.url]) }
         .alert("Where is your music folder on the computer rekordbox runs on?", isPresented: $askBase) {
             TextField("e.g. C:\\Users\\you\\Music", text: $basePath)

@@ -57,14 +57,17 @@ final class MIDIHost {
     func send(_ bytes: [UInt8]) {
         guard dest != 0, !bytes.isEmpty else { return }
         if bytes[0] == 0xf0 {
-            // system exclusive (init, keep-alive)
-            let data = Data(bytes)
+            // system exclusive (init, keep-alive). CoreMIDI moves `data` along as it sends, so the buffer to free
+            // is kept in the refcon, not taken from `data`.
+            let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: bytes.count)
+            buf.initialize(from: bytes, count: bytes.count)
             let req = UnsafeMutablePointer<MIDISysexSendRequest>.allocate(capacity: 1)
-            let buf = UnsafeMutablePointer<UInt8>.allocate(capacity: data.count)
-            data.copyBytes(to: buf, count: data.count)
-            req.initialize(to: MIDISysexSendRequest(destination: dest, data: UnsafePointer(buf), bytesToSend: UInt32(data.count), complete: false, reserved: (0, 0, 0),
-                                                     completionProc: { r in r.pointee.data.deallocate(); r.deallocate() }, completionRefCon: nil))
-            MIDISendSysex(req)
+            req.initialize(to: MIDISysexSendRequest(destination: dest, data: UnsafePointer(buf), bytesToSend: UInt32(bytes.count), complete: false, reserved: (0, 0, 0),
+                                                     completionProc: { r in
+                                                         r.pointee.completionRefCon?.assumingMemoryBound(to: UInt8.self).deallocate()
+                                                         r.deallocate()
+                                                     }, completionRefCon: UnsafeMutableRawPointer(buf)))
+            if MIDISendSysex(req) != noErr { buf.deallocate(); req.deallocate() }
             return
         }
         var list = MIDIPacketList()
