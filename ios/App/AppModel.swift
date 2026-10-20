@@ -222,6 +222,8 @@ final class AppModel: ObservableObject, ControlTarget {
                     var key = info.key
                     if !cached { key = Analysis.detectKey(m.x, m.fs).key }
                     a = DeckAnalysis(bpm: info.bpm ?? 120, firstBeat: info.firstBeat ?? 0, key: key, phrases: ph, wave: wave, duration: dur)
+                    // rekordbox's grid beat by beat (unless the grid was edited by hand here)
+                    if fromRekordbox && !info.gridManual, let b = info.rbBeats, b.count >= 2 { a.beats = b; a.beat0 = info.rbBeat0 }
                 } else {
                     let r = Analysis.analyze(m.x, fs: m.fs, range: Settings.bpmRange, waveSource: w)
                     a = DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: info.keyFromRekordbox && info.key >= 0 ? info.key : r.key, phrases: r.phrases, wave: r.wave, duration: dur)

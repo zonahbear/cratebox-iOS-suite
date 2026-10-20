@@ -19,6 +19,9 @@ public final class TrackInfo: Identifiable, Equatable {
     public var gridManual = false, autoBpm: Double?, autoFirst: Double?
     public var keyFromRekordbox = false
     public var rbCues: (cue: Double?, hot: [Double?])?
+    /// rekordbox's own beat grid, beat by beat (seconds), and which beat is bar 1's first
+    public var rbBeats: [Double]?
+    public var rbBeat0 = 0
     public init(id: String, title: String, artist: String = "", bpm: Double? = nil, firstBeat: Double? = nil, key: Int = -1, duration: Double = 0, phrases: [Phrase] = []) {
         self.id = id; self.title = title; self.artist = artist; self.bpm = bpm; self.firstBeat = firstBeat; self.key = key; self.duration = duration; self.phrases = phrases
     }
@@ -28,6 +31,9 @@ public final class TrackInfo: Identifiable, Equatable {
 /// A deck's analysis (the web app's `ana`)
 public struct DeckAnalysis {
     public var bpm: Double, firstBeat: Double, key: Int, phrases: [Phrase], wave: Waveform?, duration: Double
+    /// a beat-by-beat grid (rekordbox's): followed exactly instead of bpm + firstBeat, so a track whose
+    /// tempo isn't a perfectly even number (or changes) stays locked. beat0: the index of bar 1's first beat
+    public var beats: [Double]? = nil, beat0 = 0
     public init(bpm: Double, firstBeat: Double, key: Int, phrases: [Phrase], wave: Waveform?, duration: Double) {
         self.bpm = bpm; self.firstBeat = firstBeat; self.key = key; self.phrases = phrases; self.wave = wave; self.duration = duration
     }
@@ -93,7 +99,23 @@ public final class DeckModel: ObservableObject, Identifiable {
     public var loaded: Bool { track != nil && !loading && duration > 0 }
     public var range: Double { RANGES[rangeIdx] }
     public var bpm: Double { ana?.bpm ?? 0 }
-    public var spb: Double { bpm > 0 ? 60 / bpm : 0.5 }
+    /// seconds per beat where the playhead is (a beat-by-beat grid's tempo varies along the track)
+    public var spb: Double {
+        if let b = grid { return segment(b, now()) }
+        return bpm > 0 ? 60 / bpm : 0.5
+    }
+    /// the tempo at the playhead, from the grid
+    public func tempoNow() -> Double { grid != nil ? 60 / spb : bpm }
+    var grid: [Double]? { if let b = ana?.beats, b.count >= 2 { return b }; return nil }
+    /// index of the beat segment holding t, and the segment's length
+    func seg(_ b: [Double], _ t: Double) -> Int {
+        if t <= b[0] { return 0 }
+        if t >= b[b.count - 1] { return b.count - 2 }
+        var lo = 0, hi = b.count - 1
+        while hi - lo > 1 { let m = (lo + hi) / 2; if b[m] <= t { lo = m } else { hi = m } }
+        return lo
+    }
+    func segment(_ b: [Double], _ t: Double) -> Double { let i = seg(b, t); return max(0.05, b[i + 1] - b[i]) }
     var active: Bool { core.deckActive(i) }
 
     public func setMT(_ on: Bool) {
@@ -108,7 +130,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         if let t = track, !t.gridManual { t.autoBpm = a.bpm; t.autoFirst = a.firstBeat }
         let bar = 4 * 60 / bpm
         let firstBeat = firstBeat0 - jsFloor(firstBeat0 / bar) * bar
-        a.bpm = bpm; a.firstBeat = firstBeat; ana = a
+        a.bpm = bpm; a.firstBeat = firstBeat; a.beats = nil; ana = a
         if let t = track { t.bpm = bpm; t.firstBeat = firstBeat; t.gridManual = true; core.trackChanged(t) }
         rephrase()
         if sync { syncTick() }
@@ -185,7 +207,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         if sync, master() != nil, bpm > 0 { return syncRate * (1 + syncTrim) }
         return 1 + pitch * range / 100
     }
-    public func effBpm() -> Double { bpm * rate() / (sync ? 1 + syncTrim : 1) }
+    public func effBpm() -> Double { tempoNow() * rate() / (sync ? 1 + syncTrim : 1) }
     /// with master tempo off, speeding up raises the key: 6% is about a semitone
     public func keyNow() -> Int {
         guard let a = ana, a.key >= 0 else { return -1 }
@@ -201,8 +223,21 @@ public final class DeckModel: ObservableObject, Identifiable {
         let t = pos / sr + (core.clock() - posT) * speed
         return clamp(t, 0, duration)
     }
-    public func beatAt(_ t: Double) -> Double { ana.map { (t - $0.firstBeat) / spb } ?? 0 }
-    public func timeOfBeat(_ b: Double) -> Double { ana.map { $0.firstBeat + b * spb } ?? 0 }
+    public func beatAt(_ t: Double) -> Double {
+        if let b = grid, let a = ana {
+            let i = seg(b, t)
+            return Double(i) + (t - b[i]) / max(0.05, b[i + 1] - b[i]) - Double(a.beat0)
+        }
+        return ana.map { (t - $0.firstBeat) / (bpm > 0 ? 60 / bpm : 0.5) } ?? 0
+    }
+    public func timeOfBeat(_ x: Double) -> Double {
+        if let b = grid, let a = ana {
+            let j = x + Double(a.beat0), n = b.count
+            let i = Int(max(0, min(Double(n - 2), j.rounded(.down))))
+            return b[i] + (j - Double(i)) * (b[i + 1] - b[i])
+        }
+        return ana.map { $0.firstBeat + x * (bpm > 0 ? 60 / bpm : 0.5) } ?? 0
+    }
     public func snap(_ t: Double) -> Double { quant && ana != nil ? timeOfBeat(jsRound(beatAt(t))) : t }
     func sendRate() { let r = rate(); if r != sentRate { sentRate = r; post(.rate(r)) } }
 
@@ -299,7 +334,7 @@ public final class DeckModel: ObservableObject, Identifiable {
             syncWith = m
             if let m {
                 // halftime / double time: of 1/2x, 1x and 2x the master's tempo, take the one nearest our own
-                let r = m.effBpm() / bpm
+                let r = m.effBpm() / tempoNow()
                 syncMult = DeckModel.pickMult(r)
                 syncRate = clamp(r * syncMult, 0.5, 2)
                 syncTrim = 0
@@ -322,9 +357,9 @@ public final class DeckModel: ObservableObject, Identifiable {
     }
     func syncTick() {
         guard sync, let m = master(), bpm > 0 else { return }
-        if let w = syncWith, w !== m { syncMult = DeckModel.pickMult(m.effBpm() / bpm) }
+        if let w = syncWith, w !== m { syncMult = DeckModel.pickMult(m.effBpm() / tempoNow()) }
         syncWith = m
-        let r = clamp(m.effBpm() * syncMult / bpm, 0.5, 2)
+        let r = clamp(m.effBpm() * syncMult / tempoNow(), 0.5, 2)
         if abs(r - syncRate) > 1e-7 { syncRate = r; sendRate() }
         lockPhase(m)
     }

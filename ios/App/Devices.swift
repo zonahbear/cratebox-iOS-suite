@@ -94,6 +94,8 @@ final class Devices: ObservableObject {
         var ext = RekordboxANLZ.parse([UInt8]((try? Data(contentsOf: datURL.deletingPathExtension().appendingPathExtension("EXT"))) ?? Data()))
         ext.beats = a.beats
         if !t.info.gridManual { t.info.bpm = g.bpm; t.info.firstBeat = g.firstBeat; t.info.autoBpm = g.bpm; t.info.autoFirst = g.firstBeat }
+        t.info.rbBeats = a.beats.map { Double($0.ms) / 1000 }
+        t.info.rbBeat0 = a.beats.firstIndex { $0.n == 1 } ?? 0
         if let ph = RekordboxANLZ.phrases(ext) { t.info.phrases = ph }
         let cueSrc = !ext.hot.isEmpty || !ext.memory.isEmpty ? ext : a
         t.info.rbCues = RekordboxANLZ.cues(cueSrc)

@@ -107,4 +107,44 @@ final class SyncSoakTests: XCTestCase {
             XCTAssertLessThan(abs(tail - head), 5, "what's heard stays with the reported position")
         }
     }
+    /// a track whose tempo wanders (like a live drummer, or rekordbox's dynamic grids): synced on rekordbox's
+    /// beat-by-beat grid it stays on the beat; on a single BPM it can't
+    func testVariableTempoFollowsTheBeats() {
+        for perBeat in [true, false] {
+            let e = Engine(sampleRate: SR), c = Core(engine: e)
+            var wall = 0.0
+            c.wallMs = { wall }
+            c.clock = { e.time }
+            let secs = 150.0
+            let a = clicks(bpm: 126, secs: secs + 30)
+            // deck 2: beats whose spacing swings 0.4% around 126 BPM over about a minute
+            var beats = [Double](), t = 0.3
+            while t < secs + 25 { beats.append(t); t += 60 / 126 * (1 + 0.004 * sin(t / 9)) }
+            let n = Int((secs + 30) * SR), tb = PCMTrack(count: n, sampleRate: SR)
+            for bt in beats { let s0 = Int(bt * SR); for k in 0..<Int(0.004 * SR) where s0 + k < n { let v = Float(0.9 * sin(2 * .pi * 2000 * Double(k) / SR)); tb.left[s0 + k] = v; tb.right[s0 + k] = v } }
+            for (k, (tr, an)) in [(a, DeckAnalysis(bpm: 126, firstBeat: 0, key: 21, phrases: [], wave: nil, duration: secs + 30)),
+                                   (tb, { var x = DeckAnalysis(bpm: 126, firstBeat: 0.3, key: 21, phrases: [], wave: nil, duration: secs + 30); if perBeat { x.beats = beats }; return x }())].enumerated() {
+                let info = TrackInfo(id: "var\(k)\(perBeat)", title: "Var \(k)")
+                c.decks[k].beginLoad(info); c.decks[k].finishLoad(info, pcm: tr, analysis: an, mono: nil)
+            }
+            let outs = (0..<2).map { _ in UnsafeMutablePointer<Float>.allocate(capacity: 512) }
+            defer { outs.forEach { $0.deallocate() } }
+            func run(_ s: Double) { for _ in 0..<Int(s * SR / 512) { e.render(outs, 512); wall += 512 / SR * 1000; c.tick() } }
+            run(0.1); c.decks[0].togglePlay(); run(1)
+            c.decks[1].seek(10); run(0.1); c.decks[1].setSync(true); c.decks[1].togglePlay()
+            var worst = 0.0
+            for _ in 0..<Int(secs * 2) {
+                run(0.5)
+                // the true beat phase of deck 2 (its real beats), against deck 1's
+                let pb = e.decks[1].pos / SR, pa = e.decks[0].pos / SR
+                var i = 0; while i + 1 < beats.count && beats[i + 1] <= pb { i += 1 }
+                let trueB = Double(i) + (pb - beats[i]) / (beats[min(i + 1, beats.count - 1)] - beats[i])
+                var err = trueB - pa / (60.0 / 126)
+                err -= err.rounded()
+                worst = max(worst, abs(err) * 60 / 126 * 1000)
+            }
+            print("SYNC wandering tempo, \(perBeat ? "beat-by-beat grid" : "one BPM"): worst offset \(String(format: "%.1f", worst)) ms over \(Int(secs)) s")
+            if perBeat { XCTAssertLessThan(worst, 8) }
+        }
+    }
 }

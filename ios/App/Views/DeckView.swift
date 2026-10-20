@@ -385,17 +385,17 @@ struct WaveformView: View {
         }
         // phrases along the top
         for p in showPhrases ? a.phrases : [] {
-            let end = p.start + Double(p.bars) * 4 * deck.spb
+            let end = deck.timeOfBeat(deck.beatAt(p.start) + Double(p.bars) * 4)
             let x0 = (p.start - t0) * pps, x1 = (end - t0) * pps
             if x1 < 0 || x0 > W { continue }
             ctx.fill(Path(CGRect(x: x0, y: 0, width: x1 - x0, height: 4)), with: .color(Theme.phrase[p.label] ?? Theme.muted))
         }
         // beat grid: bar lines brighter
         if deck.bpm > 0 {
-            var b = (t0 - a.firstBeat) / deck.spb
+            var b = deck.beatAt(t0)
             b.round(.down)
-            while true {
-                let t = a.firstBeat + b * deck.spb
+            for _ in 0..<1000 {
+                let t = deck.timeOfBeat(b)
                 let gx = (t - t0) * pps
                 if gx > W { break }
                 if gx >= 0 {
