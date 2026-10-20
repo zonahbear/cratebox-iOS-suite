@@ -9,6 +9,7 @@ struct ContentView: View {
     var body: some View {
         GeometryReader { g in
             let phone = g.size.height < 600
+            if phone { PhoneScreen(settings: $settings) } else {
             VStack(spacing: 6) {
                 topBar(phone)
                 if phone {
@@ -20,8 +21,9 @@ struct ContentView: View {
                     LibraryPane().frame(minHeight: 180)
                 }
             }
-            .padding(phone ? 2 : 6)
+            .padding(6)
             .background(Theme.bg)
+            }
         }
         .sheet(isPresented: $settings) { SettingsView() }
         .sheet(item: Binding(get: { app.gridDeck.map { GridTarget(id: $0) } }, set: { app.gridDeck = $0?.id })) { t in GridEditor(deck: core.decks[t.id]) }

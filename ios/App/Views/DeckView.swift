@@ -208,6 +208,17 @@ struct DeckView: View {
             }
         }
     }
+    func pad(_ p: Int) -> some View { PadCell(deck: deck, p: p, height: phone ? 32 : compact ? 30 : 38) }
+}
+
+/// one performance pad (hot cue, beat loop, beat jump or pad FX, by the deck's pad mode)
+struct PadCell: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var deck: DeckModel
+    let p: Int
+    var height: CGFloat = 38
+    var color: Color { Theme.deck[deck.i] }
+    var body: some View { pad(p) }
     func padLabel(_ p: Int) -> String {
         switch deck.padMode {
         case .hotcue: return String(UnicodeScalar(65 + p)!)
@@ -229,7 +240,7 @@ struct DeckView: View {
         let c: Color = deck.padMode == .hotcue ? Theme.hot : deck.padMode == .beatloop ? Theme.loop : color
         return HoldButton(down: { deck.padPress(p) }, up: { deck.padRelease(p) }) {
             Text(padLabel(p)).font(.system(size: 11, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.5)
-                .frame(maxWidth: .infinity, minHeight: phone ? 32 : compact ? 30 : 38)
+                .frame(maxWidth: .infinity, minHeight: height)
                 .foregroundStyle(on ? Color.black : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 6).fill(on ? c : Theme.raise))
         }
