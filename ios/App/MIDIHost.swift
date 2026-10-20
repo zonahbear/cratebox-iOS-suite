@@ -36,6 +36,27 @@ final class MIDIHost {
         return "MIDI device"
     }
 
+    // ---- a stand-in FLX4 for the simulator runs (demo mode) ----
+    private var vSrc: MIDIEndpointRef = 0, vDst: MIDIEndpointRef = 0
+    private(set) var virtualReceived = 0
+    func makeVirtualFLX4() {
+        MIDISourceCreateWithProtocol(client, "DDJ-FLX4" as CFString, ._1_0, &vSrc)
+        MIDIDestinationCreateWithProtocol(client, "DDJ-FLX4" as CFString, ._1_0, &vDst) { [weak self] list, _ in
+            let n = MIDIHost.decode(list).count
+            DispatchQueue.main.async { self?.virtualReceived += max(1, n) }
+        }
+        bind()
+    }
+    /// as if the controller sent it
+    func injectFromVirtual(_ bytes: [UInt8]) {
+        guard vSrc != 0, bytes.count == 3 else { return }
+        var ev = MIDIEventList()
+        let p = MIDIEventListInit(&ev, ._1_0)
+        var w: UInt32 = 0x2000_0000 | UInt32(bytes[0]) << 16 | UInt32(bytes[1]) << 8 | UInt32(bytes[2])
+        _ = MIDIEventListAdd(&ev, MemoryLayout<MIDIEventList>.size, p, 0, 1, &w)
+        MIDIReceivedEventList(vSrc, &ev)
+    }
+
     func bind() {
         if source != 0 { MIDIPortDisconnectSource(inPort, source); source = 0 }
         let srcs = (0..<MIDIGetNumberOfSources()).map { MIDIGetSource($0) }

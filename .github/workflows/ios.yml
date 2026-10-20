@@ -72,14 +72,14 @@ jobs:
             xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q cratebox && echo "SIM RUNNING $dev" | tee -a ../ci.log || echo "SIM NOT RUNNING $dev (crashed?)" | tee -a ../ci.log
             n=$(echo "$dev" | tr ' ()' '___')
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$n.png" || true
-            gtimeout 60 xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|error|crash|fatal" | head -20 | tee -a ../ci.log || true
+            gtimeout 60 xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|error|crash|fatal|DEMO MIDI" | head -20 | tee -a ../ci.log || true
             xcrun simctl shutdown "$UDID" || true
           done
           ls "$RUNNER_TEMP/shots" | tee -a ../ci.log
       - name: Error summary to the ci-logs branch
         if: always()
         run: |
-          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |PUBLISHED|Cratebox.ipa|SIM |\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |PUBLISHED|Cratebox.ipa|SIM |DEMO MIDI|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git fetch origin ci-logs || true
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null

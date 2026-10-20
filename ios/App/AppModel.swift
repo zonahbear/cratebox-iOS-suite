@@ -106,6 +106,17 @@ final class AppModel: ObservableObject, ControlTarget {
                 self.core.decks[0].seek(20); self.core.decks[0].togglePlay()
                 self.core.decks[0].hotcue(0)
                 self.core.decks[1].seek(12)
+                // a stand-in FLX4: connect, keep-alive, lights, then PLAY on deck 2 and its tempo fader
+                self.midiHost.makeVirtualFLX4()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    self.midiHost.injectFromVirtual([0x91, 0x0b, 0x7f]); self.midiHost.injectFromVirtual([0x91, 0x0b, 0x00])
+                    self.midiHost.injectFromVirtual([0xb1, 0x00, 0x30]); self.midiHost.injectFromVirtual([0xb1, 0x20, 0x00])
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+                    let d = self.core.decks[1]
+                    NSLog("DEMO MIDI: %@", "controller \(self.controllerName), deck 2 playing \(d.playing), pitch \(String(format: "%.3f", d.pitch)), messages to the controller \(self.midiHost.virtualReceived)")
+                    self.status("MIDI test: \(self.controllerName) · deck 2 \(d.playing ? "playing" : "stopped") · \(self.midiHost.virtualReceived) messages sent", 60)
+                }
             }
         }
     }
