@@ -27,7 +27,7 @@ struct PhoneScreen: View {
         let band = max(46, min(ins.left, ins.right))
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
         return HStack(spacing: 0) {
-            EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band)
+            EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band).zIndex(1)
             VStack(spacing: 4) {
                 PhoneTopBar(settings: $settings).frame(height: 30)
                 if app.tab == 0 {
@@ -40,7 +40,8 @@ struct PhoneScreen: View {
                     StripInfo(deck: core.decks[r])
                 }.frame(height: max(ins.bottom, 12))
             }
-            EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band)
+            .clipped()          // nothing in the middle may spill over the edge strips
+            EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 34, bottom: max(ins.bottom, 6)).frame(width: band).zIndex(1)
         }
         .padding(.top, ins.top)
         .frame(maxWidth: .infinity, maxHeight: .infinity)

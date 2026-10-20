@@ -295,7 +295,7 @@ struct PhoneLane: View {
     }
     var full: some View {
         VStack(spacing: 1) {
-            WaveformView(deck: deck, color: color).overlay(alignment: .topLeading) { info }
+            WaveformView(deck: deck, color: color).overlay(alignment: .topLeading) { info }.clipped()
             OverviewView(deck: deck, color: color).frame(height: 6)
         }
     }
@@ -316,6 +316,7 @@ struct PhoneLane: View {
                         }
                     }
                     .padding(.horizontal, 4).padding(.vertical, 1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .background(Theme.bg.opacity(0.6))
     }
 }
