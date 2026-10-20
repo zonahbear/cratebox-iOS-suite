@@ -288,14 +288,16 @@ struct PhoneLane: View {
     var color: Color { Theme.deck[deck.i] }
     var body: some View {
         if active { full } else {
-            // a deck the controller isn't on: just its readouts over the track overview
-            OverviewView(deck: deck, color: color).frame(height: 16).overlay(alignment: .topLeading) { info }
+            // a deck the controller isn't on: its readouts, and the track overview under them
+            VStack(spacing: 1) { info.frame(height: 16); OverviewView(deck: deck, color: color).frame(height: 4) }
                 .opacity(0.75)
         }
     }
     var full: some View {
+        // the readouts get their own row above the waveform, so nothing covers it
         VStack(spacing: 1) {
-            WaveformView(deck: deck, color: color).overlay(alignment: .topLeading) { info }.clipped()
+            info.frame(height: 16)
+            WaveformView(deck: deck, color: color)
             OverviewView(deck: deck, color: color).frame(height: 6)
         }
     }
@@ -317,9 +319,9 @@ struct PhoneLane: View {
                             Text("-" + clock(deck.duration - deck.now())).font(.system(size: 11, design: .monospaced))
                         }
                     }
-                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .padding(.horizontal, 2)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.bg.opacity(0.6))
+                    .clipped()
     }
 }
 
