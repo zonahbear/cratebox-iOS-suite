@@ -21,19 +21,23 @@ struct BrowserOverlay: View {
                 ScrollViewReader { proxy in
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 1) {
-                            ForEach(sources) { s in
-                                let cur = s.view == app.view
-                                Text(s.name).font(.system(size: 12, weight: cur ? .bold : .regular)).lineLimit(1)
-                                    .padding(.leading, 8 + CGFloat(s.depth) * 10).frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
-                                    .background(RoundedRectangle(cornerRadius: 5).fill(cur ? (app.browseFocusTree ? Theme.loop.opacity(0.35) : Theme.raise) : .clear))
+                            ForEach(Array(sources.enumerated()), id: \.element.id) { k, s in
+                                if k == 0 || sources[k - 1].group != s.group {
+                                    Text(s.group.uppercased()).font(.system(size: 9, weight: .heavy)).tracking(1).foregroundStyle(Theme.dim).lineLimit(1)
+                                        .padding(.top, k == 0 ? 0 : 8).padding(.leading, 6)
+                                }
+                                let cur = s.view == app.view, cursor = app.browseFocusTree && s.view == (app.treeCursor ?? app.view)
+                                Text(s.name).font(.system(size: 13, weight: cur ? .bold : .regular)).lineLimit(1)
+                                    .padding(.leading, 8 + CGFloat(s.depth) * 12).frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+                                    .background(RoundedRectangle(cornerRadius: 5).fill(cursor ? Theme.loop.opacity(0.35) : cur ? Theme.raise : .clear))
                                     .contentShape(Rectangle())
-                                    .onTapGesture { app.view = s.view; app.browseFocusTree = false; app.showBrowser() }
+                                    .onTapGesture { app.view = s.view; app.browseFocusTree = false; app.treeCursor = nil; app.showBrowser() }
                                     .id(s.id)
                             }
                         }
                     }
                     .onAppear { proxy.scrollTo(LibraryPane.key(app.view), anchor: .center) }
-                    .onChange(of: app.view) { _, v in withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo(LibraryPane.key(v), anchor: .center) } }
+                    .onChange(of: app.treeCursor ?? app.view) { _, v in withAnimation(.easeOut(duration: 0.1)) { proxy.scrollTo(LibraryPane.key(v), anchor: .center) } }
                 }
             }
             .frame(width: 220)

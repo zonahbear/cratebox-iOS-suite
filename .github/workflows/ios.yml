@@ -87,7 +87,7 @@ jobs:
       - name: Error summary to the ci-logs branch
         if: always()
         run: |
-          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |PUBLISHED|Cratebox.ipa|SIM |DEMO MIDI|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |SYNC |PUBLISHED|Cratebox.ipa|SIM |DEMO MIDI|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git fetch origin ci-logs || true
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null

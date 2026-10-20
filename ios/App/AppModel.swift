@@ -171,7 +171,7 @@ final class AppModel: ObservableObject, ControlTarget {
         if now - lastKeep > 0.2 { lastKeep = now; midi.keepAliveTick() }
         if now - lastSec > 1 { lastSec = now; recorder.noteAudible(core) }
         if statusUntil > 0 && now > statusUntil { statusUntil = 0; statusText = "" }
-        if browserShown && now > browserUntil { browserShown = false; browseFocusTree = false }
+        if browserShown && now > browserUntil { browserShown = false; browseFocusTree = false; treeCursor = nil }
         frame += 1
         // the decks' readouts (time, beat, sync offset) follow the playhead: refresh ~20 times a second
         if frame % 3 == 0 { for d in core.decks where d.loaded { d.objectChanged() } }
@@ -243,29 +243,31 @@ final class AppModel: ObservableObject, ControlTarget {
         load(t, deck: deck)
     }
     // ---- browsing from the controller: the knob walks the tracks, or (press it) the playlist tree ----
-    struct BrowseSource: Identifiable { let view: LibraryView; let name: String; let depth: Int; var id: String { LibraryPane.key(view) } }
+    struct BrowseSource: Identifiable { let view: LibraryView; let name: String; let depth: Int; let group: String; var id: String { LibraryPane.key(view) } }
     /// Collection, your playlists, then each USB and its rekordbox playlists, in tree order (folders are
-    /// walked through, not stopped on)
+    /// walked through, not stopped on). `group` is the heading the browser shows above each lot.
     func browseSources() -> [BrowseSource] {
-        var out = [BrowseSource(view: .collection, name: "Collection", depth: 0)]
+        var out = [BrowseSource(view: .collection, name: "Collection", depth: 0, group: "CRATEBOX")]
         func local(_ parent: String?, _ depth: Int) {
             for p in playlists.children(parent) {
-                if p.folder { local(p.id, depth + 1) } else { out.append(BrowseSource(view: .playlist(p.id), name: playlists.path(p), depth: depth)) }
+                if p.folder { local(p.id, depth + 1) } else { out.append(BrowseSource(view: .playlist(p.id), name: p.name, depth: depth, group: "CRATEBOX")) }
             }
         }
         local(nil, 0)
         for d in Devices.shared.list {
-            out.append(BrowseSource(view: .device(d.id), name: "\(d.name) · all tracks", depth: 0))
-            func walk(_ parent: UInt32, _ path: String) {
+            out.append(BrowseSource(view: .device(d.id), name: "All tracks", depth: 0, group: d.name))
+            func walk(_ parent: UInt32, _ depth: Int) {
                 for n in d.tree.filter({ $0.parent == parent }).sorted(by: { $0.sort < $1.sort }) {
-                    let name = path.isEmpty ? n.name : path + " / " + n.name
-                    if n.folder { walk(n.id, name) } else { out.append(BrowseSource(view: .devicePlaylist(d.id, n.id), name: "\(d.name) · \(name)", depth: 1)) }
+                    if n.folder { walk(n.id, depth + 1) } else { out.append(BrowseSource(view: .devicePlaylist(d.id, n.id), name: n.name, depth: depth, group: d.name)) }
                 }
             }
-            walk(0, "")
+            walk(0, 0)
         }
         return out
     }
+    /// pressing the knob: the playlists, with a cursor that only becomes the list when the knob is
+    /// pressed again (closing the browser, or LOAD, leaves you in the list you were in)
+    @Published var treeCursor: LibraryView?
     /// the tracks the knob moves through: the list on screen, or the current view with its saved sort
     func browseTracks() -> [LibTrack] {
         if libraryShown && !visibleTrackIds.isEmpty { return visibleTrackIds.compactMap { library.track($0) } }
@@ -275,13 +277,13 @@ final class AppModel: ObservableObject, ControlTarget {
         browserUntil = hostSeconds() + secs
         if !browserShown && !(tab == 1) { browserShown = true }
     }
-    func hideBrowser() { browserUntil = 0; browserShown = false }
+    func hideBrowser() { browserUntil = 0; browserShown = false; browseFocusTree = false; treeCursor = nil }
     func moveSelection(_ n: Int) {
         showBrowser()
         if browseFocusTree {
             let src = browseSources()
-            let i = src.firstIndex { $0.view == view } ?? 0
-            view = src[max(0, min(src.count - 1, i + n))].view     // its last selection comes back with it
+            let i = src.firstIndex { $0.view == (treeCursor ?? view) } ?? 0
+            treeCursor = src[max(0, min(src.count - 1, i + n))].view
             return
         }
         let ids = browseTracks().map { $0.id }
@@ -350,10 +352,18 @@ final class AppModel: ObservableObject, ControlTarget {
         case "loop": if on, let b = Double(arg) { d?.beatLoop(b) }
         case "load":
             if on, deck >= 0 {
-                if browseFocusTree { browseFocusTree = false; showBrowser(); status("Pick a track, then LOAD"); return }
+                if browseFocusTree { browseFocusTree = false; treeCursor = nil; showBrowser(); status("Pick a track, then LOAD"); return }
                 loadSelected(deck); hideBrowser()
             }
-        case "browsePress": if on { browseFocusTree.toggle(); showBrowser() }
+        case "browsePress":
+            guard on else { break }
+            // the first press only brings the browser up, on the list you were in
+            if !browserShown { browseFocusTree = false; treeCursor = nil; showBrowser(); break }
+            if browseFocusTree {
+                if let c = treeCursor { view = c }        // open the playlist under the cursor
+                treeCursor = nil; browseFocusTree = false
+            } else { treeCursor = view; browseFocusTree = true }
+            showBrowser()
         case "browseShift": if on { tab = tab == 0 ? 1 : 0 }
         case "browseUp": if on { moveSelection(-1) }
         case "browseDown": if on { moveSelection(1) }
