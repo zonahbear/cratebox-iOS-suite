@@ -99,10 +99,12 @@ final class USBTests: XCTestCase {
         XCTAssertEqual(AudioSniffer.sniff(wav(rate: 96000, bits: 24)), AudioFacts(codec: .wav, sampleRate: 96000, bitDepth: 24, channels: 2))
         XCTAssertEqual(AudioSniffer.sniff(wav(rate: 44100, bits: 32, float: true))?.floatingPoint, true)
         // an MP3 frame header after an ID3 tag: MPEG-1 layer III, 44.1 kHz
-        let mp3: [UInt8] = Array("ID3".utf8) + [4, 0, 0, 0, 0, 0, 2] + [0, 0] + [0xff, 0xfb, 0x90, 0x64] + [UInt8](repeating: 0, count: 16)
+        let id3: [UInt8] = [0x49, 0x44, 0x33, 4, 0, 0, 0, 0, 0, 2, 0, 0]
+        let mp3: [UInt8] = id3 + [0xff, 0xfb, 0x90, 0x64] + [UInt8](repeating: 0, count: 16)
         XCTAssertEqual(AudioSniffer.sniff(mp3)?.codec, .mp3); XCTAssertEqual(AudioSniffer.sniff(mp3)?.sampleRate, 44100)
-        var flac: [UInt8] = Array("fLaC".utf8) + [0, 0, 0, 34] + [UInt8](repeating: 0, count: 10)
-        flac += [0x0b, 0xb8, 0x02 | 0x01, 0x70] + [UInt8](repeating: 0, count: 20)       // 48000 Hz, 2 ch, 24 bit
+        var flac: [UInt8] = [0x66, 0x4c, 0x61, 0x43, 0, 0, 0, 34] + [UInt8](repeating: 0, count: 10)
+        flac += [0x0b, 0xb8, 0x03, 0x70] as [UInt8]
+        flac += [UInt8](repeating: 0, count: 20)       // 48000 Hz, 2 ch, 24 bit
         XCTAssertEqual(AudioSniffer.sniff(flac), AudioFacts(codec: .flac, sampleRate: 48000, bitDepth: 24, channels: 2))
     }
     func testPreflightOnARealStick() throws {
@@ -227,8 +229,8 @@ final class USBTests: XCTestCase {
         XCTAssertEqual(DeckBridgeMap.hotCue(4, deck: 3, on: true), [BridgeMessage(bytes: [0x9A, 0x04, 0x7F])])
         XCTAssertEqual(DeckBridgeMap.value(.channelFader, deck: 2, 1), [BridgeMessage(bytes: [0xB2, 0x13, 0x7F]), BridgeMessage(bytes: [0xB2, 0x33, 0x7F])])
         XCTAssertEqual(DeckBridgeMap.value(.filter, deck: 3, 0.5).first, BridgeMessage(bytes: [0xB6, 0x1A, 0x40]))
-        XCTAssertEqual(DeckBridgeMap.relative(.jogScratch, deck: 2, ticks: 100).map { $0.bytes }, [[0xB2, 0x22, 127], [0xB2, 0x22, 64 + 37]])
-        XCTAssertEqual(DeckBridgeMap.relative(.jogBend, deck: 3, ticks: -5).map { $0.bytes }, [[0xB3, 0x23, 59]])
+        XCTAssertEqual(DeckBridgeMap.relative(.jogScratch, deck: 2, ticks: 100).map { $0.bytes }, [[0xB2, 0x22, 127], [0xB2, 0x22, 101]] as [[UInt8]])
+        XCTAssertEqual(DeckBridgeMap.relative(.jogBend, deck: 3, ticks: -5).map { $0.bytes }, [[0xB3, 0x23, 59]] as [[UInt8]])
         XCTAssertEqual(DeckBridgeMap.feedback([0x92, 0x0B, 0x7F]), .button(.playPause, deck: 2, on: true))
         XCTAssertEqual(DeckBridgeMap.feedback([0x9A, 0x02, 0x00]), .hotCue(2, deck: 3, on: false))
     }
