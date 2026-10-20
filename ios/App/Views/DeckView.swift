@@ -11,54 +11,78 @@ struct DeckView: View {
     @ObservedObject var deck: DeckModel
     var compact = false
     var phone = false
+    var chips = true                    // phone layout: the DECK 1 / DECK 3 switch (4-deck mode)
     var color: Color { Theme.deck[deck.i] }
 
     var body: some View {
         if phone { phoneBody } else { fullBody }
     }
-    /// iPhone landscape: everything in about 350 points of height
+    /// iPhone landscape: the deck's controls (its waveform is in the lanes across the top, PhoneLane)
     var phoneBody: some View {
         VStack(spacing: 4) {
-            header
-            WaveformView(deck: deck, color: color).frame(height: 48)
-            OverviewView(deck: deck, color: color).frame(height: 12)
-            HStack(spacing: 6) {
-                if deck.i % 2 == 0 { VFader(value: (deck.pitch + 1) / 2, color: color, height: 92, inverted: true) { deck.setPitch($0 * 2 - 1) } }
+            if app.core.four && chips {
+                // which deck this side plays: 1 or 3 on the left, 2 or 4 on the right
+                HStack(spacing: 4) {
+                    ForEach([deck.i % 2, deck.i % 2 + 2], id: \.self) { d in
+                        let on = d == deck.i
+                        Button { app.midi.setSide(d % 2, d); app.objectWillChange.send() } label: {
+                            Text("DECK \(d + 1)").font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 24)
+                                .foregroundStyle(on ? Color.black : Theme.deck[d])
+                                .background(RoundedRectangle(cornerRadius: 5).fill(on ? Theme.deck[d] : Theme.raise))
+                        }.buttonStyle(.plain)
+                    }
+                }
+            }
+            HStack(spacing: 8) {
+                if deck.i % 2 == 0 { phoneTempo }
                 JogView(deck: deck, color: color).frame(width: 84, height: 84)
-                VStack(spacing: 4) {
+                VStack(spacing: 6) {
                     HStack(spacing: 4) {
                         LitButton(label: "SYNC", on: deck.sync, color: color) { deck.setSync(!deck.sync) }
                         LitButton(label: "MT", on: deck.mt, color: color) { deck.setMT(!deck.mt) }
                         LitButton(label: "Q", on: deck.quant, color: color) { deck.quant.toggle() }
                     }
-                    HStack(spacing: 6) {
+                    HStack(spacing: 8) {
                         HoldButton(down: { deck.cueDown() }, up: { deck.cueUp() }) {
-                            Text("CUE").font(.system(size: 12, weight: .bold)).frame(width: 46, height: 34)
+                            Text("CUE").font(.system(size: 13, weight: .bold)).frame(width: 54, height: 40)
                                 .background(Capsule().fill(Theme.raise)).overlay(Capsule().stroke(Theme.cue, lineWidth: 2))
                         }
                         Button { deck.togglePlay() } label: {
-                            Image(systemName: deck.playing ? "pause.fill" : "play.fill").frame(width: 46, height: 34)
-                                .background(Capsule().fill(Theme.raise)).overlay(Capsule().stroke(Theme.ok, lineWidth: 2))
+                            Image(systemName: deck.playing ? "pause.fill" : "play.fill").font(.system(size: 16)).frame(width: 54, height: 40)
+                                .background(Capsule().fill(deck.playing ? Theme.ok.opacity(0.25) : Theme.raise)).overlay(Capsule().stroke(Theme.ok, lineWidth: 2))
                         }.buttonStyle(.plain)
                     }
-                    Menu {
-                        Button("Loop in") { deck.loopIn() }; Button("Loop out") { deck.loopOut() }; Button(deck.loop.on ? "Exit loop" : "Reloop") { deck.reloopExit() }
-                        Button("Loop ½") { deck.loopScale(0.5) }; Button("Loop ×2") { deck.loopScale(2) }
-                        Button("Jump back 4 beats") { deck.beatJump(-4) }; Button("Jump ahead 4 beats") { deck.beatJump(4) }
-                        Button("Tap tempo") { deck.tap() }; Button("Tempo range ±\(deck.range == 100 ? "W" : String(Int(deck.range)))") { deck.cycleRange() }
-                        Button("Beat grid…") { app.gridDeck = deck.i }
-                    } label: { Text("⋯ LOOP / GRID").font(.system(size: 10, weight: .semibold)).frame(maxWidth: .infinity, minHeight: 22).background(RoundedRectangle(cornerRadius: 5).fill(deck.loop.on ? Theme.loop.opacity(0.4) : Theme.raise)) }
+                }.frame(maxWidth: .infinity)
+                if deck.i % 2 == 1 { phoneTempo }
+            }
+            // loops, jumps, tap, grid: one row that scrolls sideways
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 4) {
+                    LitButton(label: "IN", on: deck.loop.a != nil && deck.loop.b == nil, color: Theme.loop) { deck.loopIn() }
+                    LitButton(label: "OUT", on: deck.loop.on, color: Theme.loop) { deck.loopOut() }
+                    LitButton(label: deck.loop.on ? "EXIT" : "RELOOP", on: deck.loop.b != nil, color: Theme.loop) { deck.reloopExit() }
+                    LitButton(label: "½") { deck.loopScale(0.5) }
+                    LitButton(label: "×2") { deck.loopScale(2) }
+                    LitButton(label: "◀4") { deck.beatJump(-4) }
+                    LitButton(label: "4▶") { deck.beatJump(4) }
+                    LitButton(label: "TAP") { deck.tap() }
+                    LitButton(label: "GRID") { app.gridDeck = deck.i }
+                    LitButton(label: "±\(deck.range == 100 ? "W" : String(Int(deck.range)))") { deck.cycleRange() }
                 }
-                if deck.i % 2 == 1 { VFader(value: (deck.pitch + 1) / 2, color: color, height: 92, inverted: true) { deck.setPitch($0 * 2 - 1) } }
             }
             Picker("", selection: $deck.padMode) {
                 Text("CUES").tag(PadMode.hotcue); Text("LOOP").tag(PadMode.beatloop); Text("JUMP").tag(PadMode.beatjump)
                 Text("FX1").tag(PadMode.padfx); Text("FX2").tag(PadMode.padfx2)
-            }.pickerStyle(.segmented).controlSize(.mini)
+            }.pickerStyle(.segmented).controlSize(.small)
             HStack(spacing: 3) { ForEach(0..<8, id: \.self) { p in pad(p) } }
         }
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
+    }
+    var phoneTempo: some View {
+        VFader(value: (deck.pitch + 1) / 2, color: color, height: 84, inverted: true) { deck.setPitch($0 * 2 - 1) }
+            .onTapGesture(count: 2) { deck.setPitch(0) }
     }
     var fullBody: some View {
         VStack(spacing: 6) {
@@ -226,6 +250,46 @@ struct JogView: View {
                 }
                 .onEnded { _ in last = nil; deck.jogTouch(false) })
         }
+    }
+}
+
+/// iPhone: one deck's waveform across the full width, its readouts over it; the number picks the deck
+/// for its side of the controller in 4-deck mode
+struct PhoneLane: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var deck: DeckModel
+    var active = true
+    var color: Color { Theme.deck[deck.i] }
+    var body: some View {
+        if active { full } else {
+            // a deck the controller isn't on: just its readouts over the track overview
+            OverviewView(deck: deck, color: color).frame(height: 18).overlay(alignment: .topLeading) { info }
+                .opacity(0.75)
+        }
+    }
+    var full: some View {
+        VStack(spacing: 1) {
+            WaveformView(deck: deck, color: color).overlay(alignment: .topLeading) { info }
+            OverviewView(deck: deck, color: color).frame(height: 6)
+        }
+    }
+    var info: some View {
+                    HStack(spacing: 6) {
+                        Button { if app.core.four { app.midi.setSide(deck.i % 2, deck.i); app.objectWillChange.send() } } label: {
+                            Text("\(deck.i + 1)").font(.system(size: 12, weight: .heavy)).frame(width: 20, height: 16)
+                                .foregroundStyle(active ? Color.black : color).background(RoundedRectangle(cornerRadius: 3).fill(active ? color : Theme.raise))
+                        }.buttonStyle(.plain)
+                        Text(deck.track.map { "\($0.title) · \($0.artist)" } ?? (deck.loading ? "Loading…" : "Empty")).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                        Spacer(minLength: 4)
+                        if deck.loaded {
+                            if let c = Keys.camelot(deck.keyNow()) { Text(c.label).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Theme.keyColor(c.num, c.letter)) }
+                            Text(String(format: "%.2f", deck.effBpm())).font(.system(size: 12, weight: .bold, design: .monospaced))
+                            Text(String(format: "%+.1f%%", (deck.rate() - 1) * 100)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
+                            Text("-" + clock(deck.duration - deck.now())).font(.system(size: 11, design: .monospaced))
+                        }
+                    }
+                    .padding(.horizontal, 4).padding(.vertical, 1)
+                    .background(Theme.bg.opacity(0.6))
     }
 }
 

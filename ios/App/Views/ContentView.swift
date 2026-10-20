@@ -26,16 +26,37 @@ struct ContentView: View {
     }
     struct GridTarget: Identifiable { let id: Int }
 
-    /// iPhone: two decks around a small mixer (4-deck mode: the decks the controller plays, switchable)
+    /// iPhone: the waveforms across the top (all four in 4-deck mode), then the two decks the controller
+    /// plays around a small mixer
     var phoneMix: some View {
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
-        return HStack(alignment: .top, spacing: 4) {
-            DeckView(deck: core.decks[l], phone: true).id(l)
-            MixerView(phone: true)
-            DeckView(deck: core.decks[r], phone: true).id(r)
+        return VStack(spacing: 4) {
+            VStack(spacing: 3) {
+                ForEach(core.four ? [0, 1, 2, 3] : [0, 1], id: \.self) { i in
+                    PhoneLane(deck: core.decks[i], active: !core.four || i == l || i == r)
+                }
+            }.frame(minHeight: 70, maxHeight: .infinity)
+            HStack(alignment: .top, spacing: 4) {
+                DeckView(deck: core.decks[l], phone: true).id(l)
+                MixerView(phone: true)
+                DeckView(deck: core.decks[r], phone: true).id(r)
+            }.fixedSize(horizontal: false, vertical: true)
         }
     }
-    func mix(compact: Bool) -> some View {
+    @ViewBuilder func mix(compact: Bool) -> some View {
+        if core.four {
+            // 4 decks on an iPad: all four waveforms across the top, the decks' controls in two columns
+            VStack(spacing: 6) {
+                VStack(spacing: 3) { ForEach(0..<4, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: compact ? 54 : 70) } }
+                HStack(alignment: .top, spacing: 6) {
+                    VStack(spacing: 6) { DeckView(deck: core.decks[0], phone: true, chips: false); DeckView(deck: core.decks[2], phone: true, chips: false) }
+                    MixerView(compact: true)
+                    VStack(spacing: 6) { DeckView(deck: core.decks[1], phone: true, chips: false); DeckView(deck: core.decks[3], phone: true, chips: false) }
+                }
+            }
+        } else { mix2(compact: compact) }
+    }
+    func mix2(compact: Bool) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(spacing: 6) { DeckView(deck: core.decks[0], compact: compact || core.four); if core.four { DeckView(deck: core.decks[2], compact: true) } }
             MixerView(compact: compact || core.four)

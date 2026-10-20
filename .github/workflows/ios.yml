@@ -72,6 +72,10 @@ jobs:
             xcrun simctl spawn "$UDID" launchctl list 2>/dev/null | grep -q cratebox && echo "SIM RUNNING $dev" | tee -a ../ci.log || echo "SIM NOT RUNNING $dev (crashed?)" | tee -a ../ci.log
             n=$(echo "$dev" | tr ' ()' '___')
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/$n.png" || true
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox -demo -four > /dev/null || true
+            sleep 20
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_4decks.png" || true
             gtimeout 60 xcrun simctl spawn "$UDID" log show --last 1m --predicate 'process == "Cratebox"' --style compact 2>/dev/null | grep -iE "fault|error|crash|fatal|DEMO MIDI" | head -20 | tee -a ../ci.log || true
             xcrun simctl shutdown "$UDID" || true
           done

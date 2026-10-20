@@ -93,8 +93,10 @@ final class AppModel: ObservableObject, ControlTarget {
             let m = AudioDecoder.mono(t, 11025), w = AudioDecoder.mono(t, 22050)
             let r = Analysis.analyze(m.x, fs: m.fs, waveSource: w)
             await MainActor.run {
-                for k in 0..<2 {
-                    let info = TrackInfo(id: "demo\(k)", title: k == 0 ? "Demo Groove" : "Demo Groove (dub)", artist: "Cratebox")
+                let four = CommandLine.arguments.contains("-four")
+                if four { self.core.setFour(true) }
+                for k in 0..<(four ? 4 : 2) {
+                    let info = TrackInfo(id: "demo\(k)", title: ["Demo Groove", "Demo Groove (dub)", "Demo Groove (tool)", "Demo Groove (edit)"][k], artist: "Cratebox")
                     let d = self.core.decks[k]
                     d.beginLoad(info)
                     d.finishLoad(info, pcm: t, analysis: DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: r.key, phrases: r.phrases, wave: r.wave, duration: 90), mono: m)
