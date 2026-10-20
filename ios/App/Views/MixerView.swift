@@ -41,11 +41,11 @@ struct MixerView: View {
     func phoneStrip(_ i: Int, _ k: CGFloat) -> some View {
         let c = Theme.deck[i]
         return VStack(spacing: 3) {
-            Knob(label: "", value: core.mixer.trim[i], color: c, size: k) { core.setMixer("trim", i, $0) }
-            Knob(label: "", value: core.mixer.hi[i], color: c, size: k) { core.setMixer("hi", i, $0) }
-            Knob(label: "", value: core.mixer.mid[i], color: c, size: k) { core.setMixer("mid", i, $0) }
-            Knob(label: "", value: core.mixer.low[i], color: c, size: k) { core.setMixer("low", i, $0) }
-            Knob(label: "", value: core.mixer.cfx[i], color: Theme.loop, size: k) { core.setMixer("cfx", i, $0) }
+            Knob(label: "", value: core.mixer.trim[i], color: c, size: k, bipolar: true) { core.setMixer("trim", i, $0) }
+            Knob(label: "", value: core.mixer.hi[i], color: c, size: k, bipolar: true) { core.setMixer("hi", i, $0) }
+            Knob(label: "", value: core.mixer.mid[i], color: c, size: k, bipolar: true) { core.setMixer("mid", i, $0) }
+            Knob(label: "", value: core.mixer.low[i], color: c, size: k, bipolar: true) { core.setMixer("low", i, $0) }
+            Knob(label: "", value: core.mixer.cfx[i], color: Theme.loop, size: k, bipolar: true) { core.setMixer("cfx", i, $0) }
             Button { core.togglePfl(i) } label: {
                 Text("\(i + 1)").font(.system(size: 10, weight: .heavy)).frame(width: 40, height: 22).foregroundStyle(core.mixer.pfl[i] ? Color.black : c)
                     .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.pfl[i] ? Theme.cue : Theme.raise))
@@ -109,11 +109,11 @@ struct MixerView: View {
     func strip(_ i: Int) -> some View {
         let c = Theme.deck[i]
         return VStack(spacing: 5) {
-            Knob(label: "Trim", value: core.mixer.trim[i], color: c, size: compact ? 24 : 28) { core.setMixer("trim", i, $0) }
-            Knob(label: "Hi", value: core.mixer.hi[i], color: c, size: compact ? 24 : 28) { core.setMixer("hi", i, $0) }
-            Knob(label: "Mid", value: core.mixer.mid[i], color: c, size: compact ? 24 : 28) { core.setMixer("mid", i, $0) }
-            Knob(label: "Low", value: core.mixer.low[i], color: c, size: compact ? 24 : 28) { core.setMixer("low", i, $0) }
-            Knob(label: "CFX", value: core.mixer.cfx[i], color: Theme.loop, size: compact ? 24 : 28) { core.setMixer("cfx", i, $0) }
+            Knob(label: "Trim", value: core.mixer.trim[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("trim", i, $0) }
+            Knob(label: "Hi", value: core.mixer.hi[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("hi", i, $0) }
+            Knob(label: "Mid", value: core.mixer.mid[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("mid", i, $0) }
+            Knob(label: "Low", value: core.mixer.low[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("low", i, $0) }
+            Knob(label: "CFX", value: core.mixer.cfx[i], color: Theme.loop, size: compact ? 24 : 28, bipolar: true) { core.setMixer("cfx", i, $0) }
             LitButton(label: "CUE", on: core.mixer.pfl[i], color: Theme.cue) { core.togglePfl(i) }
             HStack(spacing: 2) {
                 MeterView(level: { let r = app.core.lastSnapshot.decks[i]; return Double(max(r.peakL, r.peakR)) }).frame(width: 6, height: compact ? 90 : 110)

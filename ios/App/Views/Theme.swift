@@ -52,14 +52,19 @@ struct Knob: View {
     var color: Color = Theme.fg
     var size: CGFloat = 30
     var center = 0.5
+    var bipolar = false                  // TRIM, EQ, CFX: lit only when turned away from the centre
     let set: (Double) -> Void
     @State private var start: Double?
     var body: some View {
         VStack(spacing: 2) {
             ZStack {
                 Circle().fill(Theme.raise).overlay(Circle().stroke(Theme.line2))
-                Circle().trim(from: 0, to: 0.75 * value).stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                    .rotationEffect(.degrees(135)).padding(2)
+                // EQ-style knobs light only away from 12 o'clock, from the centre to where they're turned
+                let lo = bipolar ? min(0.5, value) : 0, hi = bipolar ? max(0.5, value) : value
+                if !bipolar || abs(value - 0.5) > 0.01 {
+                    Circle().trim(from: 0.75 * lo, to: 0.75 * hi).stroke(color, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                        .rotationEffect(.degrees(135)).padding(2)
+                }
                 Rectangle().fill(Theme.fg).frame(width: 2, height: size * 0.32).offset(y: -size * 0.18)
                     .rotationEffect(.degrees(-135 + 270 * value))
             }.frame(width: size, height: size)
