@@ -21,6 +21,8 @@ public enum EngineCommand {
     case recordTap(((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?)
     /// three short beeps in the headphone mix only (if the speakers play them too, cue isn't separate)
     case testCue
+    /// three short beeps on the master only (the speakers)
+    case testMaster
 }
 public enum FxSlotName { case beat, pad }
 
@@ -34,7 +36,7 @@ public final class Engine {
     var gMaster: Double, gHpCue = 1.0, gHpMaster = 0.0, gMcue = 0.0
     public private(set) var output: OutputMode = .stereo
     var frames: Int64 = 0
-    var beepLeft = 0, beepPhase = 0.0
+    var beepLeft = 0, beepPhase = 0.0, beepMaster = false
     // scratch, allocated once
     let B = 128
     let dl: [UnsafeMutablePointer<Float>], dr: [UnsafeMutablePointer<Float>]
@@ -93,7 +95,8 @@ public final class Engine {
         case .clock(let u, let c): (u < 4 ? strips[u].fx : masterFx).clock = c
         case .output(let o): output = o
         case .recordTap(let f): recordTap = f
-        case .testCue: beepLeft = Int(1.05 * sampleRate); beepPhase = 0
+        case .testCue: beepLeft = Int(1.05 * sampleRate); beepPhase = 0; beepMaster = false
+        case .testMaster: beepLeft = Int(1.05 * sampleRate); beepPhase = 0; beepMaster = true
         }
     }
 
@@ -124,22 +127,30 @@ public final class Engine {
                 let ml = Double(mL[j]) * gMaster, mr = Double(mR[j]) * gMaster
                 // headphones: the CUE mix, the master by the CUE/MASTER knob, and MASTER CUE at full level
                 hL[j] = Float(Double(cL[j]) * gHpCue + ml * (gHpMaster + gMcue)); hR[j] = Float(Double(cR[j]) * gHpCue + mr * (gHpMaster + gMcue))
+                var mb: Float = 0
                 if beepLeft > 0 {
                     // 3 x 150 ms of 880 Hz, 200 ms apart
                     let pos = Int(1.05 * sampleRate) - beepLeft, cyc = Int(0.35 * sampleRate)
-                    if pos % cyc < Int(0.15 * sampleRate) { let b = Float(0.3 * sin(beepPhase)); hL[j] += b; hR[j] += b }
+                    if pos % cyc < Int(0.15 * sampleRate) {
+                        let b = Float(0.3 * sin(beepPhase))
+                        if beepMaster { mb = b } else { hL[j] += b; hR[j] += b }
+                    }
                     beepPhase += 2 * Double.pi * 880 / sampleRate
                     beepLeft -= 1
                 }
                 var l = ml, r = mr
                 limiter.run(&l, &r)
-                mL[j] = Float(l); mR[j] = Float(r)
+                mL[j] = Float(l) + mb; mR[j] = Float(r) + mb
                 if abs(mL[j]) > mpl { mpl = abs(mL[j]) }; if abs(mR[j]) > mpr { mpr = abs(mR[j]) }
             }
             if let tap = recordTap { tap(mL, mR, m) }
             switch output {
             case .quad where outs.count >= 4:
                 for j in 0..<m { outs[0][done + j] = mL[j]; outs[1][done + j] = mR[j]; outs[2][done + j] = hL[j]; outs[3][done + j] = hR[j] }
+                if outs.count > 4 { for c in 4..<outs.count { for j in 0..<m { outs[c][done + j] = 0 } } }
+            case .quadSwapped where outs.count >= 4:
+                for j in 0..<m { outs[0][done + j] = hL[j]; outs[1][done + j] = hR[j]; outs[2][done + j] = mL[j]; outs[3][done + j] = mR[j] }
+                if outs.count > 4 { for c in 4..<outs.count { for j in 0..<m { outs[c][done + j] = 0 } } }
             case .split where outs.count >= 2:
                 // mono master on the left, mono cue mix on the right (a splitter cable)
                 for j in 0..<m { outs[0][done + j] = (mL[j] + mR[j]) * 0.5; outs[1][done + j] = (hL[j] + hR[j]) * 0.5 }

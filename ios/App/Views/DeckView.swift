@@ -265,29 +265,32 @@ struct WaveformView: View {
         let now = deck.now(), span = app.zoomSecs, W = Double(size.width), H = Double(size.height), mid = H / 2
         let t0 = now - span / 2, pps = W / span
         let wps = Double(w.wps)
-        // waveform: one bar per pixel column
-        let step = max(1, Int(W / 400))
-        var x = 0
-        while x < Int(W) {
-            let t = t0 + Double(x) / pps
-            let k = Int(t * wps)
-            if k >= 0 && k < w.peak.count {
-                let pk = Double(w.peak[k]) / 255, lo = Double(w.low[k]) / 255, mi = Double(w.mid[k]) / 255, hi = Double(w.high[k]) / 255
-                let past = t < now
-                if waveStyle == "3band" {
-                    // the older blue / orange / white style: lows, mids and highs stacked
-                    for (v, c) in [(lo, Theme.hex(0x2f6fff)), (mi, Theme.hex(0xff9a3c)), (hi, Color.white)] {
-                        let h = v * mid * 0.95
-                        ctx.fill(Path(CGRect(x: Double(x), y: mid - h, width: Double(step), height: max(1, 2 * h))), with: .color(c.opacity(past ? 0.4 : 0.85)))
-                    }
-                } else {
-                    let s = max(0.001, lo + mi + hi)
-                    let col = Color(red: min(1, 0.25 + lo / s * 1.1), green: min(1, 0.25 + mi / s * 1.1), blue: min(1, 0.3 + hi / s * 1.1))
-                    let h = pk * mid * 0.95
-                    ctx.fill(Path(CGRect(x: Double(x), y: mid - h, width: Double(step), height: max(1, 2 * h))), with: .color(col.opacity(past ? 0.55 : 1)))
+        // waveform: bars at the waveform's own time positions, grouped by whole bins counted from the start
+        // of the track, so the shape slides smoothly instead of being re-sampled (and shimmering) every frame
+        let ppb = pps / wps, n = w.peak.count
+        let g = max(1, Int((1.5 / ppb).rounded(.up)))
+        var k = max(0, Int((t0 * wps).rounded(.down)) / g * g)
+        let kEnd = min(n, Int(((t0 + span) * wps).rounded(.up)) + g)
+        let bw = Double(g) * ppb
+        while k < kEnd {
+            var pk: UInt8 = 0, lo: UInt8 = 0, mi: UInt8 = 0, hi: UInt8 = 0
+            for j in k..<min(n, k + g) { pk = max(pk, w.peak[j]); lo = max(lo, w.low[j]); mi = max(mi, w.mid[j]); hi = max(hi, w.high[j]) }
+            let tk = Double(k) / wps, x = (tk - t0) * pps
+            let past = tk + Double(g) / wps / 2 < now
+            let wd = max(1, bw * 0.85)
+            if waveStyle == "3band" {
+                // the older blue / orange / white style: lows, mids and highs stacked
+                for (v, c) in [(Double(lo) / 255, Theme.hex(0x2f6fff)), (Double(mi) / 255, Theme.hex(0xff9a3c)), (Double(hi) / 255, Color.white)] {
+                    let h = v * mid * 0.95
+                    ctx.fill(Path(CGRect(x: x, y: mid - h, width: wd, height: max(1, 2 * h))), with: .color(c.opacity(past ? 0.4 : 0.85)))
                 }
+            } else {
+                let l = Double(lo) / 255, m = Double(mi) / 255, h3 = Double(hi) / 255, sum = max(0.001, l + m + h3)
+                let col = Color(red: min(1, 0.25 + l / sum * 1.1), green: min(1, 0.25 + m / sum * 1.1), blue: min(1, 0.3 + h3 / sum * 1.1))
+                let h = Double(pk) / 255 * mid * 0.95
+                ctx.fill(Path(CGRect(x: x, y: mid - h, width: wd, height: max(1, 2 * h))), with: .color(col.opacity(past ? 0.55 : 1)))
             }
-            x += step
+            k += g
         }
         // phrases along the top
         for p in showPhrases ? a.phrases : [] {

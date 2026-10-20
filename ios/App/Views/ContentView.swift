@@ -111,8 +111,17 @@ struct SettingsView: View {
                     LabeledContent("Output", value: app.audio.routeName.isEmpty ? "—" : app.audio.routeName)
                     LabeledContent("Headphones", value: app.audio.outputChannels >= 4 ? "Controller's headphone jack (outputs 3/4)" : split ? "Split: master left, cue right" : "Master only (no cue)")
                     if !app.audio.lastError.isEmpty { Text("Audio: \(app.audio.lastError)").font(.caption).foregroundStyle(Theme.hot) }
-                    Button("Restart audio") { app.audio.restart() }
+                    if app.audio.outputChannels >= 4 || app.audio.routing != "auto" {
+                        Picker("Routing", selection: Binding(get: { app.audio.routing }, set: { app.audio.setRouting($0) })) {
+                            Text("Master 1/2, headphones 3/4 (FLX4)").tag("auto")
+                            Text("Headphones 1/2, master 3/4").tag("swapped")
+                            Text("Stereo only (master on 1/2)").tag("stereo")
+                        }
+                    }
+                    Button("Test master (three beeps on the speakers only)") { app.audio.engine.post(.testMaster) }
                     Button("Test cue (three beeps in the headphones only)") { app.audio.engine.post(.testCue) }
+                    Button("Restart audio") { app.audio.restart() }
+                    Text(app.audio.diagnostics).font(.caption2).foregroundStyle(Theme.muted).textSelection(.enabled)
                     if app.audio.outputChannels < 4 {
                         Toggle("Split (mono master left, mono cue right, with a splitter cable)", isOn: $split).onChange(of: split) { _, v in app.audio.setSplit(v) }
                     }

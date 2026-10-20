@@ -44,16 +44,35 @@ final class AudioHost {
         routeName = s.currentRoute.outputs.map { $0.portName }.joined(separator: ", ")
         let hw = max(1, min(s.outputNumberOfChannels, 4))
         // try the controller's 4 outputs first (master 1/2, headphones 3/4), then plain stereo
-        for ch in (hw >= 4 ? [4, 2] : [2]) {
+        for ch in (hw >= 4 && routing != "stereo" ? [4, 2] : [2]) {
             if attach(channels: ch) { outputChannels = ch; lastError = ""; onRoute?(); return }
         }
         outputChannels = 2
         onRoute?()
     }
+    /// what iOS reports about the output, for Settings (and for working out a wrong routing)
+    private(set) var diagnostics = ""
+    var routing: String { UserDefaults.standard.string(forKey: "cb.routing") ?? "auto" }      // auto, swapped, stereo
+    private func describe() {
+        let s = AVAudioSession.sharedInstance(), hw = av.outputNode.outputFormat(forBus: 0)
+        let chans = s.currentRoute.outputs.flatMap { p in (p.channels ?? []).map { "\($0.channelNumber): \($0.channelName)" } }
+        let tag = hw.channelLayout.map { String(format: "0x%08X", $0.layoutTag) } ?? "none"
+        diagnostics = "\(s.currentRoute.outputs.map { "\($0.portName) (\($0.portType.rawValue))" }.joined(separator: ", ")) · hardware \(hw.channelCount) ch at \(Int(hw.sampleRate)) Hz, layout \(tag) · session \(s.outputNumberOfChannels) of max \(s.maximumOutputNumberOfChannels) · channels: \(chans.joined(separator: ", "))"
+    }
     /// one try at a format; AVAudioEngine raises an Objective-C exception for one it can't use, caught here
     private func attach(channels ch: Int) -> Bool {
-        guard let layout = AVAudioChannelLayout(layoutTag: (ch == 2 ? kAudioChannelLayoutTag_Stereo : kAudioChannelLayoutTag_DiscreteInOrder | AudioChannelLayoutTag(ch))) else { return false }
-        let fmt = AVAudioFormat(standardFormatWithSampleRate: AudioHost.sampleRate, channelLayout: layout)
+        // the hardware's own channel layout when it has 4 or more channels, so channel 1 really is the
+        // controller's output 1 (a generic layout can get re-mapped by iOS)
+        let hw = av.outputNode.outputFormat(forBus: 0)
+        var fmt: AVAudioFormat
+        if ch >= 4, hw.channelCount >= 4, let hl = hw.channelLayout {
+            fmt = AVAudioFormat(standardFormatWithSampleRate: AudioHost.sampleRate, channelLayout: hl)
+        } else if ch >= 4, hw.channelCount >= 4 {
+            fmt = AVAudioFormat(standardFormatWithSampleRate: AudioHost.sampleRate, channels: hw.channelCount)!
+        } else {
+            guard let layout = AVAudioChannelLayout(layoutTag: kAudioChannelLayoutTag_Stereo) else { return false }
+            fmt = AVAudioFormat(standardFormatWithSampleRate: AudioHost.sampleRate, channelLayout: layout)
+        }
         let eng = engine
         var ptrs = [UnsafeMutablePointer<Float>]()
         ptrs.reserveCapacity(8)
@@ -79,7 +98,8 @@ final class AudioHost {
             return false
         }
         source = node
-        engine.post(.output(ch >= 4 ? .quad : .stereo))
+        engine.post(.output(outputMode(ch)))
+        describe()
         return true
     }
     func restart() {
@@ -91,5 +111,10 @@ final class AudioHost {
         build()
     }
     /// headphones on a plain stereo output: mono master left, mono cue right (a splitter cable)
-    func setSplit(_ on: Bool) { engine.post(.output(on ? .split : (outputChannels >= 4 ? .quad : .stereo))) }
+    func setSplit(_ on: Bool) { engine.post(.output(on ? .split : outputMode(outputChannels))) }
+    func outputMode(_ ch: Int) -> OutputMode {
+        if ch >= 4 { return routing == "swapped" ? .quadSwapped : .quad }
+        return UserDefaults.standard.bool(forKey: "cb.split") ? .split : .stereo
+    }
+    func setRouting(_ r: String) { UserDefaults.standard.set(r, forKey: "cb.routing"); restart() }
 }

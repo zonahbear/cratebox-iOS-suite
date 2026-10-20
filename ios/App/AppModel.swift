@@ -44,11 +44,7 @@ final class AppModel: ObservableObject, ControlTarget {
 
     init() {
         core = Core(engine: audio.engine, prefs: DefaultsPrefs(), cues: UserCueStore())
-        core.clock = { [unowned self] in
-            let s = self.core.lastSnapshot
-            if s.host == 0 { return s.time }
-            return s.time + min(0.25, max(0, hostSeconds() - s.host))
-        }
+        core.clock = { [unowned self] in self.smoothClock() }
         core.status = { [weak self] s, secs in self?.status(s, secs) }
         core.trackChanged = { [weak self] t in if let lt = self?.library.track(t.id) { self?.library.changed(lt) } }
         core.reanalyse = { [weak self] t in if let lt = self?.library.track(t.id) { lt.rec.ver = 0; self?.library.enqueue(lt) } }
@@ -119,6 +115,24 @@ final class AppModel: ObservableObject, ControlTarget {
                 }
             }
         }
+    }
+
+    /// The audio clock for the screen. The raw estimate (last block's time + host time since it was rendered)
+    /// jumps by up to a buffer every callback, because iOS renders buffers early and unevenly; drawn as is,
+    /// the waveforms shake. This runs on the host clock and is nudged toward the raw estimate gently (about
+    /// half a second to settle), snapping only after a real jump (a restart of the audio).
+    private var cAudio = 0.0, cHost = 0.0
+    func smoothClock() -> Double {
+        let s = core.lastSnapshot
+        if s.host == 0 { return s.time }
+        let now = hostSeconds(), raw = s.time + min(0.25, max(0, now - s.host))
+        if cHost == 0 { cAudio = raw; cHost = now; return raw }
+        let dt = max(0, now - cHost)
+        var t = cAudio + dt
+        let err = raw - t
+        if abs(err) > 0.08 { t = raw } else { t += err * min(1, dt * 2) }
+        cAudio = t; cHost = now
+        return t
     }
 
     @objc func tick() {

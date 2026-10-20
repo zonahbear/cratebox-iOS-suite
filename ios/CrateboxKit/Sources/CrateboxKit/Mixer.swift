@@ -149,4 +149,6 @@ struct Limiter {
     }
 }
 
-public enum OutputMode { case stereo, quad, split }
+/// stereo: master on 1/2. quad: master 1/2, headphones 3/4. quadSwapped: headphones 1/2, master 3/4.
+/// split: mono master left, mono cue right.
+public enum OutputMode { case stereo, quad, quadSwapped, split }
