@@ -189,6 +189,11 @@ final class Library: ObservableObject {
         }
         queue.removeFirst()
         if t.analysed { runQueue(); return }
+        // rekordbox USB tracks: rekordbox already analysed them; use that (Cratebox analyses only if it's missing)
+        if t.device != nil {
+            Devices.shared.readAnalysis(t)
+            if (t.info.bpm ?? 0) > 0 && t.info.firstBeat != nil { t.rec.ver = Library.ANALYSIS_VER; changed(t); DispatchQueue.main.async { self.runQueue() }; return }
+        }
         analysing = true
         progress = "Analysing \(queue.count + 1) track\(queue.isEmpty ? "" : "s")…"
         let url = fileURL(t), grid = t.rec.gridManual ? (t.rec.bpm ?? 0, t.rec.firstBeat ?? 0) : nil

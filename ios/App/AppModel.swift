@@ -203,11 +203,15 @@ final class AppModel: ObservableObject, ControlTarget {
         guard let url = Devices.shared.url(for: t) ?? library.fileURL(t) else { status("\(t.rec.title) isn't in a connected folder"); return }
         d.beginLoad(t.info)
         status("Loading \(t.info.title) into deck \(deck + 1)...", 0)
-        let cached = t.analysed && (t.info.bpm ?? 0) > 0 && t.info.firstBeat != nil
         let info = t.info
+        let analysedBefore = t.analysed && (t.info.bpm ?? 0) > 0 && t.info.firstBeat != nil
         Task.detached(priority: .userInitiated) {
             do {
-                if t.device != nil { Devices.shared.readAnalysis(t) }
+                // a rekordbox USB track: rekordbox's own grid, phrases and cues (read first, so they're used
+                // instead of Cratebox's analysis)
+                var fromRekordbox = false
+                if t.device != nil { Devices.shared.readAnalysis(t); fromRekordbox = (info.bpm ?? 0) > 0 && info.firstBeat != nil }
+                let cached = analysedBefore || fromRekordbox
                 let pcm = try AudioDecoder.decode(url)
                 let m = AudioDecoder.mono(pcm, 11025), w = AudioDecoder.mono(pcm, 22050)
                 let dur = Double(pcm.count) / pcm.sampleRate
