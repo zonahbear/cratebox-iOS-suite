@@ -118,7 +118,10 @@ struct DeckBridgeSetup: View {
     @State private var shared: URL?
     @State private var bluetooth = false
     let learnable: [(String, BridgeControl)] = [("PLAY", .playPause), ("CUE", .cue), ("SYNC", .sync), ("Loop in", .loopIn), ("Loop out", .loopOut),
-                                                 ("Channel fader", .channelFader), ("Tempo", .tempo), ("Filter", .filter)]
+                                                 ("Channel fader", .channelFader), ("Tempo", .tempo), ("Filter", .filter),
+                                                 ("Search ▶ (jog top right)", .searchFwd), ("Search ◀ (jog top left)", .searchRev), ("Reloop/Exit", .reloopExit),
+                                                 ("HOT CUE pad mode", .hotCueMode), ("BEAT JUMP pad mode", .beatJumpMode), ("PAD FX 1 pad mode", .padFx1Mode),
+                                                 ("PAD FX 2 pad mode", .padFx2Mode), ("Beat FX assign", .fxAssign)]
     var body: some View {
         NavigationStack {
             Form {
@@ -152,10 +155,17 @@ struct DeckBridgeSetup: View {
                         }
                     }
                     ForEach(0..<2, id: \.self) { s in
+                        ForEach(Array(DeckBridgeMap.PadBank.allCases.dropFirst()), id: \.self) { b in
+                            Button("Send \(b.title) pad 1, deck \(bridge.sides[s].deck + 1)") {
+                                let d = bridge.sides[s].deck
+                                bridge.send(DeckBridgeMap.pad(0, bank: b, deck: d, on: true))
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { bridge.send(DeckBridgeMap.pad(0, bank: b, deck: d, on: false)) }
+                            }
+                        }
                         Button("Send Bend + (pitch bend up), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendUp, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendUp, side: s, on: false) } }
                         Button("Send Bend − (pitch bend down), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendDown, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendDown, side: s, on: false) } }
                     }
-                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: the platter's top holds Search, its edge holds Pitch Bend. Both come in the mapping file. If Pitch Bend doesn't respond, learn it once per deck: in rekordbox's MIDI window ADD pitch bend up / down for the deck, press LEARN on each, then tap its Send Bend button here (don't touch the platter while LEARN is on, or rekordbox takes the Search note instead). Messages sent: \(bridge.sentCount).") }
+                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: the platter's top holds Search, its edge holds Pitch Bend. Both come in the mapping file. If Pitch Bend doesn't respond, learn it once per deck: in rekordbox's MIDI window ADD pitch bend up / down for the deck, press LEARN on each, then tap its Send Bend button here (don't touch the platter while LEARN is on, or rekordbox takes the Search note instead). The same goes for any row from the file that does nothing: LEARN it with its button here. Messages sent: \(bridge.sentCount).") }
             }
             .navigationTitle("Deck Bridge setup")
             .toolbar { Button("Done") { dismiss() } }

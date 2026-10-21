@@ -231,12 +231,17 @@ final class DeckBridge: ObservableObject {
     // lets go when it stops. Quick flicks give short nudges, a steady turn a held search or bend.
     private var jogHeld: [BridgeControl?] = [nil, nil]
     private var jogRelease: [DispatchWorkItem?] = [nil, nil]
+    private var jogTravel = [0.0, 0.0]
     func jog(side: Int, degrees: Double, edge: Bool) {
         let d = sides[side]
         d.jogAngle += degrees
         d.objectWillChange.send()
-        guard abs(degrees) > 0.2 else { return }
-        let want: BridgeControl = edge ? (degrees > 0 ? .bendUp : .bendDown) : (degrees > 0 ? .searchFwd : .searchRev)
+        // a slow turn moves a fraction of a degree per touch event: add them up so it still counts
+        jogTravel[side] += degrees
+        guard abs(jogTravel[side]) >= 0.5 else { return }
+        let turn = jogTravel[side]
+        jogTravel[side] = 0
+        let want: BridgeControl = edge ? (turn > 0 ? .bendUp : .bendDown) : (turn > 0 ? .searchFwd : .searchRev)
         if jogHeld[side] != want {
             if let h = jogHeld[side] { button(h, side: side, on: false) }
             button(want, side: side, on: true)
@@ -250,6 +255,7 @@ final class DeckBridge: ObservableObject {
     }
     func jogLetGo(_ side: Int) {
         jogRelease[side]?.cancel(); jogRelease[side] = nil
+        jogTravel[side] = 0
         if let h = jogHeld[side] { button(h, side: side, on: false); jogHeld[side] = nil }
     }
     func jogTouch(side: Int, _ on: Bool) {
