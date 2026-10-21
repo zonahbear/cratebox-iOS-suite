@@ -41,7 +41,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload" && cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qr ../CrateboxSuite.ipa Payload)
           ls -la "$RUNNER_TEMP/CrateboxSuite.ipa" | tee -a ../ci.log
-      - name: Publish the IPA (release "ios-latest", main only: preview branches never replace it)
+      - name: Publish the IPA (release "ios-latest", main only, never from preview branches)
         if: steps.app.outcome == 'success' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
