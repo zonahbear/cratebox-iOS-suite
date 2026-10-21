@@ -475,6 +475,55 @@ final class USBSession: ObservableObject {
         }
     }
 
+    // ---- cues, grid and track info ----
+    /// the edits as the Kit's writer takes them
+    func trackChanges() -> [String: USBTrackChanges] {
+        var out = [String: USBTrackChanges]()
+        for (k, e) in edits where !e.isEmpty {
+            out[k] = USBTrackChanges(cue: e.cue, hot: e.hot.map { slots in slots.map { t in t.map { USBCue(time: $0) } } },
+                                     memory: e.memory?.map { USBCue(time: $0.time, loopEnd: $0.loopEnd, comment: $0.comment) },
+                                     bpm: e.bpm, firstBeat: e.firstBeat, title: e.title, artist: e.artist, album: e.album, genre: e.genre, comment: e.comment, rating: e.rating)
+        }
+        return out
+    }
+    /// nil when the edits can be written; otherwise why not
+    var trackEditBlocker: String? {
+        guard library != nil else { return "No stick open" }
+        let needs = trackChanges().values.reduce(Set<USBWriteKind>()) { $0.union($1.kinds) }
+        let locked = USBWriteKind.allCases.filter { needs.contains($0) && !gate.allowed($0) }
+        if locked.isEmpty { return nil }
+        let names: [USBWriteKind: String] = [.cues: "cues", .beatgrid: "beat grids", .metadata: "track info"]
+        let what = locked.compactMap { names[$0] }.joined(separator: ", ")
+        return "Writing \(what) isn't proven on hardware yet, so it's locked (Proving Ground in settings). Your edits are kept as staged changes."
+    }
+    /// Writes every track edit to the stick through USBTrackWriter: all the files, or none.
+    func writeTrackEdits() {
+        guard let root, let lib = library, !writing else { return }
+        if let b = trackEditBlocker { note(b); return }
+        let changes = trackChanges(), gate = self.gate, pdb = pdbBytes, ol = olBytes
+        if changes.isEmpty { return }
+        writing = true
+        let appBackups = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Cratebox/usb-backups/\(stickId)")
+        DispatchQueue.global(qos: .userInitiated).async {
+            var msg = "", written = [String]()
+            do {
+                let plan = try USBTrackWriter.plan(lib, root: root, changes: changes, gate: gate, pdbBytes: pdb, olBytes: ol)
+                try USBTrackWriter.apply(plan, root: root, appBackupDir: appBackups)
+                written = plan.tracks
+                msg = "Saved edits to \(plan.tracks.count) track\(plan.tracks.count == 1 ? "" : "s") (\(plan.files.count) files) on the stick. Backups are in PIONEER/rekordbox/.cratebox."
+            } catch { msg = "Not saved: \(error)" }
+            DispatchQueue.main.async {
+                self.writing = false
+                self.note(msg)
+                if !written.isEmpty {
+                    for k in written { self.edits[k] = nil }
+                    self.changeLog.removeAll { $0.hasPrefix("Edit ") }
+                    self.reload(keepNodes: true)
+                }
+            }
+        }
+    }
+
     func restoreBackup(_ rel: String) {
         guard let root, let b = USBSafeWrite.latestBackup(root: root, rel: rel), let bytes = try? [UInt8](Data(contentsOf: b)) else { note("No Cratebox backup of \(rel) on this stick"); return }
         let cur = (try? [UInt8](Data(contentsOf: root.appendingPathComponent(rel)))) ?? []

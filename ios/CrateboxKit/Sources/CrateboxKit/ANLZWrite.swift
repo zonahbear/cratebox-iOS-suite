@@ -5,9 +5,10 @@
 // The writer only replaces tags rekordbox already put in the file, leaves every other tag byte for byte as
 // it was, and reads its own output back before returning it. What hasn't been confirmed on a player (and is
 // why these writes stay locked behind USBWriteGate until they are):
-//  - PCPT `status` (crate-digger: 1 = enabled, pyrekordbox: 4) and `order_first` / `order_last` (read here as
+//  - PCPT `status` (crate-digger: 1 = enabled; pyrekordbox: 4 = enabled; rekordcrate: 0, 4 = active loop) and `order_first` / `order_last` (read here as
 //    the previous / next entry in time order). Players are known to read hot_cue, type, time and loop_time.
-//  - PCP2 entries are written without the unknown tail after the colour bytes (len_entry = 48 + comment).
+//  - PCPT / PCP2 `type`: 1 = point, 2 = loop (crate-digger, pyrekordbox); rekordcrate says 0 = point.
+//  - PCP2's 20 bytes after the colour (rekordcrate's five unknown words) are written as zeros.
 //  - PCOB carries hot cues A-C only (the older players' three); PCO2 carries A-H.
 //  - PQT2 (the .EXT's second beat grid) can't be rebuilt (its entries aren't decoded anywhere), so a grid
 //    write drops it rather than leave a grid that disagrees with PQTZ.
@@ -88,7 +89,8 @@ extension RekordboxANLZ {
     }
     static func pcp2(_ c: ANLZCuePoint) -> [UInt8] {
         var comment = [UInt8]()
-        if !c.comment.isEmpty { for u in c.comment.utf16 { comment += be16(u) }; comment += [0, 0] }
+        for u in c.comment.utf16 { comment += be16(u) }
+        comment += [0, 0]                                       // NUL-terminated, also when empty (rekordcrate)
         var e = [UInt8]()
         e += be32(UInt32(c.hot))
         e += [c.loopMs == nil ? 1 : 2, 0] + be16(1000)
@@ -98,6 +100,7 @@ extension RekordboxANLZ {
         e += be32(UInt32(comment.count)) + comment
         let col = c.color ?? ANLZHotCueColor(code: 0, r: 0, g: 0, b: 0)
         e += [col.code, col.r, col.g, col.b]
+        e += [UInt8](repeating: 0, count: 20)                   // the five unknown words rekordcrate reads after the colour
         return fourcc("PCP2") + be32(0x10) + be32(UInt32(12 + e.count)) + e
     }
     /// PCOB: type, 2 unknown bytes, count, memory_count (-1 when empty, as rekordbox writes it), entries
