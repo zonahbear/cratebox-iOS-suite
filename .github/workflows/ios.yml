@@ -80,6 +80,15 @@ jobs:
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -browse > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_browse.png" || true
+            # WAVE mode, 2 and 4 decks (deck 1 playing, so the FLX4 lanes glow)
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -wave > /dev/null || true
+            sleep 20
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_wave.png" || true
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -four -wave > /dev/null || true
+            sleep 20
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_wave4.png" || true
             # the suite's other two modes: Deck Bridge, and Cratebox USB on a copy of the test stick (no audio: the scan flags it)
             xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -bridge > /dev/null || true

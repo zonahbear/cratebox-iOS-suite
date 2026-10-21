@@ -53,6 +53,8 @@ final class AppModel: ObservableObject, ControlTarget {
     @Published var browseFocusTree = false
     @Published var zoomSecs = 8.0
     @Published var tab = 0                       // phones: 0 = mix, 1 = library
+    /// WAVE: the decks and mixer fold away, the waveforms fill the screen (remembered across launches)
+    @Published var waveMode = UserDefaults.standard.bool(forKey: "cb.waveMode") { didSet { UserDefaults.standard.set(waveMode, forKey: "cb.waveMode") } }
     @Published var gridDeck: Int?                // the deck whose beat grid editor is open
     var visibleTrackIds: [String] = []           // the library list as shown (for the browse knob)
     var libraryShown = false                     // the library list is on screen (then the knob follows it, search included)
@@ -81,6 +83,7 @@ final class AppModel: ObservableObject, ControlTarget {
         }
         midi.saveLearned = { id, l in UserDefaults.standard.set(try? JSONEncoder().encode(l), forKey: "cb.learn.\(id)") }
         midi.onFxLever = { [weak self] d in self?.core.fx.channel(d ?? 4) }
+        midi.onSide = { [weak self] in self?.objectWillChange.send() }      // the lanes' FLX4 glow follows the sides
         midiHost.onMessage = { [weak self] m in self?.midi.receive(m) }
         midiHost.onChange = { [weak self] name in self?.controllerConnected(name) }
         audio.onRoute = { [weak self] in DispatchQueue.main.async { self?.routeChanged() } }
@@ -118,6 +121,7 @@ final class AppModel: ObservableObject, ControlTarget {
             let r = Analysis.analyze(m.x, fs: m.fs, waveSource: w)
             await MainActor.run {
                 let four = CommandLine.arguments.contains("-four")
+                if CommandLine.arguments.contains("-wave") { self.waveMode = true }
                 if four { self.core.setFour(true) }
                 for k in 0..<(four ? 4 : 2) {
                     let info = TrackInfo(id: "demo\(k)", title: ["Demo Groove", "Demo Groove (dub)", "Demo Groove (tool)", "Demo Groove (edit)"][k], artist: "Cratebox")

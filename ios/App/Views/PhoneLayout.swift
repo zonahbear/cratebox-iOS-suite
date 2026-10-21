@@ -32,7 +32,7 @@ struct PhoneScreen: View {
             VStack(spacing: 4) {
                 PhoneTopBar(settings: $settings).frame(height: 30)
                 if app.tab == 0 {
-                    mix(l, r).overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
+                    Group { if app.waveMode { WaveStack() } else { mix(l, r) } }.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
                 } else { LibraryPane() }
                 // the home-bar strip: text only, so a swipe home never lands on a control
                 HStack {
@@ -91,6 +91,7 @@ struct PhoneTopBar: View {
             Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: 150)
             Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
             MixerView(masterBar: true)
+            LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
             LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
             Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
         }
