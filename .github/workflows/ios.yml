@@ -49,6 +49,16 @@ jobs:
           gh release upload ios-latest "$RUNNER_TEMP/CrateboxSuite.ipa" --clobber
           gh release edit ios-latest --notes "Unsigned build of cratebox-iOS-suite main, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC). Install with SideStore or AltStore." 
           echo "PUBLISHED ios-latest from ${GITHUB_SHA::7}" | tee -a ci.log
+      - name: Publish a preview IPA (its own release per branch, "ios-preview-<branch>", preview branches only)
+        if: steps.app.outcome == 'success' && startsWith(github.ref, 'refs/heads/preview/')
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          # one release per preview branch, so two branches in flight don't overwrite each other's IPA
+          NAME="${GITHUB_REF_NAME#preview/}"; TAG="ios-preview-${NAME//\//-}"
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --target main --title "Cratebox iOS Suite (preview: ${NAME})" --notes "Preview build of ${GITHUB_REF_NAME} for testing before it goes to main."
+          gh release upload "$TAG" "$RUNNER_TEMP/CrateboxSuite.ipa" --clobber
+          gh release edit "$TAG" --notes "Preview build of ${GITHUB_REF_NAME}, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC), for testing before it goes to main. Install with SideStore or AltStore." 
+          echo "PUBLISHED $TAG from ${GITHUB_SHA::7}" | tee -a ci.log
       - name: Launch in the simulators (screenshots)
         if: steps.app.outcome == 'success'
         continue-on-error: true
@@ -89,6 +99,11 @@ jobs:
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -four -wave > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_wave4.png" || true
+            # HEAT (TrueCurve mini) on the simulator device, preheating to the Quartz Banger's 520°F while the demo plays
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -heat > /dev/null || true
+            sleep 25
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_heat.png" || true
             # the suite's other two modes: Deck Bridge, and Cratebox USB on a copy of the test stick (no audio: the scan flags it)
             xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -bridge > /dev/null || true

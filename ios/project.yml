@@ -31,7 +31,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
-        UIBackgroundModes: [audio]
+        UIBackgroundModes: [audio, bluetooth-central]
+        NSBluetoothAlwaysUsageDescription: The HEAT button (TrueCurve) talks to your Puffco over Bluetooth to read and set its temperature.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UIRequiresFullScreen: true
