@@ -71,6 +71,9 @@ final class BridgeDeckState: ObservableObject {
         case .reloopExit: reloop = on
         case .autoLoop: autoLoop = on
         case .headphoneCue: headphoneCue = on
+        // rekordbox lights the pad mode it's in: follow it, so a mode picked on the computer reaches the pads here
+        case .hotCueMode, .beatJumpMode, .padFx1Mode, .padFx2Mode:
+            if on, let b = DeckBridgeMap.PadBank.allCases.first(where: { $0.mode == c }) { padBank = b }
         default: break
         }
     }
@@ -135,6 +138,9 @@ final class DeckBridge: ObservableObject {
         NotificationCenter.default.addObserver(forName: Notification.Name(MIDINetworkNotificationContactsDidChange), object: nil, queue: .main) { [weak self] _ in self?.refresh() }
         applyNetwork()
         refresh()
+        // keep the copy in Files → Cratebox → Deck Bridge the same as this build's mapping (an older build's file
+        // there lacks rows this build sends)
+        _ = writeMapping()
         // incoming connections don't always post a notification: look again every few seconds
         Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refresh() }
     }

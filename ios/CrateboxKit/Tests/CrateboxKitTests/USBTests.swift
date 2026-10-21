@@ -246,6 +246,8 @@ final class USBTests: XCTestCase {
         // rekordbox drops jog rows from a generic device's mapping: none in the file; the platter uses search instead
         XCTAssertFalse(lines.contains { $0.hasPrefix("Jog") })
         XCTAssertTrue(lines.contains { $0.hasPrefix("SearchFwd,SearchFwd,Button,9071,0,1,2,3,") })
+        XCTAssertTrue(lines.contains { $0.hasPrefix("PitchBendUp,,Button,9073,0,1,2,3,9073,0,1,2,3,") })
+        XCTAssertTrue(lines.contains { $0.hasPrefix("PitchBendDown,,Button,9072,0,1,2,3,") })
         XCTAssertEqual(DeckBridgeMap.button(.bendUp, deck: 2, on: true), [BridgeMessage(bytes: [0x92, 0x73, 0x7F])])
         XCTAssertEqual(DeckBridgeMap.pad(3, bank: .beatJump, deck: 3, on: true), [BridgeMessage(bytes: [0x9A, 0x23, 0x7F])])
         // the copy in the repo (deckbridge/) is the same file

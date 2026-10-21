@@ -155,7 +155,7 @@ struct DeckBridgeSetup: View {
                         Button("Send Bend + (pitch bend up), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendUp, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendUp, side: s, on: false) } }
                         Button("Send Bend − (pitch bend down), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendDown, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendDown, side: s, on: false) } }
                     }
-                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: the platter's top holds Search, its edge holds Pitch Bend. Search comes in the mapping file. For Pitch Bend, once per deck: in rekordbox's MIDI window ADD the pitch bend up / down functions for the deck, press LEARN on each, then tap its Send Bend button here. Messages sent: \(bridge.sentCount).") }
+                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: the platter's top holds Search, its edge holds Pitch Bend. Both come in the mapping file. If Pitch Bend doesn't respond, learn it once per deck: in rekordbox's MIDI window ADD pitch bend up / down for the deck, press LEARN on each, then tap its Send Bend button here (don't touch the platter while LEARN is on, or rekordbox takes the Search note instead). Messages sent: \(bridge.sentCount).") }
             }
             .navigationTitle("Deck Bridge setup")
             .toolbar { Button("Done") { dismiss() } }
