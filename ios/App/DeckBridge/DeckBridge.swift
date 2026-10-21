@@ -28,6 +28,9 @@ final class BridgeDeckState: ObservableObject {
     @Published var autoLoop = false
     @Published var headphoneCue = false
     @Published var hot = [Bool](repeating: false, count: 8)
+    /// rekordbox's pad mode on this deck (as last chosen here), and its pads' lights per mode
+    @Published var padBank: DeckBridgeMap.PadBank = .hotCue
+    @Published var padLit = [[Bool]](repeating: [Bool](repeating: false, count: 8), count: 4)
     // what the touch controls are at (rekordbox doesn't send faders back)
     @Published var tempo = 0.5
     @Published var trim = 0.5
@@ -187,6 +190,15 @@ final class DeckBridge: ObservableObject {
     func button(_ c: BridgeControl, side: Int, on: Bool) { send(DeckBridgeMap.button(c, deck: sides[side].deck, on: on)) }
     func global(_ c: BridgeControl, on: Bool) { send(DeckBridgeMap.button(c, deck: 0, on: on)) }
     func hotCue(_ k: Int, side: Int, on: Bool) { send(DeckBridgeMap.hotCue(k, deck: sides[side].deck, on: on, shift: shift)) }
+    /// a pad in the deck's current pad mode (SHIFT only does something for hot cues: delete)
+    func pad(_ k: Int, side: Int, on: Bool) {
+        let d = sides[side]
+        send(DeckBridgeMap.pad(k, bank: d.padBank, deck: d.deck, on: on, shift: shift && d.padBank == .hotCue))
+    }
+    func setPadBank(_ b: DeckBridgeMap.PadBank, side: Int) {
+        sides[side].padBank = b
+        button(b.mode, side: side, on: true); button(b.mode, side: side, on: false)
+    }
     func value(_ c: BridgeControl, side: Int, _ v: Double) {
         let d = sides[side]
         switch c {
@@ -233,7 +245,8 @@ final class DeckBridge: ObservableObject {
         guard let f = DeckBridgeMap.feedback(m) else { return }
         switch f {
         case .button(let c, let deck, let on): sides.first { $0.deck == deck }?.set(c, on)
-        case .hotCue(let k, let deck, let on): if let s = sides.first(where: { $0.deck == deck }) { s.hot[k] = on }
+        case .hotCue(let k, let deck, let on): if let s = sides.first(where: { $0.deck == deck }) { s.hot[k] = on; s.padLit[0][k] = on }
+        case .pad(let b, let k, let deck, let on): if let s = sides.first(where: { $0.deck == deck }) { s.padLit[b.rawValue][k] = on }
         case .fx(_, let on): fxOn = on
         }
     }

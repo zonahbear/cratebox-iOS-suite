@@ -15,6 +15,9 @@ LoopHalf,LoopHalf,Button,9012,0,1,2,3,9012,0,1,2,3,Fast,Loop 1/2
 LoopDouble,LoopDouble,Button,9013,0,1,2,3,9013,0,1,2,3,Fast,Loop x2
 HeadphoneCue,HeadphoneCue,Button,9054,0,1,2,3,9054,0,1,2,3,,Headphone cue
 HotCue,HotCueMode,Button,901B,0,1,2,3,901B,0,1,2,3,Fast,HOT CUE pad mode
+BeatJump,BeatJumpMode,Button,9020,0,1,2,3,9020,0,1,2,3,Fast,BEAT JUMP pad mode
+PadFx1,PadFx1Mode,Button,901E,0,1,2,3,901E,0,1,2,3,Fast,PAD FX 1 pad mode
+PadFx2,PadFx2Mode,Button,906B,0,1,2,3,906B,0,1,2,3,Fast,PAD FX 2 pad mode
 PAD1_HotCue,PAD1.HotCue.Call,Pad,9000,7,8,9,10,9000,7,8,9,10,Fast,Hot cue 1
 PAD1_HotCue+Shift,PAD1.HotCue.Delete,Pad,9008,7,8,9,10,,,,,,Fast,Delete hot cue 1
 PAD2_HotCue,PAD2.HotCue.Call,Pad,9001,7,8,9,10,9001,7,8,9,10,Fast,Hot cue 2
@@ -31,6 +34,30 @@ PAD7_HotCue,PAD7.HotCue.Call,Pad,9006,7,8,9,10,9006,7,8,9,10,Fast,Hot cue 7
 PAD7_HotCue+Shift,PAD7.HotCue.Delete,Pad,900E,7,8,9,10,,,,,,Fast,Delete hot cue 7
 PAD8_HotCue,PAD8.HotCue.Call,Pad,9007,7,8,9,10,9007,7,8,9,10,Fast,Hot cue 8
 PAD8_HotCue+Shift,PAD8.HotCue.Delete,Pad,900F,7,8,9,10,,,,,,Fast,Delete hot cue 8
+PAD1_BeatJump,PAD1.BeatJump,Pad,9020,7,8,9,10,9020,7,8,9,10,Fast,Beat jump pad 1
+PAD2_BeatJump,PAD2.BeatJump,Pad,9021,7,8,9,10,9021,7,8,9,10,Fast,Beat jump pad 2
+PAD3_BeatJump,PAD3.BeatJump,Pad,9022,7,8,9,10,9022,7,8,9,10,Fast,Beat jump pad 3
+PAD4_BeatJump,PAD4.BeatJump,Pad,9023,7,8,9,10,9023,7,8,9,10,Fast,Beat jump pad 4
+PAD5_BeatJump,PAD5.BeatJump,Pad,9024,7,8,9,10,9024,7,8,9,10,Fast,Beat jump pad 5
+PAD6_BeatJump,PAD6.BeatJump,Pad,9025,7,8,9,10,9025,7,8,9,10,Fast,Beat jump pad 6
+PAD7_BeatJump,PAD7.BeatJump,Pad,9026,7,8,9,10,9026,7,8,9,10,Fast,Beat jump pad 7
+PAD8_BeatJump,PAD8.BeatJump,Pad,9027,7,8,9,10,9027,7,8,9,10,Fast,Beat jump pad 8
+PAD1_PadFx1,PAD1.PadFx1,Pad,9010,7,8,9,10,9010,7,8,9,10,Fast,Pad FX 1 pad 1
+PAD2_PadFx1,PAD2.PadFx1,Pad,9011,7,8,9,10,9011,7,8,9,10,Fast,Pad FX 1 pad 2
+PAD3_PadFx1,PAD3.PadFx1,Pad,9012,7,8,9,10,9012,7,8,9,10,Fast,Pad FX 1 pad 3
+PAD4_PadFx1,PAD4.PadFx1,Pad,9013,7,8,9,10,9013,7,8,9,10,Fast,Pad FX 1 pad 4
+PAD5_PadFx1,PAD5.PadFx1,Pad,9014,7,8,9,10,9014,7,8,9,10,Fast,Pad FX 1 pad 5
+PAD6_PadFx1,PAD6.PadFx1,Pad,9015,7,8,9,10,9015,7,8,9,10,Fast,Pad FX 1 pad 6
+PAD7_PadFx1,PAD7.PadFx1,Pad,9016,7,8,9,10,9016,7,8,9,10,Fast,Pad FX 1 pad 7
+PAD8_PadFx1,PAD8.PadFx1,Pad,9017,7,8,9,10,9017,7,8,9,10,Fast,Pad FX 1 pad 8
+PAD1_PadFx2,PAD1.PadFx2,Pad,9030,7,8,9,10,9030,7,8,9,10,Fast,Pad FX 2 pad 1
+PAD2_PadFx2,PAD2.PadFx2,Pad,9031,7,8,9,10,9031,7,8,9,10,Fast,Pad FX 2 pad 2
+PAD3_PadFx2,PAD3.PadFx2,Pad,9032,7,8,9,10,9032,7,8,9,10,Fast,Pad FX 2 pad 3
+PAD4_PadFx2,PAD4.PadFx2,Pad,9033,7,8,9,10,9033,7,8,9,10,Fast,Pad FX 2 pad 4
+PAD5_PadFx2,PAD5.PadFx2,Pad,9034,7,8,9,10,9034,7,8,9,10,Fast,Pad FX 2 pad 5
+PAD6_PadFx2,PAD6.PadFx2,Pad,9035,7,8,9,10,9035,7,8,9,10,Fast,Pad FX 2 pad 6
+PAD7_PadFx2,PAD7.PadFx2,Pad,9036,7,8,9,10,9036,7,8,9,10,Fast,Pad FX 2 pad 7
+PAD8_PadFx2,PAD8.PadFx2,Pad,9037,7,8,9,10,9037,7,8,9,10,Fast,Pad FX 2 pad 8
 TempoSlider,TempoSlider,KnobSliderHiRes,B000,0,1,2,3,,,,,,Fast,Tempo
 Gain,Gain,KnobSliderHiRes,B004,0,1,2,3,,,,,,Fast,Trim
 EQHigh,EQHigh,KnobSliderHiRes,B007,0,1,2,3,,,,,,Fast,EQ high
