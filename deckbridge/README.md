@@ -30,16 +30,28 @@ rekordbox (Performance mode) → **MIDI** (top right) → pick the device (the n
 port) → **IMPORT** → `Cratebox Deck Bridge.midi.csv` (this folder, or Deck Bridge → ⚙ → Share).
 
 The file follows the layout of Pioneer's own 4-deck mapping files (deck N on MIDI channel N, pads on channels
-8–11, mixer globals on 7, Beat FX on 5, 14-bit faders, relative jogs centred on 64).
+8–11, mixer globals on 7, Beat FX on 5, 14-bit faders).
 
-## What isn't verified yet
+Re-import after updating the app: a file from an older build lacks rows the new one sends. The copy in
+Files → Cratebox → Deck Bridge is rewritten each time Deck Bridge starts.
 
-These files were built from rekordbox's own shipped mappings, not tested against a running rekordbox in this
-build. Most likely to need a manual **MIDI LEARN** (Deck Bridge → ⚙ → Learn helper sends any control on demand):
+## The platter
 
-- **Jog wheels**: Pioneer's own files leave the jog rows to their hardware drivers; rekordbox may not accept
-  `JogRotate` rows for a generic device.
-- **Hot cue pads** (`Pad` rows) may need the deck in HOT CUE pad mode first (the **MODE** link above the pads).
-- The **tempo** direction: Deck Bridge sends "up = slower" like a CDJ; flip it in ⚙ if rekordbox disagrees.
+rekordbox takes no jog wheel from a generic MIDI device, so the platter presses rekordbox buttons while it
+turns: the top holds **Search** forward / back (`SearchFwd` / `SearchRev`, notes 0x71 / 0x70 on the deck's
+channel), the outer ring holds **Pitch Bend** up / down (`PitchBendUp` / `PitchBendDown`, notes 0x73 / 0x72).
+Each lets go about 0.15 s after the platter stops (sooner at higher jog sensitivity).
 
-Please report which rows rekordbox took and which needed learning, so the file can be fixed.
+## Tested against rekordbox (Windows, rtpMIDI, 2026-10-21)
+
+Working: linking, import, PLAY / CUE with lights, SHIFT+CUE, loop in / out, SYNC / MT / Q / SLIP, tempo, trim,
+EQ, channel faders, filter, crossfader, browse / back / load, hot cues and SHIFT delete.
+
+Still open:
+
+- Search, beat jump and Pad FX were tested with an older mapping file that lacked those rows; retest after
+  re-importing.
+- Pitch Bend rows are named as rekordbox's own MIDI LEARN exports them; not yet confirmed to bend.
+- Beat FX channel assign (`FX1Assign.CHn`) does nothing: the function name is wrong.
+- Reloop / Exit can leave the loop stuck.
+- rekordbox doesn't send fader positions back, so the phone's faders don't follow rekordbox's on-screen ones.
