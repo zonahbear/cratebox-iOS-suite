@@ -129,49 +129,78 @@ struct BridgeDeck: View {
     @ObservedObject var deck: BridgeDeckState
     let side: Int
     var color: Color { Theme.deck[deck.deck] }
+    static let tempoW: CGFloat = 40, capW: CGFloat = 70, loopH: CGFloat = 34, tabsH: CGFloat = 22
+    /// the jog takes the width left after the tempo fader and CUE / PLAY (and leaves room for two rows of pads)
+    static func jogSize(_ W: CGFloat, _ H: CGFloat) -> CGFloat {
+        let byWidth: CGFloat = W - tempoW - capW - 20
+        let byHeight: CGFloat = H - loopH - tabsH - 88 - 20
+        return max(100, min(byWidth, byHeight))
+    }
     var body: some View {
         GeometryReader { g in
-            // the jog takes the width left after the tempo fader and CUE / PLAY; IN / OUT / RELOOP go in a row under
-            // it; the tempo fader runs the full height of both; the pads share what's left
-            let W = g.size.width - 12, H = g.size.height - 12
-            let tempo: CGFloat = 40, cap: CGFloat = 70, loopH: CGFloat = 34, tabs: CGFloat = 22
-            let jog = max(100, min(W - tempo - cap - 10 - 6 - 4, H - loopH - tabs - 2 * 44 - 5 * 4))
-            let padH = max(36, (H - jog - loopH - tabs - 5 * 3 - 4 - 5) / 2)
+            let W: CGFloat = g.size.width - 12
+            let H: CGFloat = g.size.height - 12
+            let jog: CGFloat = BridgeDeck.jogSize(W, H)
+            let rest: CGFloat = H - jog - BridgeDeck.loopH - BridgeDeck.tabsH - 24
+            let padH: CGFloat = max(36, rest / 2)
             VStack(spacing: 5) {
-                HStack(alignment: .top, spacing: 0) {
-                    if side == 0 { BridgeTempo(bridge: bridge, deck: deck, side: side).frame(width: tempo, height: jog + 5 + loopH); Spacer(minLength: 10) }
-                    VStack(spacing: 5) {
-                        HStack(spacing: 6) {
-                            if side == 1 { transport(jog) }
-                            BridgeJog(bridge: bridge, deck: deck, side: side, color: color).frame(width: jog, height: jog)
-                            if side == 0 { transport(jog) }
-                        }
-                        HStack(spacing: 4) {
-                            loopKey("IN", deck.loopIn, .loopIn, loopH)
-                            loopKey("OUT", deck.loopOut, .loopOut, loopH)
-                            loopKey(deck.reloop ? "EXIT" : "RELOOP", deck.reloop, .reloopExit, loopH)
-                        }.frame(width: jog + 6 + cap)
-                    }.frame(width: jog + 6 + cap)
-                    if side == 1 { Spacer(minLength: 10); BridgeTempo(bridge: bridge, deck: deck, side: side).frame(width: tempo, height: jog + 5 + loopH) }
-                }
-                HStack(spacing: 4) {
-                    ForEach(DeckBridgeMap.PadBank.allCases, id: \.self) { b in
-                        Button { bridge.setPadBank(b, side: side) } label: {
-                            Text(b.title).font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: tabs)
-                                .foregroundStyle(deck.padBank == b ? Theme.fg : Theme.muted)
-                                .background(RoundedRectangle(cornerRadius: 6).fill(deck.padBank == b ? Theme.line2 : Theme.raise))
-                        }.buttonStyle(.plain)
-                    }
-                }
-                VStack(spacing: 4) {
-                    HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in pad(p, padH) } }
-                    HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in pad(p, padH) } }
-                }
+                topBlock(jog)
+                tabsRow
+                padsGrid(padH)
             }
             .padding(6)
             .frame(width: g.size.width, height: g.size.height, alignment: .top)
             .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
             .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.7), lineWidth: 1))
+        }
+    }
+    /// tempo fader (full height of jog and loops), the jog with CUE / PLAY beside it, IN / OUT / RELOOP under them
+    func topBlock(_ jog: CGFloat) -> some View {
+        let fullH: CGFloat = jog + 5 + BridgeDeck.loopH
+        let colW: CGFloat = jog + 6 + BridgeDeck.capW
+        return HStack(alignment: .top, spacing: 0) {
+            if side == 0 { tempoFader(fullH); Spacer(minLength: 10) }
+            VStack(spacing: 5) {
+                jogRow(jog)
+                loopRow.frame(width: colW)
+            }.frame(width: colW)
+            if side == 1 { Spacer(minLength: 10); tempoFader(fullH) }
+        }
+    }
+    func tempoFader(_ h: CGFloat) -> some View {
+        BridgeTempo(bridge: bridge, deck: deck, side: side).frame(width: BridgeDeck.tempoW, height: h)
+    }
+    func jogRow(_ jog: CGFloat) -> some View {
+        HStack(spacing: 6) {
+            if side == 1 { transport(jog) }
+            BridgeJog(bridge: bridge, deck: deck, side: side, color: color).frame(width: jog, height: jog)
+            if side == 0 { transport(jog) }
+        }
+    }
+    var loopRow: some View {
+        HStack(spacing: 4) {
+            loopKey("IN", deck.loopIn, .loopIn, BridgeDeck.loopH)
+            loopKey("OUT", deck.loopOut, .loopOut, BridgeDeck.loopH)
+            loopKey(deck.reloop ? "EXIT" : "RELOOP", deck.reloop, .reloopExit, BridgeDeck.loopH)
+        }
+    }
+    var tabsRow: some View {
+        HStack(spacing: 4) {
+            ForEach(DeckBridgeMap.PadBank.allCases, id: \.self) { b in tab(b) }
+        }
+    }
+    func tab(_ b: DeckBridgeMap.PadBank) -> some View {
+        let on = deck.padBank == b
+        return Button { bridge.setPadBank(b, side: side) } label: {
+            Text(b.title).font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: BridgeDeck.tabsH)
+                .foregroundStyle(on ? Theme.fg : Theme.muted)
+                .background(RoundedRectangle(cornerRadius: 6).fill(on ? Theme.line2 : Theme.raise))
+        }.buttonStyle(.plain)
+    }
+    func padsGrid(_ h: CGFloat) -> some View {
+        VStack(spacing: 4) {
+            HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in pad(p, h) } }
+            HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in pad(p, h) } }
         }
     }
     func transport(_ jog: CGFloat) -> some View {
