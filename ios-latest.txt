@@ -1,0 +1,207 @@
+run 39537804139 sha 6ba379a43d7a6d3d81422b2bc8ef0aa77f5709aa at Wed Oct 21 03:28:32 UTC 2026
+Test Case '-[CrateboxKitTests.ANLZTests testDemoTrack1]' passed (0.003 seconds).
+Test Case '-[CrateboxKitTests.ANLZTests testKeyNames]' passed (0.002 seconds).
+Test Suite 'ANLZTests' passed at 2026-10-21 03:19:02.854.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.004 (0.005) seconds
+Test Case '-[CrateboxKitTests.AnalysisTests testMatchesTheWebApp]' passed (0.787 seconds).
+Test Suite 'AnalysisTests' passed at 2026-10-21 03:19:03.641.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.787 (0.787) seconds
+Test Case '-[CrateboxKitTests.CoreTests testFLX4Messages]' passed (0.013 seconds).
+Test Case '-[CrateboxKitTests.CoreTests testLayersAndSoftTakeover]' passed (0.004 seconds).
+Test Case '-[CrateboxKitTests.CoreTests testPlayCueHotcueLoop]' passed (0.040 seconds).
+Test Case '-[CrateboxKitTests.CoreTests testProfilesAndKeys]' passed (0.002 seconds).
+Test Case '-[CrateboxKitTests.CoreTests testSyncHalftimeAndBeatLock]' passed (0.081 seconds).
+Test Suite 'CoreTests' passed at 2026-10-21 03:19:03.782.
+	 Executed 5 tests, with 0 failures (0 unexpected) in 0.140 (0.141) seconds
+Test Case '-[CrateboxKitTests.DSPTests testMatchesTheWebApp]' passed (0.101 seconds).
+Test Suite 'DSPTests' passed at 2026-10-21 03:19:03.884.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.101 (0.102) seconds
+Test Case '-[CrateboxKitTests.EngineTests testCrossfaderAndHiddenDecks]' passed (0.034 seconds).
+Test Case '-[CrateboxKitTests.EngineTests testEqKillsEachBand]' passed (0.054 seconds).
+Test Case '-[CrateboxKitTests.EngineTests testHeadphonesOnThreeAndFour]' passed (0.016 seconds).
+Test Case '-[CrateboxKitTests.EngineTests testLimiterHoldsTheMaster]' passed (0.021 seconds).
+Test Case '-[CrateboxKitTests.EngineTests testPlaysThrough]' passed (0.009 seconds).
+Test Case '-[CrateboxKitTests.EngineTests testReportsPosition]' passed (0.011 seconds).
+Test Suite 'EngineTests' passed at 2026-10-21 03:19:04.030.
+	 Executed 6 tests, with 0 failures (0 unexpected) in 0.145 (0.146) seconds
+Test Case '-[CrateboxKitTests.PDBTests testReadsLikeTheWebApp]' passed (0.002 seconds).
+Test Case '-[CrateboxKitTests.PDBTests testRefusesBadInput]' passed (0.000 seconds).
+Test Case '-[CrateboxKitTests.PDBTests testStrings]' passed (0.000 seconds).
+Test Case '-[CrateboxKitTests.PDBTests testWritesByteForByteLikeTheWebApp]' passed (0.009 seconds).
+Test Suite 'PDBTests' passed at 2026-10-21 03:19:04.042.
+	 Executed 4 tests, with 0 failures (0 unexpected) in 0.012 (0.013) seconds
+Test Case '-[CrateboxKitTests.SyncSoakTests testHeardMatchesPosition]' passed (0.544 seconds).
+Test Case '-[CrateboxKitTests.SyncSoakTests testSyncHoldsOverMinutes]' passed (8.804 seconds).
+Test Case '-[CrateboxKitTests.SyncSoakTests testVariableTempoFollowsTheBeats]' passed (4.039 seconds).
+Test Suite 'SyncSoakTests' passed at 2026-10-21 03:19:17.429.
+	 Executed 3 tests, with 0 failures (0 unexpected) in 13.386 (13.387) seconds
+Test Case '-[CrateboxKitTests.USBTests testBothLibrariesInSync]' passed (0.105 seconds).
+Test Case '-[CrateboxKitTests.USBTests testDamagedPDBIsReported]' passed (0.000 seconds).
+Test Case '-[CrateboxKitTests.USBTests testDeckBridgeMappingFile]' passed (0.001 seconds).
+Test Case '-[CrateboxKitTests.USBTests testDeckBridgeMessages]' passed (0.000 seconds).
+Test Case '-[CrateboxKitTests.USBTests testDecryptsARealRekordboxDatabase]' passed (0.210 seconds).
+Test Case '-[CrateboxKitTests.USBTests testFindsWhereTheLibrariesDisagree]' passed (0.096 seconds).
+Test Case '-[CrateboxKitTests.USBTests testPlayerRequirements]' passed (0.000 seconds).
+Test Case '-[CrateboxKitTests.USBTests testPreflightFlagsOutOfSyncLibraries]' passed (0.099 seconds).
+Test Case '-[CrateboxKitTests.USBTests testPreflightOnARealStick]' passed (0.110 seconds).
+Test Case '-[CrateboxKitTests.USBTests testReadsOneLibraryMadeBySQLCipher]' passed (0.102 seconds).
+Test Case '-[CrateboxKitTests.USBTests testRekordboxColourWaveform]' passed (0.046 seconds).
+Test Case '-[CrateboxKitTests.USBTests testSafeWriteAndRecovery]' passed (0.067 seconds).
+Test Case '-[CrateboxKitTests.USBTests testSniffsHeaders]' passed (0.000 seconds).
+Test Case '-[CrateboxKitTests.USBTests testWriteGate]' passed (0.000 seconds).
+Test Case '-[CrateboxKitTests.USBTests testWritesOneLibraryPlaylistsAndReadsThemBack]' passed (0.609 seconds).
+Test Suite 'USBTests' passed at 2026-10-21 03:19:18.877.
+	 Executed 15 tests, with 0 failures (0 unexpected) in 1.446 (1.448) seconds
+Test Case '-[CrateboxKitTests.VersionTests testVersion]' passed (0.000 seconds).
+Test Suite 'VersionTests' passed at 2026-10-21 03:19:18.877.
+	 Executed 1 test, with 0 failures (0 unexpected) in 0.000 (0.000) seconds
+Test Case '-[CrateboxKitTests.XMLTests testExportReadsBack]' passed (0.001 seconds).
+Test Case '-[CrateboxKitTests.XMLTests testImport]' passed (0.000 seconds).
+Test Suite 'XMLTests' passed at 2026-10-21 03:19:18.878.
+	 Executed 2 tests, with 0 failures (0 unexpected) in 0.001 (0.001) seconds
+Test Suite 'CrateboxKitPackageTests.xctest' passed at 2026-10-21 03:19:18.879.
+	 Executed 40 tests, with 0 failures (0 unexpected) in 16.022 (16.029) seconds
+Test Suite 'All tests' passed at 2026-10-21 03:19:18.879.
+	 Executed 40 tests, with 0 failures (0 unexpected) in 16.022 (16.030) seconds
+ANALYSIS Bass Lab - Halftime Wobble 140.wav: bpm 140.0 (web 140.0), first beat 0.04966579774352009 (web 0.04966579774352009), key 17 (web 17), phrases ["Groove 16", "Groove 27"] (web ["Groove 16", "Groove 27"]), 0.14 s
+ANALYSIS Bass Lab - Halftime Wobble 140.wav wave peak: 0 of 22500 bytes differ
+ANALYSIS Bass Lab - Halftime Wobble 140.wav wave rms: 0 of 22500 bytes differ
+ANALYSIS Bass Lab - Halftime Wobble 140.wav wave low: 0 of 22500 bytes differ
+ANALYSIS Bass Lab - Halftime Wobble 140.wav wave mid: 0 of 22500 bytes differ
+ANALYSIS Bass Lab - Halftime Wobble 140.wav wave high: 0 of 22500 bytes differ
+ANALYSIS Boom Bap Crew - Dusty 92.wav: bpm 92.0 (web 92.0), first beat 0.498884086181085 (web 0.498884086181085), key 3 (web 3), phrases ["Groove 28"] (web ["Groove 28"]), 0.13 s
+ANALYSIS Boom Bap Crew - Dusty 92.wav wave peak: 0 of 22500 bytes differ
+ANALYSIS Boom Bap Crew - Dusty 92.wav wave rms: 0 of 22500 bytes differ
+ANALYSIS Boom Bap Crew - Dusty 92.wav wave low: 0 of 22500 bytes differ
+ANALYSIS Boom Bap Crew - Dusty 92.wav wave mid: 0 of 22500 bytes differ
+ANALYSIS Boom Bap Crew - Dusty 92.wav wave high: 0 of 22500 bytes differ
+ANALYSIS Jungle Unit - Rollers 174.wav: bpm 174.0 (web 174.0), first beat 0.2093077756172001 (web 0.2093077756172001), key 5 (web 5), phrases ["Groove 16", "Groove 16", "Groove 22"] (web ["Groove 16", "Groove 16", "Groove 22"]), 0.14 s
+ANALYSIS Jungle Unit - Rollers 174.wav wave peak: 0 of 22500 bytes differ
+ANALYSIS Jungle Unit - Rollers 174.wav wave rms: 0 of 22500 bytes differ
+ANALYSIS Jungle Unit - Rollers 174.wav wave low: 0 of 22500 bytes differ
+ANALYSIS Jungle Unit - Rollers 174.wav wave mid: 0 of 22500 bytes differ
+ANALYSIS Jungle Unit - Rollers 174.wav wave high: 0 of 22500 bytes differ
+ANALYSIS Test Artist - House Groove 126.wav: bpm 126.0 (web 126.0), first beat 0.36725503918049296 (web 0.36725503918049296), key 21 (web 21), phrases ["Intro 8", "Drop 12", "Breakdown 12", "Drop 7"] (web ["Intro 8", "Drop 12", "Breakdown 12", "Drop 7"]), 0.13 s
+ANALYSIS Test Artist - House Groove 126.wav wave peak: 0 of 22500 bytes differ
+ANALYSIS Test Artist - House Groove 126.wav wave rms: 0 of 22500 bytes differ
+ANALYSIS Test Artist - House Groove 126.wav wave low: 0 of 22500 bytes differ
+ANALYSIS Test Artist - House Groove 126.wav wave mid: 0 of 22500 bytes differ
+ANALYSIS Test Artist - House Groove 126.wav wave high: 0 of 22500 bytes differ
+DSP deck_loop_seek: max error 0.0 (first > 1e-4 at sample -1) over 64000 samples
+DSP deck_mt: max error 0.0 (first > 1e-4 at sample -1) over 51200 samples
+DSP deck_plain: max error 0.0 (first > 1e-4 at sample -1) over 51200 samples
+DSP deck_scratch: max error 0.0 (first > 1e-4 at sample -1) over 51200 samples
+DSP fx_DELAY: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_ECHO: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_FILTER: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_FLANGER: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_HPF: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_LPF: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_PING_PONG: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_REVERB: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_ROLL: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_TRANS: max error 0.0 (first > 1e-4 at sample -1) over 89600 samples
+DSP fx_pad_and_beat: max error 0.0 (first > 1e-4 at sample -1) over 64000 samples
+ENGINE eq low kill at 80.0 Hz: -39.67126892359863 dB
+ENGINE eq mid kill at 900.0 Hz: -35.46490219713524 dB
+ENGINE eq hi kill at 8000.0 Hz: -44.162885805313365 dB
+ENGINE quad: master 1.6931766583771462e-18 1.6931766583771462e-18, headphones 0.5472930842432212 0.5472930842432212
+ENGINE limiter peak 0.9742512
+SYNC heard vs position, MT on: 325 clicks, offset at start 0.48 ms, after 150 s 0.39 ms, spread 1.90 ms
+SYNC heard vs position, MT off: 325 clicks, offset at start 0.13 ms, after 150 s 0.04 ms, spread 1.83 ms
+SYNC MT on, 1024 buffers, app clock: worst offset per 30 s (ms) 0.0 0.0 0.0 0.0 0.0 0.0 · trim 0.00000 phaseErr -0.0000
+SYNC MT off, 1024 buffers, app clock: worst offset per 30 s (ms) 0.0 0.0 0.0 0.0 0.0 0.0 · trim 0.00000 phaseErr -0.0000
+SYNC halftime, MT on: worst offset per 30 s (ms) 0.0 0.0 0.0 0.0 · trim 0.00000 phaseErr 0.0000
+SYNC deck 2's grid 0.05 BPM off: worst offset per 30 s (ms) 0.0 0.0 0.0 0.0 0.0 0.0 · trim 0.00000 phaseErr 0.0000
+SYNC wandering tempo, beat-by-beat grid: worst offset 1.5 ms over 150 s
+SYNC wandering tempo, one BPM: worst offset 71.8 ms over 150 s
+✔ Test run with 0 tests in 0 suites passed after 0.001 seconds.
+** BUILD SUCCEEDED **
+-rw-r--r--  1 runner  staff  1930449 Oct 21 03:20 /Users/runner/work/_temp/CrateboxSuite.ipa
+PUBLISHED ios-latest from 6ba379a
+** BUILD SUCCEEDED **
+SIM iPhone 16 Pro Max F1218AE5-3D29-4CE5-9D0F-6F21CEAA502C
+SIM RUNNING iPhone 16 Pro Max
+SIM iPad Pro 13-inch (M4) AFBB202F-0F39-4DD8-8C47-DAB97D7D9DF2
+SIM RUNNING iPad Pro 13-inch (M4)
+---- tail
+SIM iPhone 16 Pro Max F1218AE5-3D29-4CE5-9D0F-6F21CEAA502C
+com.zonahbear.cratebox.suite: 13291
+SIM RUNNING iPhone 16 Pro Max
+2026-10-21 03:24:16.927 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:16.979 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.043 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.093 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.142 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.192 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.245 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.310 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.376 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:17.437 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.608 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.658 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.710 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.776 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.825 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.891 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.942 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:18.994 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.042 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.094 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.142 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.193 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.241 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.294 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.341 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.408 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.459 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.509 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.561 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:24:19.610 Df Cratebox[18699:eb1c] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+SIM iPad Pro 13-inch (M4) AFBB202F-0F39-4DD8-8C47-DAB97D7D9DF2
+com.zonahbear.cratebox.suite: 23342
+SIM RUNNING iPad Pro 13-inch (M4)
+2026-10-21 03:27:29.535 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:29.580 Df Cratebox[28376:152ef] [com.apple.coreaudio:ddagg]        AggregateDevice.mm:857   Creating DefaultDeviceAggregate
+2026-10-21 03:27:29.625 Df Cratebox[28376:152f9] [com.apple.coreaudio:aqme]           AQMixEngine.cpp:709   AQMEDevice (0x10562ad48) has neither a defaultOutStreamClient nor a defaultInStreamClient
+2026-10-21 03:27:29.633 Df Cratebox[28376:152f8] [com.apple.coreaudio:aqme]  MEDeviceStreamClient.cpp:227   AQME Default-InputOutput: client starting: <CA_UISoundClientBase@0x10560b2b0>; running count now 1
+2026-10-21 03:27:29.650 Df Cratebox[28376:152f8] [com.apple.coreaudio:aqme]  MEDeviceStreamClient.cpp:227   AQME Default-InputOutput: client starting: <RemoteIOClient@0x10687a800(@0x10687aaa0); output; [28376]>; running count now 2
+2026-10-21 03:27:29.706 Df Cratebox[28376:152ef] [PrototypeTools:domain] Not observing PTDefaults on customer install.
+2026-10-21 03:27:29.723 Df Cratebox[28376:152ef] [com.apple.network:activity] Create activity from XPC object <nw_activity 50:1 [A0822BF7-AF47-464F-8274-D9EAD1CC0A88] (reporting strategy default)>
+2026-10-21 03:27:29.723 Df Cratebox[28376:152ef] [com.apple.network:activity] Create activity from XPC object <nw_activity 50:2 [6A52A9B2-60C3-4FD6-AB5C-4448DF0D49B8] (reporting strategy default)>
+2026-10-21 03:27:29.723 Df Cratebox[28376:152ef] [com.apple.network:activity] Set activity <nw_activity 50:1 [A0822BF7-AF47-464F-8274-D9EAD1CC0A88] (reporting strategy default)> as the global parent
+2026-10-21 03:27:29.725 Df Cratebox[28376:152ef] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:com.zonahbear.cratebox.suite-default  persistentID: 83DAFD4C-D5DC-4738-B4C5-07288E265E1A
+2026-10-21 03:27:31.059 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.124 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.175 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.225 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.275 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.326 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.376 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.425 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.476 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.527 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.574 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.640 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.691 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.741 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.793 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.841 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.893 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.940 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:31.993 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+2026-10-21 03:27:32.040 Df Cratebox[28376:152ef] [com.apple.FrontBoard:SceneClient] [(FBSceneManager):sceneID:com.zonahbear.cratebox.suite-default] Sending action(s): BLSInvalidateFrameSpecifiersAction
+iPad_Pro_13-inch__M4__4decks.png
+iPad_Pro_13-inch__M4__bridge.png
+iPad_Pro_13-inch__M4__browse.png
+iPad_Pro_13-inch__M4__usb.png
+iPad_Pro_13-inch__M4__wave.png
+iPad_Pro_13-inch__M4__wave4.png
+iPad_Pro_13-inch__M4_.png
+iPhone_16_Pro_Max_4decks.png
+iPhone_16_Pro_Max_bridge.png
+iPhone_16_Pro_Max_browse.png
+iPhone_16_Pro_Max_usb.png
+iPhone_16_Pro_Max_wave.png
+iPhone_16_Pro_Max_wave4.png
+iPhone_16_Pro_Max.png
