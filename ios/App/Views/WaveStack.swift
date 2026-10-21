@@ -27,14 +27,9 @@ struct WaveLane: View {
     @State private var breathe = false
     var color: Color { Theme.deck[deck.i] }
     var body: some View {
-        PhoneLane(deck: deck)
+        // the L / R tag sits next to the deck number, clear of the readouts on the right
+        PhoneLane(deck: deck, badge: side)
             .padding(3)
-            .overlay(alignment: .topTrailing) {
-                if let side {
-                    Text(side).font(.system(size: 9, weight: .heavy)).foregroundStyle(Color.black)
-                        .padding(.horizontal, 4).background(Capsule().fill(color)).padding(5)
-                }
-            }
             .overlay {
                 RoundedRectangle(cornerRadius: 7)
                     .stroke(color.opacity(driven ? (breathe && !reduceMotion ? 0.45 : 1) : 0), lineWidth: 1.5)

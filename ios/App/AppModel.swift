@@ -122,7 +122,7 @@ final class AppModel: ObservableObject, ControlTarget {
             await MainActor.run {
                 let four = CommandLine.arguments.contains("-four")
                 if CommandLine.arguments.contains("-wave") { self.waveMode = true }
-                if four { self.core.setFour(true) }
+                self.core.setFour(four)          // the simulator remembers 4 DECKS between launches: set it either way
                 for k in 0..<(four ? 4 : 2) {
                     let info = TrackInfo(id: "demo\(k)", title: ["Demo Groove", "Demo Groove (dub)", "Demo Groove (tool)", "Demo Groove (edit)"][k], artist: "Cratebox")
                     let d = self.core.decks[k]

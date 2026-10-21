@@ -1,12 +1,12 @@
 name: iOS build
 on:
   push:
-    branches: [main]
+    branches: [main, "preview/**"]
     paths: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 permissions:
   contents: write
-concurrency: { group: ios, cancel-in-progress: true }
+concurrency: { group: "ios-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   build:
     runs-on: macos-15
@@ -41,8 +41,8 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ipa/Payload" && cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qr ../CrateboxSuite.ipa Payload)
           ls -la "$RUNNER_TEMP/CrateboxSuite.ipa" | tee -a ../ci.log
-      - name: Publish the IPA (release "ios-latest")
-        if: steps.app.outcome == 'success'
+      - name: Publish the IPA (release "ios-latest", main only: preview branches never replace it)
+        if: steps.app.outcome == 'success' && github.ref == 'refs/heads/main'
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
           gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease --target main --title "Cratebox iOS Suite (latest build)" --notes "Unsigned build of cratebox-iOS-suite main. Install with SideStore or AltStore."
@@ -105,13 +105,14 @@ jobs:
             xcrun simctl shutdown "$UDID" || true
           done
           ls "$RUNNER_TEMP/shots" | tee -a ../ci.log
-      - name: Error summary to the ci-logs branch
+      - name: Error summary to the ci-logs branch (ci-logs-preview for preview branches)
         if: always()
+        env: { LOGS: "${{ github.ref == 'refs/heads/main' && 'ci-logs' || 'ci-logs-preview' }}" }
         run: |
           { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |SYNC |PUBLISHED|CrateboxSuite.ipa|SIM |DEMO MIDI|\*\* " ci.log | head -300; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
-          git fetch origin ci-logs || true
+          git fetch origin "$LOGS" || true
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
           cp summary.txt ios-latest.txt
           mkdir -p shots && cp "$RUNNER_TEMP"/shots/*.png shots/ 2>/dev/null || true
-          git add -f ios-latest.txt shots && git commit -qm "ios ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs
+          git add -f ios-latest.txt shots && git commit -qm "ios ci ${{ github.run_id }}" && git push -qf origin "HEAD:$LOGS"

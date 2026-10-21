@@ -285,6 +285,7 @@ struct PhoneLane: View {
     @EnvironmentObject var app: AppModel
     @ObservedObject var deck: DeckModel
     var active = true
+    var badge: String? = nil            // WAVE mode: "L" / "R" for the controller side driving this deck
     var color: Color { Theme.deck[deck.i] }
     var body: some View {
         if active { full } else {
@@ -307,6 +308,10 @@ struct PhoneLane: View {
                             Text("\(deck.i + 1)").font(.system(size: 12, weight: .heavy)).frame(width: 20, height: 16)
                                 .foregroundStyle(active ? Color.black : color).background(RoundedRectangle(cornerRadius: 3).fill(active ? color : Theme.raise))
                         }.buttonStyle(.plain)
+                        if let badge {
+                            Text(badge).font(.system(size: 9, weight: .heavy)).foregroundStyle(Color.black)
+                                .padding(.horizontal, 4).frame(height: 14).background(Capsule().fill(color))
+                        }
                         Text(deck.track.map { "\($0.title) · \($0.artist)" } ?? (deck.loading ? "Loading…" : "Empty")).font(.system(size: 11, weight: .semibold)).lineLimit(1)
                         Spacer(minLength: 4)
                         if deck.loaded {
