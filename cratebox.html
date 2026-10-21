@@ -7,7 +7,7 @@
 <meta name="theme-color" content="#0b0d10">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Cratebox">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="apple-touch-icon" href="icon-180.png">
@@ -101,7 +101,7 @@ button.tag:not(.on):hover { color: var(--fg); border-color: var(--muted); }
 .setpanel .hsel { max-width: none; width: 100%; }
 .setpanel { width: 330px; }
 /* Settings sits in the header: its panel drops down over the app */
-header .setpanel { position: fixed; bottom: auto; top: 48px; left: auto; max-height: calc(var(--vh, 100vh) - 64px); overflow-y: auto; z-index: 40; }
+header .setpanel { position: fixed; inset: auto; margin: 0; color: var(--fg); top: 48px; max-height: calc(var(--vh, 100vh) - 64px); overflow-y: auto; z-index: 40; }
 .ctlpanel { display: grid; gap: 4px; padding-bottom: 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line2); }
 .ctlnote { margin: 2px 0; font-size: 11px; color: var(--muted); line-height: 1.4; }
 .ctlrow { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -274,7 +274,15 @@ body.browse #mixer, body.browse .dbody { display: none; }
 .trow2 .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .trow2 .ct { font-family: var(--f-mono); font-size: 11px; color: var(--muted); }
 .trow2.ro .nm { color: #c9d3e0; }
-.rbwarn { position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center; background: rgba(0,0,0,.6); padding: 16px; }
+/* modal dialogs (<dialog>.showModal): the browser puts them in the top layer, traps focus, closes on Esc and
+   dims the page with ::backdrop. The dialog box itself is invisible: its .panel is what you see, so a click
+   whose target is the dialog element is a click on the backdrop. */
+dialog.rbwarn, dialog.sheet { padding: 0; border: 0; background: transparent; color: inherit; overflow: visible; max-width: none; max-height: none; }
+dialog:modal { overscroll-behavior: contain; }
+/* a closed popover stays hidden even where its own rule sets display (browsers without popover skip this rule) */
+[popover]:not(:popover-open) { display: none !important; }
+dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
+.rbwarn::backdrop { background: rgba(0,0,0,.6); }
 .rbwarn .panel { max-width: 560px; max-height: calc(100vh - 32px); overflow: auto; background: #151a22; color: #dfe6ef; border: 1px solid #39424f; border-radius: 10px; padding: 18px 20px; font-size: 13px; line-height: 1.45; }
 .rbwarn h3 { margin: 0 0 8px; font-size: 15px; }
 .rbwarn ul { margin: 8px 0; padding-left: 18px; } .rbwarn li { margin: 5px 0; }
@@ -287,7 +295,7 @@ body.browse #mixer, body.browse .dbody { display: none; }
 .tconfirm { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 6px 8px; background: #2a1a1c; font-size: 12px; }
 .tconfirm span { flex-basis: 100%; }
 .hbtn.danger { background: #8e2b33; border-color: #b33a45; color: #fff; }
-.popmenu { position: fixed; z-index: 70; min-width: 200px; max-width: 360px; max-height: 60vh; overflow-y: auto; display: grid; padding: 4px; background: var(--raise); border: 1px solid var(--line2); border-radius: 6px; box-shadow: 0 10px 30px #000c; }
+.popmenu { position: fixed; z-index: 70; inset: auto; margin: 0; color: var(--fg); min-width: 200px; max-width: 360px; max-height: 60vh; overflow-y: auto; display: grid; padding: 4px; background: var(--raise); border: 1px solid var(--line2); border-radius: 6px; box-shadow: 0 10px 30px #000c; }
 .popmenu button { text-align: left; height: 30px; padding: 0 10px; border: 0; background: transparent; color: var(--fg); border-radius: 4px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .popmenu button:hover { background: #2a3f59; }
 .popmenu .pmhead { padding: 6px 10px 2px; font-size: 10px; letter-spacing: .1em; color: var(--muted); }
@@ -316,7 +324,7 @@ html.phone .deskonly { display: none !important; }
 html.phone.nomidi #ctlPanel { display: none; }
 html.phone, html.phone body { height: 100%; overflow: hidden; overscroll-behavior: none; -webkit-text-size-adjust: 100%; }
 html.phone #app { min-width: 0; height: 100dvh; display: flex; flex-direction: column;
-  padding: 0 max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left)); gap: 6px; }
+  padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(8px, env(safe-area-inset-left)); gap: 6px; }
 html.phone header { flex: 0 0 auto; height: 38px; padding: 0 2px; gap: 10px; background: transparent; border: 0; flex-wrap: nowrap; }
 html.phone header > :not(.logo):not(.ptabs):not(.spacer):not(#setOpen):not(#fxOpen):not(#midiPill) { display: none; }
 html.phone #fxOpen { font-family: var(--f-disp); font-weight: 700; font-size: 15px; letter-spacing: .04em; }
@@ -395,8 +403,8 @@ html.phone #mixer .cuebtn { width: 40px; height: 22px; font-size: 11px; border-r
 html.phone #mixer .xfade { grid-column: 1 / -1; grid-row: 2; width: 100%; }
 html.phone #mixer .fcol .slabel { display: none; }
 /* sheets (settings, deck extras) */
-.sheet { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; justify-content: center; background: #000a; }
-.sheet[hidden] { display: none; }
+dialog.sheet { position: fixed; inset: auto 0 0; margin: 0 auto; width: fit-content; }
+.sheet::backdrop { background: #000a; }
 .sheet .panel { width: min(860px, calc(100vw - 2 * max(12px, env(safe-area-inset-left)))); max-height: 86dvh; overflow: auto; background: var(--panel); border: 1px solid var(--line2); border-bottom: 0; border-radius: 14px 14px 0 0; padding: 14px 16px calc(14px + env(safe-area-inset-bottom)); display: grid; gap: 10px; }
 .sheet h3 { margin: 0; font-family: var(--f-disp); font-size: 18px; letter-spacing: .06em; display: flex; align-items: center; }
 .sheet h3 .spacer { flex: 1; }
@@ -417,7 +425,7 @@ html.phone #mixer .fcol .slabel { display: none; }
 .sheet label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; }
 .sheet .hsel { height: 36px; font-size: 15px; width: 100%; max-width: none; border-radius: 8px; }
 .sheet .setpanel { position: static; width: auto; box-shadow: none; border: 0; padding: 0; background: transparent; display: grid !important; }
-#toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 44px); transform: translateX(-50%); z-index: 60; max-width: min(560px, 80vw);
+#toast { position: fixed; inset: auto; margin: 0; left: 50%; top: calc(env(safe-area-inset-top) + 44px); transform: translateX(-50%); z-index: 60; max-width: min(560px, 80vw);
   background: #1f242c; border: 1px solid var(--line2); border-radius: 10px; padding: 8px 14px; font-size: 13px; color: var(--fg); box-shadow: 0 8px 24px #000b;
   opacity: 0; pointer-events: none; transition: opacity .2s; }
 #toast.show { opacity: 1; }
@@ -439,7 +447,7 @@ html.phone #list .hdr { height: 26px; padding: 0 10px; }
   #rotate span { color: var(--muted); max-width: 280px; }
 }
 @keyframes turn { 0%, 30% { transform: rotate(0); } 60%, 100% { transform: rotate(-90deg); } }
-#resume { position: fixed; top: 48px; left: 50%; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 10px; background: #1b1416; border: 1px solid #ff3b55; box-shadow: 0 8px 30px #000a; color: #ffd7dd; font-size: 13px; max-width: calc(100vw - 32px); }
+#resume { position: fixed; inset: auto; margin: 0; top: 48px; left: 50%; transform: translateX(-50%); z-index: 90; display: flex; align-items: center; gap: 12px; padding: 8px 10px 8px 16px; border-radius: 10px; background: #1b1416; border: 1px solid #ff3b55; box-shadow: 0 8px 30px #000a; color: #ffd7dd; font-size: 13px; max-width: calc(100vw - 32px); }
 #resume[hidden] { display: none; }
 #resume button { height: 34px; padding: 0 16px; border-radius: 8px; border: 0; background: var(--d0); color: #031321; font-family: var(--f-disp); font-weight: 700; font-size: 18px; letter-spacing: .06em; }
 
@@ -744,6 +752,16 @@ html[data-theme="booth"] .trow { border-bottom-color: #121418; }
 html[data-theme="booth"] .trow:nth-child(even) { background: #0b0c0e; }
 html[data-theme="booth"] .trow.sel { background: #10233a; box-shadow: inset 3px 0 0 var(--d0); }
 html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme="booth"] .ltool input[type=search] { background: #15171b; border-color: #2c3037; }
+/* TrueCurve mini: the HEAT button glows while a curve runs; its panel is a small settings-style popover */
+#tcBtn { font-variant-numeric: tabular-nums; }
+#tcBtn.on { background: #6b2a10; border-color: #ff9a4d; color: #ffd9bd; }
+.tcpanel { width: 290px; }
+header .tcpanel { top: 48px; }
+.tcgo { height: 34px; margin-top: 8px; font-size: 13px; font-weight: 600; }
+#tcGo.danger { background: #8e2b33; border-color: #b33a45; color: #fff; }
+#tcMsg:empty { display: none; }
+html.phone .tcwrap { display: revert !important; }
+html.phone #tcBtn { height: 26px; font-size: 11px; }
 </style>
 </head>
 <body>
@@ -766,8 +784,8 @@ html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme=
     <select class="hsel" id="hpDev" hidden></select>
     <button class="hbtn" id="cueTest" title="Beep in the headphones only">Test cue</button>
     <div class="setwrap">
-        <button class="hbtn" id="setBtn" aria-expanded="false">Settings ▾</button>
-        <div class="setpanel" id="setPanel" hidden>
+        <button class="hbtn" id="setBtn" aria-expanded="false" popovertarget="setPanel">Settings ▾</button>
+        <div class="setpanel" id="setPanel" popover hidden>
           <label for="rangeSel">BPM range <small>where half/double-time tracks land</small></label>
           <select class="hsel" id="rangeSel"><option>58-115</option><option>68-135</option><option>78-155</option><option>88-175</option></select>
           <label for="waveSel">Waveform</label>
@@ -808,6 +826,20 @@ html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme=
           <div class="ctlrow" style="margin-top:10px;align-items:center"><button class="hbtn" id="reportOpen">Report a problem…</button><span class="ctlnote">Cratebox v1.1.1</span></div>
         </div>
       </div>
+    <div class="setwrap tcwrap">
+      <button class="hbtn" id="tcBtn" aria-expanded="false" popovertarget="tcPanel" title="TrueCurve: run a heat curve on your Puffco while you play">HEAT ▾</button>
+      <div class="setpanel tcpanel" id="tcPanel" popover hidden>
+        <label>TrueCurve <small>heat curves for Peak Pro / Proxy</small></label>
+        <div class="ctlrow" style="align-items:center"><span class="ctlnote" id="tcDev">No device</span><span class="spacer"></span>
+          <button class="hbtn" id="tcConn">Connect…</button><button class="hbtn" id="tcSim">Simulator</button><button class="hbtn" id="tcDisc" hidden>Disconnect</button></div>
+        <label for="tcCurve">Curve</label>
+        <select class="hsel" id="tcCurve"></select>
+        <button class="hbtn tcgo" id="tcGo" disabled>Start curve</button>
+        <p class="ctlnote" id="tcMsg"></p>
+        <div class="ctlrow"><button class="hbtn" id="tcPaste" title="In TrueCurve, press Copy curves for Cratebox, then this">Paste curves from TrueCurve</button></div>
+        <p class="ctlnote">Uses profile slot 4 while it runs and puts it back after. Close this and keep mixing: the button shows the bowl temperature.</p>
+      </div>
+    </div>
     <span id="status"></span>
     <span class="spacer"></span>
     <button class="hbtn deskonly" id="recBtn" title="Record your set (master output)">● REC</button>
@@ -844,21 +876,21 @@ html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme=
   </section>
 </div>
 <div id="rotate"><div class="ph"></div><b>TURN YOUR PHONE SIDEWAYS</b><span>Cratebox is laid out for landscape on a phone: both decks and the mixer on one screen.</span></div>
-<div id="toast"></div>
+<div id="toast" popover="manual"></div>
 <div id="learnBar" hidden><b>LEARN</b><span id="learnText"></span>
   <span class="learnlib">Library: <button class="hbtn" data-learn="browse">Browse knob</button><button class="hbtn" data-learn="browsePress">Browse press</button>
   <button class="hbtn" data-learn="load" data-deck="0">Load 1</button><button class="hbtn" data-learn="load" data-deck="1">Load 2</button>
   <button class="hbtn" data-learn="jogSide" data-deck="0">Jog side 1</button><button class="hbtn" data-learn="jogSide" data-deck="1">Jog side 2</button></span>
   <button class="hbtn" id="learnDone">Done</button></div>
-<div id="resume" hidden role="alert"><span id="resumeText">Audio stopped. Starting it again…</span><button>Start audio</button></div>
-<div class="sheet" id="setSheet" hidden><div class="panel"><h3>SETTINGS<span class="spacer"></span><button class="iconbtn" data-close>✕</button></h3><div id="setBody"></div></div></div>
+<div id="resume" popover="manual" hidden role="alert"><span id="resumeText">Audio stopped. Starting it again…</span><button>Start audio</button></div>
+<dialog class="sheet" id="setSheet" closedby="any" aria-label="Settings"><div class="panel"><h3>SETTINGS<span class="spacer"></span><button class="iconbtn" data-close aria-label="Close">✕</button></h3><div id="setBody"></div></div></dialog>
 <div id="recPanel" hidden><div class="row"><b id="recTitle">RECORDING SAVED</b><span class="spacer"></span><button class="iconbtn" id="recClose" aria-label="Close">✕</button></div>
   <span class="ctlnote" id="recInfo"></span><pre id="recList"></pre>
   <div class="row"><button class="hbtn" id="recSaveAgain">Save recording again</button><button class="hbtn" id="recSaveList">Save tracklist</button></div></div>
-<div class="sheet" id="reportSheet" hidden><div class="panel report">
+<dialog class="sheet" id="reportSheet" closedby="any" aria-label="Report a problem"><div class="panel report">
   <h3>REPORT A PROBLEM<span class="spacer"></span><button class="iconbtn" id="reportClose" aria-label="Close">✕</button></h3>
   <label for="reportWhat">What happened? What did you do just before?</label>
-  <textarea id="reportWhat" rows="4" placeholder="e.g. Pressed SYNC on deck 2 and the track jumped ahead"></textarea>
+  <textarea id="reportWhat" rows="4" autofocus placeholder="e.g. Pressed SYNC on deck 2 and the track jumped ahead"></textarea>
   <label for="reportWant">What did you expect instead? <small>(optional)</small></label>
   <textarea id="reportWant" rows="2"></textarea>
   <label><input type="checkbox" id="reportDiag" checked> Include device details <small>(browser, screen, controller, version; no personal info or track names)</small></label>
@@ -868,9 +900,9 @@ html[data-theme="booth"] .hbtn, html[data-theme="booth"] .hsel, html[data-theme=
     <button class="sq" id="reportCopy">Copy report</button>
     <span class="ctlnote" id="reportNote">No GitHub account? Copy it and send it to the developer.</span>
   </div>
-</div></div>
-<div class="sheet" id="fxSheet" hidden><div class="panel"><h3>BEAT FX<span class="spacer"></span><button class="iconbtn" data-close>✕</button></h3><div id="fxBody"></div></div></div>
-<div class="sheet" id="deckSheet" hidden><div class="panel"><h3 id="deckSheetTitle">DECK<span class="spacer"></span><button class="iconbtn" data-close>✕</button></h3><div id="deckBody"></div></div></div>
+</div></dialog>
+<dialog class="sheet" id="fxSheet" closedby="any" aria-label="Beat FX"><div class="panel"><h3>BEAT FX<span class="spacer"></span><button class="iconbtn" data-close aria-label="Close">✕</button></h3><div id="fxBody"></div></div></dialog>
+<dialog class="sheet" id="deckSheet" closedby="any" aria-labelledby="deckSheetTitle"><div class="panel"><h3 id="deckSheetTitle">DECK<span class="spacer"></span><button class="iconbtn" data-close aria-label="Close">✕</button></h3><div id="deckBody"></div></div></dialog>
 <div id="start">
   <div class="card">
     <h1>CRATEBOX <small style="font-size:13px;color:var(--muted);letter-spacing:.04em">v1.1.1</small></h1>
@@ -954,6 +986,23 @@ const fmtTime = (s) => {
   const m = Math.floor(s / 60), r = s - m * 60;
   return `${m}:${r.toFixed(1).padStart(4, "0")}`;
 };
+// Overlays: settings, menus, the toast and the audio banner are popovers and the sheets are modal <dialog>s, so
+// the browser stacks them in its top layer (no z-index fights, nothing clipped by the header's overflow), and
+// handles Esc, focus and outside presses. Browsers without popover (Safari < 17) keep the fixed-position CSS and
+// the hidden attribute; Safari has no dialog closedby yet, so a press on the backdrop closes a sheet by hand.
+const POPOVER = "popover" in HTMLElement.prototype, CLOSEDBY = "closedBy" in HTMLDialogElement.prototype;
+// show/hide a manual popover; raise: show it again even if it's up, so it lands over anything opened since
+function overlay(el, on, raise) {
+  if (!POPOVER) { el.hidden = !on; return; }
+  el.hidden = false;
+  const open = el.matches(":popover-open");
+  if (open && (!on || raise)) el.hidePopover();
+  if (on && (!open || raise)) el.showPopover();
+}
+// a modal's visible box is its .panel, so a press whose target is the <dialog> itself landed on the backdrop
+function lightDismiss(dlg) {
+  dlg.addEventListener("pointerdown", (e) => { if ((!CLOSEDBY && e.target === dlg) || e.target.closest("[data-close]")) dlg.close(); });
+}
 let statusTimer = null;
 function status(msg, ms = 4000) {
   const el = $("#status");
@@ -963,6 +1012,7 @@ function status(msg, ms = 4000) {
   if (typeof PHONE !== "undefined" && PHONE) {
     const t = $("#toast");
     t.textContent = msg; t.classList.toggle("show", !!msg);
+    if (msg) overlay(t, true, true);
     clearTimeout(status.tt);
     status.tt = setTimeout(() => t.classList.remove("show"), Math.min(ms || 4000, 5000));
   }
@@ -3205,17 +3255,32 @@ function setBrowse(on) {
   try { localStorage.setItem("cb.browse", on ? "1" : "0"); } catch (e) {}
   requestAnimationFrame(() => renderList());
 }
-$("#setBtn").addEventListener("click", (e) => {
-  e.stopPropagation();
-  const p = $("#setPanel"); p.hidden = !p.hidden; $("#setBtn").setAttribute("aria-expanded", String(!p.hidden));
-  if (!p.hidden && !PHONE) {
-    // under the button, kept inside the window (positions in the app's own units: the interface zoom divided out)
-    const r = $("#setBtn").getBoundingClientRect(), z = UIZ || 1;
-    p.style.top = (r.bottom + 6) / z + "px";
-    p.style.left = Math.max(8, Math.min(innerWidth - p.offsetWidth * z - 8, r.left)) / z + "px";
-  }
-});
-document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".setwrap")) $("#setPanel").hidden = true; });
+// under the button, kept inside the window (positions in the app's own units: the interface zoom divided out).
+// Runs before the panel shows, so its width comes from the stylesheet rather than its (not yet laid out) box.
+function placeSetPanel() {
+  const p = $("#setPanel"), r = $("#setBtn").getBoundingClientRect(), z = UIZ || 1, w = parseFloat(getComputedStyle(p).width) || 330;
+  p.style.top = (r.bottom + 6) / z + "px";
+  p.style.left = Math.max(8, Math.min(innerWidth - w * z - 8, r.left)) / z + "px";
+}
+function closeSetPanel() {
+  const p = $("#setPanel");
+  if (POPOVER) { if (p.matches(":popover-open")) p.hidePopover(); } else p.hidden = true;
+}
+if (POPOVER) {
+  // the button opens it (popovertarget); Esc or a press anywhere else closes it
+  $("#setPanel").hidden = false;
+  $("#setPanel").addEventListener("beforetoggle", (e) => {
+    $("#setBtn").setAttribute("aria-expanded", String(e.newState === "open"));
+    if (e.newState === "open" && !PHONE) placeSetPanel();
+  });
+} else {
+  $("#setBtn").addEventListener("click", (e) => {
+    e.stopPropagation();
+    const p = $("#setPanel"); p.hidden = !p.hidden; $("#setBtn").setAttribute("aria-expanded", String(!p.hidden));
+    if (!p.hidden && !PHONE) placeSetPanel();
+  });
+  document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".setwrap")) $("#setPanel").hidden = true; });
+}
 $("#waveSel").value = waveStyle;
 $("#waveSel").addEventListener("change", (e) => {
   waveStyle = e.target.value;
@@ -4096,19 +4161,22 @@ function addToMenu(btn) {
 }
 function popMenu(anchor, items) {
   closeMenus();
-  const m = h("div", { class: "popmenu" });
+  const m = h("div", { class: "popmenu", popover: POPOVER && "auto" });
   for (const [label, fn] of items) {
     if (fn === null) { m.append(h("div", { class: "pmhead" }, label)); continue; }
     const b = h("button", {}, label);
     b.addEventListener("click", (e) => { e.stopPropagation(); closeMenus(); fn(); });
     m.append(b);
   }
-  document.body.append(m);
+  // inside an open sheet the menu has to live in it, or the modal would make it unclickable
+  (anchor.closest("dialog[open]") || document.body).append(m);
+  if (POPOVER) { m.showPopover(); m.addEventListener("toggle", (e) => { if (e.newState === "closed") m.remove(); }); }
   const r = anchor.getBoundingClientRect();
   const top = r.bottom + 4 + m.offsetHeight > innerHeight ? Math.max(8, r.top - m.offsetHeight - 4) : r.bottom + 4;
   m.style.left = Math.max(8, Math.min(innerWidth - m.offsetWidth - 8, r.left)) + "px";
   m.style.top = top + "px";
-  setTimeout(() => document.addEventListener("pointerdown", closeMenusOutside, { capture: true }), 0);
+  // with popover the browser closes it on Esc or a press outside; without, do that here
+  if (!POPOVER) setTimeout(() => document.addEventListener("pointerdown", closeMenusOutside, { capture: true }), 0);
 }
 function closeMenusOutside(e) { if (!e.target.closest(".popmenu")) closeMenus(); }
 function closeMenus() { for (const m of document.querySelectorAll(".popmenu")) m.remove(); document.removeEventListener("pointerdown", closeMenusOutside, { capture: true }); }
@@ -4243,17 +4311,20 @@ function setRbEdit(on) {
 }
 function rbEditDisclaimer() {
   return new Promise((done) => {
-    const close = (ok) => { box.remove(); done(ok); };
-    const box = h("div", { class: "rbwarn", role: "dialog", "aria-modal": "true" },
-      h("div", { class: "panel" },
-        h("h3", {}, "Edit playlists on rekordbox USB sticks?"),
+    // the buttons submit a method="dialog" form, which sets returnValue; Esc or a press outside leave it ""
+    const box = h("dialog", { class: "rbwarn", closedby: "any", "aria-labelledby": "rbwarnTitle" },
+      h("form", { class: "panel", method: "dialog" },
+        h("h3", { id: "rbwarnTitle" }, "Edit playlists on rekordbox USB sticks?"),
         h("p", {}, "This is untested and may damage your USB's rekordbox library. Back up your stick first. Proceed at your own risk."),
         h("div", { class: "row" },
-          h("button", { class: "hbtn", onclick: () => close(false) }, "Cancel"),
-          h("button", { class: "hbtn danger", onclick: () => close(true) }, "I understand, turn it on"))));
-    box.addEventListener("keydown", (e) => { e.stopPropagation(); if (e.key === "Escape") close(false); });
-    $("#setPanel").hidden = true;                           // out of the way while you read
+          h("button", { class: "hbtn", value: "" }, "Cancel"),
+          h("button", { class: "hbtn danger", value: "ok" }, "I understand, turn it on"))));
+    box.addEventListener("close", () => { box.remove(); done(box.returnValue === "ok"); });
+    box.addEventListener("keydown", (e) => e.stopPropagation());   // no deck shortcuts while it's up
+    lightDismiss(box);
+    closeSetPanel();                                        // out of the way while you read
     document.body.append(box);
+    box.showModal();
     box.querySelector("button").focus();
   });
 }
@@ -5766,7 +5837,7 @@ function setupLayerButtons() {
   };
   ask();
 }
-$("#ctlSmart").addEventListener("click", () => { $("#setPanel").hidden = true; setupLayerButtons(); });
+$("#ctlSmart").addEventListener("click", () => { closeSetPanel(); setupLayerButtons(); });
 window.addEventListener("keydown", (e) => { if (e.key === "Escape" && MIDI.capture) { MIDI.capture = null; status("Cancelled", 3000); } });
 
 // ---- MIDI learn: click a control on screen, then move or press it on the controller ----
@@ -6184,15 +6255,14 @@ function reportText() {
 }
 function reportRefresh() { $("#reportPreview").textContent = $("#reportDiag").checked ? reportDiagnostics() : ""; }
 function openReport() {
-  $("#setPanel").hidden = true; $("#setSheet").hidden = true;
+  closeSetPanel(); $("#setSheet").close();
   $("#reportNote").textContent = "No GitHub account? Copy it and send it to the developer.";
   reportRefresh();
-  $("#reportSheet").hidden = false;
-  setTimeout(() => $("#reportWhat").focus(), 50);
+  $("#reportSheet").showModal();                          // focus lands in the first box (autofocus)
 }
 $("#reportOpen").addEventListener("click", openReport);
-$("#reportClose").addEventListener("click", () => { $("#reportSheet").hidden = true; });
-$("#reportSheet").addEventListener("pointerdown", (e) => { if (e.target === e.currentTarget) $("#reportSheet").hidden = true; });
+$("#reportClose").addEventListener("click", () => $("#reportSheet").close());
+for (const sh of document.querySelectorAll("dialog.sheet")) lightDismiss(sh);
 $("#reportDiag").addEventListener("change", reportRefresh);
 // typing in the report must not trigger the deck keyboard shortcuts
 for (const id of ["#reportWhat", "#reportWant"]) $(id).addEventListener("keydown", (e) => e.stopPropagation());
@@ -6217,7 +6287,7 @@ $("#reportCopy").addEventListener("click", async () => {
   }
   $("#reportNote").textContent = ok ? "Copied. Paste it in a message or comment to the developer." : "Couldn't copy here: select the details above and copy them by hand.";
 });
-$("#ctlLearn").addEventListener("click", () => { $("#setPanel").hidden = true; $("#setSheet").hidden = true; startLearn(); });
+$("#ctlLearn").addEventListener("click", () => { closeSetPanel(); $("#setSheet").close(); startLearn(); });
 $("#learnDone").addEventListener("click", stopLearn);
 $("#ctlClear").addEventListener("click", clearLearned);
 $("#ctlExport").addEventListener("click", exportMapping);
@@ -6233,10 +6303,7 @@ $("#ctlIn").addEventListener("change", (e) => { setPref("cb.midiIn", e.target.va
 // Phone layout: same controls, rearranged. Loops, beat jump and the grid editor move into a
 // per-deck sheet (⋯), output/headphone options into the settings sheet (⚙).
 function phoneize() {
-  const openSheet = (id) => { $(id).hidden = false; };
-  for (const sh of document.querySelectorAll(".sheet")) {
-    sh.addEventListener("pointerdown", (e) => { if (e.target === sh || e.target.closest("[data-close]")) sh.hidden = true; });
-  }
+  const openSheet = (id) => $(id).showModal();
   // tabs
   for (const b of document.querySelectorAll(".ptabs button")) b.addEventListener("click", () => {
     document.documentElement.dataset.tab = b.dataset.tab;
@@ -6251,6 +6318,7 @@ function phoneize() {
     field("Headphones", $("#hpSel")),
     h("div", { class: "row" }, $("#cueTest"), $("#masterSlot")),
     $("#setPanel"));
+  $("#setPanel").removeAttribute("popover");                // lives in the sheet now, always shown there
   $("#cueTest").classList.add("sq");
   $("#setOpen").addEventListener("click", () => openSheet("#setSheet"));
   // Beat FX: its own sheet (the phone mixer has no room)
@@ -6266,7 +6334,7 @@ function phoneize() {
       const db = $("#deckBody"); db.innerHTML = "";
       db.append(u.sheetParts);
       u.gridBar.hidden = false;
-      $("#deckSheet").hidden = false;
+      $("#deckSheet").showModal();
     });
     const btns = h("div", { class: "pbtns" }, u.syncBtn, u.mtBtn, u.qtag, more);
     ctrl.prepend(btns);
@@ -6286,6 +6354,507 @@ function phoneize() {
   mx.querySelector(".mcenter").append(mm);
   mx.querySelector(".mcenter > .slabel").remove();
 }
+
+// =====================================================================================
+//  TrueCurve mini: heat curves for a Puffco Peak Pro / Proxy over Web Bluetooth
+// =====================================================================================
+// A cut-down copy of zonahbear/truecurve web/index.html: same curve maths, predictive driver, heater-model
+// learning, Lorax BLE protocol and safety rules, without the editor and chart. A curve runs as an async loop
+// on the main thread at ~5 Hz of small BLE reads/writes, never touching the audio worklet, so a set keeps
+// playing while the device heats. Temperatures are °F, times are seconds. Curves come from the presets
+// below or are pasted from TrueCurve ("Copy curves for Cratebox"); its own saved curves live on another origin.
+const TC = (() => {
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  const now = () => performance.now();
+  const cToF = (c) => c * 9 / 5 + 32, fToC = (f) => (f - 32) * 5 / 9;
+  const MIN_F = 350, MAX_F = 590, CUTOFF_F = 600, SLOT = 3;
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+  };
+  // monotone cubic (Fritsch–Butland: never overshoots between points) or straight lines
+  function makeCurve(points, smooth) {
+    const pts = points.map((p) => ({ t: +p.t, f: +p.f })).sort((a, b) => a.t - b.t);
+    const xs = pts.map((p) => p.t), ys = pts.map((p) => p.f), n = pts.length, hh = [], d = [], m = new Array(n).fill(0);
+    for (let i = 0; i < n - 1; i++) { hh[i] = xs[i + 1] - xs[i]; d[i] = (ys[i + 1] - ys[i]) / hh[i]; }
+    for (let i = 1; i < n - 1; i++) {
+      if (d[i - 1] * d[i] <= 0) continue;
+      const w1 = 2 * hh[i] + hh[i - 1], w2 = hh[i] + 2 * hh[i - 1];
+      m[i] = (w1 + w2) / (w1 / d[i - 1] + w2 / d[i]);
+    }
+    const end = xs[n - 1], seg = (t) => { let i = 0; while (i < n - 2 && t > xs[i + 1]) i++; return i; };
+    const at = (t) => {
+      t = clamp(t, 0, end);
+      const i = seg(t), s = (t - xs[i]) / hh[i];
+      if (!smooth) return ys[i] + s * (ys[i + 1] - ys[i]);
+      const s2 = s * s, s3 = s2 * s;
+      return (2 * s3 - 3 * s2 + 1) * ys[i] + (s3 - 2 * s2 + s) * hh[i] * m[i] + (-2 * s3 + 3 * s2) * ys[i + 1] + (s3 - s2) * hh[i] * m[i + 1];
+    };
+    const slope = (t) => {
+      if (t <= 0 || t >= end) return 0;
+      const i = seg(t), s = (t - xs[i]) / hh[i];
+      if (!smooth) return d[i];
+      const s2 = s * s;
+      return ((6 * s2 - 6 * s) * ys[i] + (-6 * s2 + 6 * s) * ys[i + 1]) / hh[i] + (3 * s2 - 4 * s + 1) * m[i] + (3 * s2 - 2 * s) * m[i + 1];
+    };
+    return { at, slope, end };
+  }
+  // bowl temp follows the heater target as a first-order lag capped by heating power; it can only cool passively
+  const DEFAULT_MODEL = { tau: 4.0, heatMax: 12, coolK: 0.015, dead: 0.6, runs: 0 };
+  function plantStep(y, u, dt, p, extraCool = 0) {
+    const rate = u > y ? Math.min((u - y) / p.tau, p.heatMax) : Math.max((u - y) / p.tau, -p.coolK * (y - 70));
+    return y + (rate - extraCool) * dt;
+  }
+  // look ahead by dead time + BLE latency and invert the lag; live correction only trims (big asks can make
+  // the firmware abort the session)
+  class Driver {
+    constructor(c, m) { this.c = c; this.m = m; this.I = 0; }
+    command(t, y, dt) {
+      const { c, m } = this, tl = t + m.dead + 0.25, r = c.at(t);
+      const ff = c.at(tl) + m.tau * (tl < c.end ? c.slope(tl) : 0);
+      let corr = 0, I = this.I, unsat = true;
+      if (y != null) {
+        const e = r - y;
+        if (Math.abs(e) < 30) I = clamp(I + 0.1 * e * dt, -12, 12);
+        const raw = 0.6 * clamp(e, -30, 30) + I;
+        corr = clamp(raw, -15, 20); unsat = corr === raw;
+      }
+      const u = ff + corr, uc = clamp(u, Math.max(MIN_F, r - 40), Math.min(MAX_F, r + 30));
+      if (unsat && Math.abs(uc - u) < 0.01) this.I = I;
+      return uc;
+    }
+  }
+  // learns tau / max heat rate / cooling from a run, like TrueCurve (stored per device on this origin)
+  class Learner {
+    constructor(m) { this.m = { ...m }; this.s = []; this.n = 0; }
+    add(t, y, u) {
+      if (y == null) return;
+      this.s.push({ t, y, u });
+      while (this.s.length && t - this.s[0].t > 1.4) this.s.shift();
+      if (this.s.length < 4) return;
+      const k = this.s.length, mt = this.s.reduce((a, v) => a + v.t, 0) / k, my = this.s.reduce((a, v) => a + v.y, 0) / k;
+      let num = 0, den = 0;
+      for (const v of this.s) { num += (v.t - mt) * (v.y - my); den += (v.t - mt) ** 2; }
+      if (den < 0.2) return;
+      const dy = num / den, m = this.m, ta = t - m.dead - 0.2;
+      let uD = null;
+      for (const v of this.s) if (v.t <= ta) uD = v.u;
+      if (uD == null) uD = this.s[0].u;
+      const gap = uD - my;
+      if (gap > 10 && dy > 1) {
+        if (gap / m.tau < 0.7 * m.heatMax) m.tau += 0.04 * (clamp(gap / dy, 1.5, 15) - m.tau);
+        else m.heatMax += (dy > m.heatMax ? 0.15 : 0.03) * (clamp(dy, 3, 40) - m.heatMax);
+        this.n++;
+      } else if (gap < -10 && dy < -0.5 && my > 150 && -gap / m.tau > 1.3 * m.coolK * (my - 70)) {
+        m.coolK += 0.05 * (clamp(-dy / (my - 70), 0.003, 0.06) - m.coolK); this.n++;
+      }
+    }
+  }
+
+  // ---- Puffco BLE (Lorax protocol), same as TrueCurve's PuffcoBle ----
+  const SVC = "e276967f-ea8a-478a-a92e-d78f5dd15dd5", SVC_LEGACY = "06caf9c0-74d3-454f-9be9-e30cd999c17a";
+  const CH_CMD = "60133d5c-5727-4f2c-9697-d842c5292a3c", CH_REPLY = "8dc5ec05-8f7d-45ad-99db-3fbde65dbd9c", CH_VER = "05434bca-cc7f-4ef6-bbb3-b1c520b9800c";
+  const LORAX_KEY = new Uint8Array([0x64, 0xc6, 0x45, 0x62, 0x56, 0xf2, 0x6f, 0x5b, 0x1c, 0xa1, 0x27, 0x37, 0xa5, 0xdd, 0x71, 0xfb]);
+  const P = { mode: "/p/app/mc", state: "/p/app/stat/id", temp: "/p/app/htr/temp", tempAlt: "/p/htr/temp", live: "/p/app/thc/temp", slot: "/p/app/hcs", soc: "/p/bat/soc",
+    pTemp: (s) => `/u/app/hc/${s}/temp`, pTime: (s) => `/u/app/hc/${s}/time` };
+  class Ble {
+    constructor() { this.kind = "ble"; this.seq = 0; this.pending = new Map(); this.q = Promise.resolve(); this.connected = false; this.tempPath = P.temp; this.onDisconnect = null; }
+    async connect() {
+      if (!navigator.bluetooth) throw new Error("this browser has no Web Bluetooth (use Chrome or Edge on a computer or Android)");
+      const dev = await navigator.bluetooth.requestDevice({
+        filters: [{ services: [SVC] }, { namePrefix: "Peak" }, { namePrefix: "Proxy" }, { namePrefix: "Puffco" }, { manufacturerData: [{ companyIdentifier: 0x0c03 }] }],
+        optionalServices: [SVC, SVC_LEGACY] });
+      this.dev = dev; this.name = dev.name || "Puffco"; this.id = dev.id; this.isProxy = /prox|pivot/i.test(this.name);
+      dev.addEventListener("gattserverdisconnected", () => this._lost());
+      // the link often drops right after connecting (worst on Proxy), so connect + discovery are retried together
+      let svc = null;
+      for (let i = 1; i <= 3 && !svc; i++) {
+        try {
+          const gatt = await dev.gatt.connect();
+          await sleep(300);
+          try { svc = await gatt.getPrimaryService(SVC); } catch (e) { if (!gatt.connected) throw e; svc = await gatt.getPrimaryService(SVC_LEGACY); }
+        } catch (e) { if (i === 3) throw e; await sleep(800 * i); }
+      }
+      this.cmd = await svc.getCharacteristic(CH_CMD);
+      this.reply = await svc.getCharacteristic(CH_REPLY);
+      try { await (await svc.getCharacteristic(CH_VER)).readValue(); } catch (e) {}   // triggers OS bonding
+      this.reply.addEventListener("characteristicvaluechanged", (e) => this._onReply(e.target.value));
+      await this.reply.startNotifications();
+      await sleep(150);
+      this.connected = true;
+      const pr = this.cmd.properties || {};
+      this.withResp = !!pr.write || !pr.writeWithoutResponse;
+      // unauthenticated clients get dropped after ~10 s, so the handshake has to land
+      let why = "";
+      for (let i = 1; i <= 3; i++) {
+        why = await this._auth();
+        if (why === "ok" || /not paired|insufficient auth|encrypt/i.test(why)) break;
+        if (i === 1 && pr.write && pr.writeWithoutResponse) this.withResp = !this.withResp;
+        if (i === 2) { try { await this.reply.stopNotifications(); } catch (e) {} await sleep(300); try { await this.reply.startNotifications(); } catch (e) {} await sleep(300); }
+      }
+      if (why !== "ok") {
+        this.disconnect();
+        throw new Error(/not paired|insufficient auth|encrypt/i.test(why) ? "pair the device with the computer's Bluetooth settings first" : "handshake failed (" + why + "); is the Puffco app connected to it?");
+      }
+      await this._detectFormat();
+    }
+    _lost() {
+      if (!this.connected) return;
+      this.connected = false;
+      for (const p of this.pending.values()) { clearTimeout(p.timer); p.reject(new Error("Device disconnected")); }
+      this.pending.clear();
+      this.onDisconnect && this.onDisconnect();
+    }
+    disconnect() { const was = this.connected; this.connected = false; try { this.dev && this.dev.gatt && this.dev.gatt.disconnect(); } catch (e) {} if (was) this.onDisconnect && this.onDisconnect(); }
+    _onReply(dv) {
+      if (dv.byteLength < 3) return;
+      const seq = dv.getUint16(0, true), st = dv.getUint8(2), p = this.pending.get(seq);
+      if (p) { clearTimeout(p.timer); this.pending.delete(seq); p.resolve([st, new Uint8Array(dv.buffer.slice(dv.byteOffset + 3, dv.byteOffset + dv.byteLength))]); }
+    }
+    _write(f) {
+      const c = this.cmd;
+      if (this.withResp && c.writeValueWithResponse) return c.writeValueWithResponse(f);
+      if (!this.withResp && c.writeValueWithoutResponse) return c.writeValueWithoutResponse(f);
+      return c.writeValue(f);
+    }
+    _send(op, payload = new Uint8Array(0), timeout = 3000) {
+      const run = () => new Promise((resolve, reject) => {
+        if (!this.connected) return reject(new Error("Device is not connected"));
+        this.seq = (this.seq + 1) & 0xffff || 1;
+        const seq = this.seq, f = new Uint8Array(3 + payload.length);
+        f[0] = seq & 0xff; f[1] = seq >> 8; f[2] = op; f.set(payload, 3);
+        const timer = setTimeout(() => { this.pending.delete(seq); reject(new Error("BLE reply timed out")); }, timeout);
+        this.pending.set(seq, { resolve, reject, timer });
+        this._write(f).catch((e) => { clearTimeout(timer); this.pending.delete(seq); reject(e); });
+      });
+      const task = this.q.then(run, run);
+      this.q = task.catch(() => {});
+      return task;
+    }
+    async _auth() {
+      try {
+        const [st, seed] = await this._send(0);
+        if (st !== 0 || seed.length < 16) return `seed request returned status ${st}`;
+        const buf = new Uint8Array(32); buf.set(LORAX_KEY, 0); buf.set(seed.subarray(0, 16), 16);
+        const token = new Uint8Array(await crypto.subtle.digest("SHA-256", buf)).subarray(0, 16);
+        const [ok] = await this._send(1, token);
+        return ok === 0 ? "ok" : `unlock returned status ${ok}`;
+      } catch (e) { return /timed out/.test(e.message) ? "no reply from device" : e.message; }
+    }
+    async read(path, max = 64) {
+      const pb = new TextEncoder().encode(path), pl = new Uint8Array(4 + pb.length);
+      pl[2] = max & 0xff; pl[3] = max >> 8; pl.set(pb, 4);
+      try { const [st, d] = await this._send(16, pl); return st === 0 ? d : null; } catch (e) { return null; }
+    }
+    async write(path, bytes) {
+      const pb = new TextEncoder().encode(path), pl = new Uint8Array(3 + pb.length + 1 + bytes.length);
+      pl.set(pb, 3); pl.set(bytes, 4 + pb.length);
+      try { const [st] = await this._send(17, pl); return st === 0; } catch (e) { return false; }
+    }
+    _decC(b) {
+      if (!b || b.length < 4) return null;
+      const dv = new DataView(b.buffer, b.byteOffset, 4), f = dv.getFloat32(0, true);
+      if (this.fmt !== "i10" && isFinite(f) && f > -80 && f < 520 && !(f !== 0 && Math.abs(f) < 1e-3)) return f;
+      const i = dv.getInt32(0, true);
+      return Math.abs(i) <= 6000 ? i / 10 : null;
+    }
+    _encC(fmt, c) { const b = new Uint8Array(4), dv = new DataView(b.buffer); if (fmt === "i10") dv.setInt32(0, Math.round(c * 10), true); else dv.setFloat32(0, c, true); return b; }
+    async _detectFormat() {
+      const b = await this.read(P.pTemp(0), 4);
+      if (b && b.length >= 4) {
+        const dv = new DataView(b.buffer, b.byteOffset, 4), f = dv.getFloat32(0, true), i = dv.getInt32(0, true);
+        if (isFinite(f) && f >= 100 && f <= 350) this.fmt = "f32"; else if (i >= 1000 && i <= 3600) this.fmt = "i10";
+      }
+      if (!this.fmt) this.fmt = this.isProxy ? "i10" : "f32";
+    }
+    async readTemp() {
+      for (const path of this.tempPath === P.tempAlt ? [P.tempAlt, P.temp] : [P.temp, P.tempAlt]) {
+        const c = this._decC(await this.read(path, 4));
+        if (c != null && c > 0) { this.tempPath = path; return Math.round(cToF(c) * 10) / 10; }
+      }
+      return null;
+    }
+    async readState() { const b = await this.read(P.state, 1); return b && b.length ? b[0] : null; }
+    // /p/bat/soc: float on Peak Pro, integer (sometimes tenths/hundredths of a percent) on Proxy
+    async readBattery() {
+      const b = await this.read(P.soc, 4);
+      if (!b || !b.length) return null;
+      const dv = new DataView(b.buffer, b.byteOffset, b.length);
+      if (b.length >= 4) {
+        const f = dv.getFloat32(0, true);
+        if (isFinite(f) && f >= 1e-3 && f < 1) return Math.round(f * 100);
+        if (isFinite(f) && f >= 1 && f <= 100) return Math.round(f);
+      }
+      const i = b.length >= 4 ? dv.getInt32(0, true) : b.length >= 2 ? dv.getUint16(0, true) : b[0];
+      if (i < 0 || i > 10000) return null;
+      if (i > 1000) this.socScale = 100; else if (i > 100 && this.socScale !== 100) this.socScale = 10;
+      return Math.round(i / (this.socScale || 1));
+    }
+    async readActiveSlot() { const b = await this.read(P.slot, 1); return b && b.length ? b[0] : null; }
+    setActiveSlot(s) { return this.write(P.slot, new Uint8Array([s])); }
+    async backupSlot(s) { return { temp: await this.read(P.pTemp(s), 4), time: await this.read(P.pTime(s), 4) }; }
+    async restoreSlot(s, b) {
+      if (b && b.temp && b.temp.length >= 4) await this.write(P.pTemp(s), b.temp.slice(0, 4));
+      if (b && b.time && b.time.length >= 4) await this.write(P.pTime(s), b.time.slice(0, 4));
+    }
+    async writeProfileTemp(s, f) {
+      const c = fToC(clamp(f, MIN_F, MAX_F));
+      for (const fmt of [this.fmt, this.fmt === "i10" ? "f32" : "i10"]) {
+        if (!(await this.write(P.pTemp(s), this._encC(fmt, c)))) continue;
+        const b = await this.read(P.pTemp(s), 4);
+        if (b && b.length >= 4) {
+          const dv = new DataView(b.buffer, b.byteOffset, 4), back = fmt === "i10" ? dv.getInt32(0, true) / 10 : dv.getFloat32(0, true);
+          if (!(Math.abs(back - c) <= 1.5)) continue;
+        }
+        this.fmt = fmt;
+        return true;
+      }
+      return false;
+    }
+    // Peak Pro: heat time in float seconds. Proxy units vary by firmware, so it's left alone and the run ends the session.
+    async writeProfileTime(s, secs) {
+      if (this.isProxy) return false;
+      const b = new Uint8Array(4); new DataView(b.buffer).setFloat32(0, secs, true);
+      if (!(await this.write(P.pTime(s), b))) return false;
+      const r = await this.read(P.pTime(s), 4);
+      return !r || r.length < 4 || Math.abs(new DataView(r.buffer, r.byteOffset, 4).getFloat32(0, true) - secs) <= 1;
+    }
+    start() { return this.write(P.mode, new Uint8Array([7])); }
+    async stop() { let ok = false; for (let i = 0; i < 3; i++) { if (await this.write(P.mode, new Uint8Array([8]))) ok = true; await sleep(45); } return ok; }
+    async probeLiveFormat() {
+      const b = await this.read(P.live, 4);
+      if (!b || b.length < 4) return;
+      const dv = new DataView(b.buffer, b.byteOffset, 4), f = dv.getFloat32(0, true), i = dv.getInt32(0, true);
+      if (isFinite(f) && f >= 150 && f <= 400) this.liveFmt = "f32"; else if (i >= 1500 && i <= 4000) this.liveFmt = "i10";
+    }
+    async setLiveTarget(f) {
+      const c = fToC(clamp(f, MIN_F, MAX_F)), first = this.liveFmt || this.fmt;
+      for (const fmt of [first, first === "i10" ? "f32" : "i10"]) if (await this.write(P.live, this._encC(fmt, c))) { this.liveFmt = fmt; return true; }
+      return false;
+    }
+  }
+  // simulator with the same interface, to try it with no device (and for the tests)
+  class Sim {
+    constructor() {
+      this.kind = "sim"; this.name = "Simulator"; this.id = "sim"; this.connected = false;
+      this.truth = { tau: 3.0, heatMax: 15, coolK: 0.011, dead: 0.45 };
+      this.y = 74; this.state = 5; this.slotIdx = 0; this.u = 74; this.cmds = [];
+      this.slots = [0, 1, 2, 3].map(() => ({ temp: 485, time: 45 })); this.endAt = 0;
+    }
+    async connect() {
+      this.connected = true; let last = now();
+      this.timer = setInterval(() => {
+        const t = now(), dt = (t - last) / 1000; last = t;
+        while (this.cmds.length && this.cmds[0].at <= t) this.u = this.cmds.shift().u;
+        const heating = this.state === 7 || this.state === 8;
+        this.y = plantStep(this.y, heating ? this.u : 70, dt, this.truth);
+        if (this.state === 7 && this.y >= this.u - 6) { this.state = 8; this.endAt = t + this.slots[this.slotIdx].time * 1000; }
+        if (this.state === 8 && t >= this.endAt) this.state = 5;
+      }, 100);
+    }
+    disconnect() { clearInterval(this.timer); this.connected = false; this.onDisconnect && this.onDisconnect(); }
+    async _io() { await sleep(30 + Math.random() * 30); }
+    async readTemp() { await this._io(); return Math.round((this.y + (Math.random() - 0.5) * 1.2) * 10) / 10; }
+    async readState() { await this._io(); return this.state; }
+    async readBattery() { return 87; }
+    async readActiveSlot() { return this.slotIdx; }
+    async setActiveSlot(s) { this.slotIdx = s; return true; }
+    async backupSlot(s) { return { ...this.slots[s] }; }
+    async restoreSlot(s, b) { this.slots[s] = { ...b }; }
+    async writeProfileTemp(s, f) { await this._io(); this.slots[s].temp = f; return true; }
+    async writeProfileTime(s, secs) { await this._io(); this.slots[s].time = secs; return true; }
+    async start() { await this._io(); this.state = 7; this.u = this.slots[this.slotIdx].temp; this.cmds = []; return true; }
+    async stop() { await this._io(); this.state = 5; return true; }
+    async probeLiveFormat() {}
+    async setLiveTarget(f) { await this._io(); this.cmds.push({ at: now() + this.truth.dead * 1000, u: clamp(f, MIN_F, MAX_F) }); return true; }
+  }
+
+  // TrueCurve's presets; Quartz Banger (starts at 520 and trails off to 450) is the default
+  const PRESETS = {
+    "Quartz Banger": [[0, 520], [10, 508], [25, 485], [45, 462], [65, 450]],
+    "Terp Ramp": [[0, 450], [20, 480], [40, 520], [55, 550]],
+    "Hot Start, Cool Finish": [[0, 540], [15, 520], [35, 480], [55, 460]],
+    "Wave": [[0, 470], [15, 520], [30, 480], [45, 540], [60, 505]],
+    "Slow Climb": [[0, 430], [50, 510], [80, 560]],
+    "Flat 500": [[0, 500], [45, 500]],
+  };
+  // Proxy reports "ready" (10) for most of a heat cycle, not just "heating" (8)
+  const HEATING = new Set([7, 8, 10]);
+  const S = { dev: null, running: false, abort: false, phase: "idle", live: null, target: null, state: null, t: null, end: 0, battery: null, msg: "",
+    name: store.get("cb.tc.last", "Quartz Banger") };
+  const mine = () => store.get("cb.tc.curves", {});
+  const curveDef = (name) => {
+    const c = mine()[name];
+    if (c && Array.isArray(c.points) && c.points.length >= 2) return { points: c.points, smooth: c.smooth !== false };
+    return { points: (PRESETS[name] || PRESETS["Quartz Banger"]).map(([t, f]) => ({ t, f })), smooth: true };
+  };
+  const modelKey = () => S.dev && "cb.tc.model." + S.dev.id;
+  const say = (m) => { S.msg = m; render(); };
+
+  // ---- panel ----
+  const btn = $("#tcBtn"), panel = $("#tcPanel"), sel = $("#tcCurve"), go = $("#tcGo");
+  function fill() {
+    const saved = mine();
+    sel.innerHTML = "";
+    const add = (label, names) => { if (names.length) sel.append(h("optgroup", { label }, ...names.map((n) => h("option", { value: n }, n)))); };
+    add("Presets", Object.keys(PRESETS).filter((n) => !saved[n]));
+    add("From TrueCurve", Object.keys(saved));
+    if (!PRESETS[S.name] && !saved[S.name]) S.name = "Quartz Banger";
+    sel.value = S.name;
+  }
+  const f0 = (v) => (v == null ? "--" : Math.round(v));
+  let lastLabel = "";
+  // only touches the DOM when the text changes, so a running curve costs the main loop nothing
+  function render() {
+    const c = !!S.dev, hot = S.running && S.phase !== "prep";
+    const label = !S.running ? "HEAT" : S.phase === "preheat" ? `HEAT ${f0(S.live)}° ↑${f0(S.target)}` : S.phase === "running" ? `HEAT ${f0(S.live)}° ${Math.floor(S.t || 0)}/${Math.round(S.end)}s` : "HEAT…";
+    if (label !== lastLabel) { btn.textContent = label + " ▾"; lastLabel = label; }
+    btn.classList.toggle("on", hot);
+    $("#tcConn").hidden = $("#tcSim").hidden = c; $("#tcDisc").hidden = !c;
+    $("#tcDev").textContent = c ? `${S.dev.name}${S.battery != null ? " · " + S.battery + "%" : ""} · bowl ${f0(S.live)}°F` : "No device";
+    go.disabled = !c || S.phase === "prep";
+    go.textContent = S.running ? "Stop" : "Start curve";
+    go.classList.toggle("danger", S.running);
+    sel.disabled = S.running;
+    $("#tcMsg").textContent = S.msg;
+  }
+  async function connect(dev) {
+    say(dev.kind === "sim" ? "Starting the simulator…" : "Pick your device in the browser's list…");
+    dev.onDisconnect = () => {
+      if (S.running) S.abort = true;
+      S.dev = null; say(S.running ? "Connection lost mid-curve; the device finishes its own cycle at its last temperature." : "Disconnected.");
+    };
+    try {
+      await dev.connect();
+      S.dev = dev; say(`Connected to ${dev.name}.`);
+      idle();
+    } catch (e) { say(e && e.name === "NotFoundError" ? "" : "Couldn't connect: " + (e.message || e)); }
+  }
+  async function idle() {
+    for (let n = 0; S.dev && S.dev.connected; n++) {
+      if (!S.running) {
+        const d = S.dev;
+        S.live = await d.readTemp(); S.state = await d.readState();
+        if (n % 30 === 0) S.battery = await d.readBattery();
+        render();
+      }
+      await sleep(PANEL_OPEN() ? 1000 : 3000);     // poll less when nobody is looking
+    }
+  }
+  const PANEL_OPEN = () => (POPOVER ? panel.matches(":popover-open") : !panel.hidden);
+
+  // ---- runner: TrueCurve's runCurve, minus the chart ----
+  async function run(name) {
+    const dev = S.dev, def = curveDef(name), curve = makeCurve(def.points, def.smooth), end = curve.end;
+    const model = { ...DEFAULT_MODEL, ...(store.get(modelKey(), {}) || {}) };
+    const drv = new Driver(curve, model), learner = new Learner(model);
+    let backup = null, origSlot = null, completed = false, errSum = 0, errN = 0;
+    Object.assign(S, { running: true, abort: false, phase: "prep", t: null, end, target: curve.at(0) });
+    say(`Setting up "${name}"…`);
+    try {
+      if (HEATING.has(await dev.readState())) { await dev.stop(); await sleep(1500); }
+      origSlot = await dev.readActiveSlot();
+      backup = await dev.backupSlot(SLOT);
+      const startF = Math.round(curve.at(0));
+      if (!(await dev.writeProfileTemp(SLOT, startF))) throw new Error("the device refused the start temperature");
+      await dev.writeProfileTime(SLOT, Math.min(120, Math.ceil(end + 10)));
+      await dev.setActiveSlot(SLOT);
+      if (!(await dev.start())) throw new Error("the device didn't accept the start command");
+      S.phase = "preheat"; S.target = startF; say(`Preheating to ${startF}°F. Back to the decks; it'll run on its own.`);
+      const p0 = now();
+      while (!S.abort) {
+        S.live = await dev.readTemp(); S.state = await dev.readState();
+        const tp = (now() - p0) / 1000, y = S.live;
+        render();
+        if (y != null && y >= CUTOFF_F) throw new Error(`overheat cutoff at ${y}°F`);
+        // some firmware (Proxy) says "heating" long before the bowl is hot, so the temperature has to agree too
+        if (y != null && (y >= startF - 8 || (HEATING.has(S.state) && S.state !== 7 && y >= startF - 30))) break;
+        if (tp > 6 && !HEATING.has(S.state)) throw new Error(`the device stopped heating during preheat (at ${f0(y)}°F)`);
+        if (tp > 70) break;
+        await sleep(250);
+      }
+      if (S.abort) return;
+      await dev.probeLiveFormat();
+      S.phase = "running"; say(`Running "${name}".`);
+      const t0 = now();
+      let last = t0, sent = startF, sentAt = 0, tick = 0;
+      while (!S.abort) {
+        const tn = now(), t = (tn - t0) / 1000, dt = (tn - last) / 1000;
+        last = tn;
+        if (t >= end) { completed = true; break; }
+        const y = await dev.readTemp();
+        if (tick++ % 3 === 0) {
+          S.state = await dev.readState();
+          if (t > 2 && !HEATING.has(S.state)) { say(`The device ended its heat cycle ${Math.round(t)} s in.`); break; }
+        }
+        if (y != null && y >= CUTOFF_F) throw new Error(`overheat cutoff at ${y}°F`);
+        const u = Math.round(drv.command(t, y, dt) * 10) / 10, diff = Math.abs(u - sent);
+        if ((diff >= 1.5 || (diff >= 0.5 && tn - sentAt > 1500)) && await dev.setLiveTarget(u)) { sent = u; sentAt = tn; }
+        learner.add(t, y, sent);
+        S.t = t; S.live = y; S.target = curve.at(t);
+        if (y != null && t > 1) { errSum += Math.abs(y - S.target); errN++; }
+        render();
+        await sleep(Math.max(0, 200 - (now() - tn)));
+      }
+    } catch (e) {
+      say("Stopped: " + (e.message || e));
+    } finally {
+      if (dev.connected) {
+        try { await dev.stop(); } catch (e) {}
+        if (backup) try { await dev.restoreSlot(SLOT, backup); } catch (e) {}
+        if (origSlot != null) try { await dev.setActiveSlot(origSlot); } catch (e) {}
+      }
+      if (errN > 10) {
+        say(`${completed ? "Done" : "Stopped"}: "${name}", ${(errSum / errN).toFixed(1)}°F average off the curve.`);
+        if (learner.n > 15 && modelKey()) store.set(modelKey(), { ...learner.m, dead: model.dead, runs: (model.runs || 0) + 1 });
+      } else if (S.abort && S.dev) say("Stopped.");
+      Object.assign(S, { running: false, phase: "idle", t: null, target: null });
+      render();
+      status(completed ? `Heat curve "${name}" done` : `Heat curve "${name}" stopped`, 5000);
+    }
+  }
+  function toggle() {
+    if (S.running) { S.abort = true; say("Stopping…"); }
+    // straight back to the decks: the HEAT button carries the temperature from here
+    else if (S.dev) { run(S.name); if (POPOVER) { if (panel.matches(":popover-open")) panel.hidePopover(); } else panel.hidden = true; }
+  }
+  // paste the JSON from TrueCurve's "Copy curves for Cratebox" ({name: {points: [{t, f}], smooth}})
+  async function paste() {
+    let txt = "";
+    try { txt = await navigator.clipboard.readText(); } catch (e) {}
+    if (!/^\s*\{/.test(txt)) txt = prompt("Paste the curves copied from TrueCurve") || "";
+    try {
+      const got = JSON.parse(txt), all = mine();
+      let n = 0;
+      for (const [k, v] of Object.entries(got)) {
+        const pts = v && Array.isArray(v.points) ? v.points.filter((p) => isFinite(p.t) && isFinite(p.f)).map((p) => ({ t: clamp(+p.t, 0, 110), f: clamp(+p.f, MIN_F, MAX_F) })) : [];
+        if (pts.length >= 2) { all[String(k).slice(0, 24)] = { points: pts, smooth: v.smooth !== false }; n++; }
+      }
+      store.set("cb.tc.curves", all); fill(); say(n ? `Added ${n} curve${n > 1 ? "s" : ""}.` : "No curves found in that text.");
+    } catch (e) { if (txt) say("That isn't TrueCurve's curve list."); }
+  }
+
+  if (POPOVER) { panel.hidden = false; panel.addEventListener("beforetoggle", (e) => { btn.setAttribute("aria-expanded", String(e.newState === "open")); if (e.newState === "open") { placeTcPanel(); render(); } }); }
+  else {
+    btn.addEventListener("click", (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; if (!panel.hidden) { placeTcPanel(); render(); } });
+    document.addEventListener("pointerdown", (e) => { if (!e.target.closest(".tcwrap")) panel.hidden = true; });
+  }
+  function placeTcPanel() {
+    const r = btn.getBoundingClientRect(), z = PHONE ? 1 : UIZ || 1, w = parseFloat(getComputedStyle(panel).width) || 280;
+    panel.style.top = (r.bottom + 6) / z + "px";
+    panel.style.left = Math.max(8, Math.min(innerWidth - w * z - 8, r.left)) / z + "px";
+  }
+  panel.addEventListener("keydown", (e) => e.stopPropagation());   // no deck/library shortcuts while it's focused
+  sel.addEventListener("change", () => { S.name = sel.value; store.set("cb.tc.last", S.name); });
+  go.addEventListener("click", toggle);
+  $("#tcConn").addEventListener("click", () => connect(new Ble()));
+  $("#tcSim").addEventListener("click", () => { if (S.dev) S.dev.disconnect(); connect(new Sim()); });
+  $("#tcDisc").addEventListener("click", () => { S.abort = true; S.dev && S.dev.disconnect(); });
+  $("#tcPaste").addEventListener("click", paste);
+  if (!navigator.bluetooth) $("#tcConn").title = "This browser has no Web Bluetooth: use Chrome or Edge on a computer or Android, or Bluefy on iPhone";
+  fill(); render();
+  return { S, PRESETS, makeCurve, Sim, connect, run, toggle, fill, get dev() { return S.dev; } };
+})();
 
 // =====================================================================================
 //  Build UI + main loop
@@ -6355,7 +6924,7 @@ function tryResume() {
 function checkAudioAlive() {
   if (!A.ctx) return;
   const st = A.ctx.state, stopped = st !== "running" && st !== "closed";
-  $("#resume").hidden = !stopped;
+  overlay($("#resume"), stopped);
   if (stopped) {
     if (!audioStoppedAt) { audioStoppedAt = performance.now(); noteError(`audio: ${st}`); }
     $("#resumeText").textContent = resumeTries < 3 ? "Audio stopped. Starting it again…" : "Audio stopped. Is another app using the controller's sound (rekordbox, Serato, a DAW)? Close it, or check the controller is plugged in, then press Start audio.";
@@ -6525,7 +7094,7 @@ $("#startBtn").addEventListener("click", async () => {
 });
 
 // test hook: lets the automated tests feed MIDI in and read the LED output
-window.cratebox = { VERSION, get showPhrases() { return showPhrases; }, get loadLock() { return loadLock; }, phraseSpans, PHRASE_COLORS, ANALYSIS_VER, FX, FX_LIST, PAD_FX, fxSelect, fxBeat, fxChannel, fxOn, fxDepth, pfxDown, pfxUp, sendClock, get jogSens() { return jogSens; }, barBeat, applyTheme, controlTick, get drawCost() { return drawCost; }, REC, recStart, recStop, setFour, applyUiSize, PL, RB, plNew, plGet, plAdd, plMove, plDelete, setView, renderTree, mountDevice, PAUSE_ANALYSIS_WHILE_PLAYING, setupLayerButtons, ANALYSIS_LANES, ANALYZERS, importXml, exportXml, removeFromPlaylist, setRbEdit, selectRow, treePress, treeMove, decks, M, lib, midiIn, MIDI, useProfile, profileFor, PROFILES, startLearn, stopLearn, addFiles, applyView, loadSelected, lanePps, camelot, A, routeOutput, initAudio, applyHeadphones, WORKLET };
+window.cratebox = { VERSION, get showPhrases() { return showPhrases; }, get loadLock() { return loadLock; }, phraseSpans, PHRASE_COLORS, ANALYSIS_VER, FX, FX_LIST, PAD_FX, fxSelect, fxBeat, fxChannel, fxOn, fxDepth, pfxDown, pfxUp, sendClock, get jogSens() { return jogSens; }, barBeat, applyTheme, controlTick, get drawCost() { return drawCost; }, REC, recStart, recStop, setFour, applyUiSize, PL, RB, plNew, plGet, plAdd, plMove, plDelete, setView, renderTree, mountDevice, PAUSE_ANALYSIS_WHILE_PLAYING, setupLayerButtons, ANALYSIS_LANES, ANALYZERS, importXml, exportXml, removeFromPlaylist, setRbEdit, selectRow, treePress, treeMove, decks, M, lib, midiIn, MIDI, useProfile, profileFor, PROFILES, startLearn, stopLearn, addFiles, applyView, loadSelected, lanePps, camelot, A, routeOutput, initAudio, applyHeadphones, WORKLET, TC };
 </script>
 </body>
 </html>
