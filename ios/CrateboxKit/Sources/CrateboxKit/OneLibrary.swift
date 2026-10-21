@@ -185,13 +185,18 @@ public enum OneLibrary {
             guard let g = got[n.id], g.parent == n.parent, g.folder == n.folder, g.name == n.name, g.tracks == (n.folder ? [] : n.tracks)
             else { throw OneLibraryError.readBack("playlist didn't read back: \(n.name)") }
         }
+        return try seal(db, codec, url)
+    }
+
+    /// closes the edited copy and gives back the file to write: re-encrypted with the original's salt (a plain
+    /// test database stays plain), and checked to decrypt to exactly what was checked
+    static func seal(_ db: SQLiteDB, _ codec: SQLCipherCodec?, _ url: URL) throws -> [UInt8] {
         db.close()
         var plain = [UInt8](try Data(contentsOf: url))
-        // SQLite may have grown the file by whole pages; a plain test database stays plain
+        // SQLite may have grown the file by whole pages
         guard let c = codec else { return plain }
         if plain.count % SQLCipherCodec.pageSize != 0 { plain += [UInt8](repeating: 0, count: SQLCipherCodec.pageSize - plain.count % SQLCipherCodec.pageSize) }
         let enc = try c.encrypt(plain)
-        // and the encrypted file must decrypt to exactly what was checked
         if try c.decrypt(enc) != plain { throw OneLibraryError.readBack("re-encrypted file didn't decrypt back") }
         return enc
     }

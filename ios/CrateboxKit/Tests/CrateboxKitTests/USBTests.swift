@@ -209,7 +209,8 @@ final class USBTests: XCTestCase {
         let pdbOnly = USBWriteGate(proven: [.deviceLibraryPlaylists])
         XCTAssertNil(pdbOnly.playlistWriteBlocker(deviceLibrary: true, oneLibrary: false))
         XCTAssertNotNil(pdbOnly.playlistWriteBlocker(deviceLibrary: true, oneLibrary: true), "both libraries or neither")
-        XCTAssertFalse(USBWriteGate(proven: Set(USBWriteKind.allCases)).allowed(.cues), "no writer: never")
+        XCTAssertFalse(USBWriteGate(proven: []).allowed(.cues), "locked until proven")
+        XCTAssertTrue(USBWriteGate(proven: [.cues]).allowed(.cues))
     }
 
     // ---- analysis waveform ----
