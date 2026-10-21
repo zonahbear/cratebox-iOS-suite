@@ -49,6 +49,14 @@ jobs:
           gh release upload ios-latest "$RUNNER_TEMP/CrateboxSuite.ipa" --clobber
           gh release edit ios-latest --notes "Unsigned build of cratebox-iOS-suite main, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC). Install with SideStore or AltStore." 
           echo "PUBLISHED ios-latest from ${GITHUB_SHA::7}" | tee -a ci.log
+      - name: Publish a preview IPA (release "ios-preview", preview branches only)
+        if: steps.app.outcome == 'success' && startsWith(github.ref, 'refs/heads/preview/')
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          gh release view ios-preview >/dev/null 2>&1 || gh release create ios-preview --prerelease --target main --title "Cratebox iOS Suite (preview build)" --notes "Preview build for testing before it goes to main."
+          gh release upload ios-preview "$RUNNER_TEMP/CrateboxSuite.ipa" --clobber
+          gh release edit ios-preview --notes "Preview build of ${GITHUB_REF_NAME}, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC), for testing before it goes to main. Install with SideStore or AltStore." 
+          echo "PUBLISHED ios-preview from ${GITHUB_SHA::7}" | tee -a ci.log
       - name: Launch in the simulators (screenshots)
         if: steps.app.outcome == 'success'
         continue-on-error: true

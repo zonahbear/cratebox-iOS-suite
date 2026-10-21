@@ -97,6 +97,8 @@ final class DeckBridge: ObservableObject {
     @Published var status = ""
     var heardRecently: Bool { lastHeard > 0 && hostSeconds() - lastHeard < 30 }
     var linked: Bool { !destinations.isEmpty }
+    /// a computer is really there: iOS lists it, or rekordbox has sent something back lately
+    var confirmed: Bool { !peers.isEmpty || heardRecently }
 
     private var client = MIDIClientRef(), inPort = MIDIPortRef(), outPort = MIDIPortRef()
     private var virtualSource = MIDIEndpointRef()
@@ -130,6 +132,8 @@ final class DeckBridge: ObservableObject {
         NotificationCenter.default.addObserver(forName: Notification.Name(MIDINetworkNotificationContactsDidChange), object: nil, queue: .main) { [weak self] _ in self?.refresh() }
         applyNetwork()
         refresh()
+        // incoming connections don't always post a notification: look again every few seconds
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refresh() }
     }
 
     func applyNetwork() {
@@ -146,7 +150,9 @@ final class DeckBridge: ObservableObject {
         peers = s.connections().map { $0.host.name }
         var ds = [MIDIEndpointRef](), names = [String]()
         let netDest = s.isEnabled ? s.destinationEndpoint() : 0
-        if netDest != 0 && !peers.isEmpty { ds.append(netDest); names.append("Network: " + peers.joined(separator: ", ")) }
+        // Always send into the network session while it's on. A connection the computer starts (rtpMIDI's
+        // Connect) doesn't always show up in connections(), and sending with nobody connected is harmless.
+        if netDest != 0 { ds.append(netDest); names.append(peers.isEmpty ? "Network session" : "Network: " + peers.joined(separator: ", ")) }
         for i in 0..<MIDIGetNumberOfDestinations() {
             let d = MIDIGetDestination(i)
             if d == netDest { continue }
@@ -162,7 +168,8 @@ final class DeckBridge: ObservableObject {
                 MIDIPortConnectSource(inPort, src, nil)
             }
         }
-        status = linked ? "Linked: \(names.joined(separator: " · "))" : networkOn ? "Waiting for rekordbox's computer to connect (\(s.networkName.isEmpty ? "this phone" : s.networkName))" : "Not linked"
+        status = !peers.isEmpty || heardRecently ? "Linked: \(names.joined(separator: " · "))"
+            : networkOn ? "Sending on the network session \"\(s.networkName.isEmpty ? "this phone" : s.networkName)\". Connect to it from rtpMIDI / Audio MIDI Setup." : linked ? "Sending to \(names.joined(separator: " · "))" : "Not linked"
     }
 
     // ---- out ----

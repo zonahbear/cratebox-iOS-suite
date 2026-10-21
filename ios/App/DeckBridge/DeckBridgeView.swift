@@ -32,8 +32,8 @@ struct DeckBridgeView: View {
     }
     var linkPill: some View {
         HStack(spacing: 5) {
-            Circle().fill(bridge.linked ? (bridge.heardRecently ? Theme.ok : Theme.accent) : Theme.dim).frame(width: 7, height: 7)
-            Text(bridge.linked ? (bridge.heardRecently ? "rekordbox linked" : "Linked") : "Not linked").font(.system(size: 11)).lineLimit(1)
+            Circle().fill(bridge.heardRecently ? Theme.ok : bridge.confirmed ? Theme.accent : bridge.linked ? Theme.warn : Theme.dim).frame(width: 7, height: 7)
+            Text(bridge.heardRecently ? "rekordbox linked" : bridge.confirmed ? "Linked" : bridge.linked ? "Sending" : "Not linked").font(.system(size: 11)).lineLimit(1)
         }
         .padding(.horizontal, 8).frame(height: 26).background(Capsule().fill(Theme.raise))
         .onTapGesture { setup = true }
