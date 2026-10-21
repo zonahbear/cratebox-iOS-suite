@@ -65,7 +65,6 @@ struct BridgeTopBar: View {
                 BridgeKey(label: "LOAD \(bridge.sides[1].deck + 1)", height: 26) { if $0 { bridge.load(side: 1) } }.frame(width: 62)
                 BridgeKey(label: "BACK", height: 26) { bridge.global(.back, on: $0) }.frame(width: 48)
             }
-            LitButton(label: "SHIFT", on: bridge.shift, color: Theme.hot) { bridge.shift.toggle() }
             Button { setup = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
         }
     }
@@ -132,19 +131,29 @@ struct BridgeDeck: View {
     var color: Color { Theme.deck[deck.deck] }
     var body: some View {
         GeometryReader { g in
+            // the jog takes the width left after the tempo fader and CUE / PLAY; IN / OUT / RELOOP go in a row under
+            // it; the tempo fader runs the full height of both; the pads share what's left
             let W = g.size.width - 12, H = g.size.height - 12
-            let col: CGFloat = 70, tempo: CGFloat = 30, gaps: CGFloat = 10 + 6 + 6 + 6
-            let jog = max(96, min(W - tempo - col * 2 - gaps, H * 0.52))
-            let tabs: CGFloat = 22
-            let padH = max(33, (H - jog - tabs - 5 * 3 - 4) / 2)
+            let tempo: CGFloat = 40, cap: CGFloat = 70, loopH: CGFloat = 34, tabs: CGFloat = 22
+            let jog = max(100, min(W - tempo - cap - 10 - 6 - 4, H - loopH - tabs - 2 * 44 - 5 * 4))
+            let padH = max(36, (H - jog - loopH - tabs - 5 * 3 - 4 - 5) / 2)
             VStack(spacing: 5) {
-                HStack(spacing: 0) {
-                    if side == 0 { BridgeTempo(bridge: bridge, deck: deck, side: side).frame(width: tempo); Spacer(minLength: 10) }
-                    else { loopCol(jog); Spacer(minLength: 6); transport(jog); Spacer(minLength: 6) }
-                    BridgeJog(bridge: bridge, deck: deck, side: side, color: color).frame(width: jog, height: jog)
-                    if side == 0 { Spacer(minLength: 6); transport(jog); Spacer(minLength: 6); loopCol(jog) }
-                    else { Spacer(minLength: 10); BridgeTempo(bridge: bridge, deck: deck, side: side).frame(width: tempo) }
-                }.frame(height: jog + 2)
+                HStack(alignment: .top, spacing: 0) {
+                    if side == 0 { BridgeTempo(bridge: bridge, deck: deck, side: side).frame(width: tempo, height: jog + 5 + loopH); Spacer(minLength: 10) }
+                    VStack(spacing: 5) {
+                        HStack(spacing: 6) {
+                            if side == 1 { transport(jog) }
+                            BridgeJog(bridge: bridge, deck: deck, side: side, color: color).frame(width: jog, height: jog)
+                            if side == 0 { transport(jog) }
+                        }
+                        HStack(spacing: 4) {
+                            loopKey("IN", deck.loopIn, .loopIn, loopH)
+                            loopKey("OUT", deck.loopOut, .loopOut, loopH)
+                            loopKey(deck.reloop ? "EXIT" : "RELOOP", deck.reloop, .reloopExit, loopH)
+                        }.frame(width: jog + 6 + cap)
+                    }.frame(width: jog + 6 + cap)
+                    if side == 1 { Spacer(minLength: 10); BridgeTempo(bridge: bridge, deck: deck, side: side).frame(width: tempo, height: jog + 5 + loopH) }
+                }
                 HStack(spacing: 4) {
                     ForEach(DeckBridgeMap.PadBank.allCases, id: \.self) { b in
                         Button { bridge.setPadBank(b, side: side) } label: {
@@ -166,7 +175,7 @@ struct BridgeDeck: View {
         }
     }
     func transport(_ jog: CGFloat) -> some View {
-        let h = min(64, max(44, (jog - 6) / 2))
+        let h = max(44, (jog - 6) / 2)
         return VStack(spacing: 6) {
             BridgeCapsule(lit: deck.cueLit, stroke: Theme.cue, height: h, press: { bridge.button(bridge.shift ? .jumpToStart : .cue, side: side, on: $0) }) {
                 Text("CUE").font(.system(size: 13, weight: .bold))

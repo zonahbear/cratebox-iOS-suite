@@ -14,6 +14,8 @@ public enum BridgeControl: String, CaseIterable, Codable {
     // deck buttons (note on the deck's channel)
     case playPause, cue, sync, keylock, quantize, slip, loopIn, loopOut, reloopExit, autoLoop, loopHalf, loopDouble, headphoneCue, hotCueMode, jumpToStart
     case padFx1Mode, beatJumpMode, padFx2Mode
+    // what the platter presses while it turns: rekordbox takes no jog wheel from a generic MIDI device, only these
+    case searchFwd, searchRev, bendUp, bendDown
     // deck continuous (14-bit CC on the deck's channel)
     case tempo, trim, eqHigh, eqMid, eqLow, channelFader
     // jog (relative CC / touch note on the deck's channel)
@@ -31,6 +33,7 @@ public enum DeckBridgeMap {
         .playPause: 0x0B, .cue: 0x0C, .sync: 0x58, .keylock: 0x1A, .quantize: 0x35, .slip: 0x40, .loopIn: 0x10, .loopOut: 0x11,
         .reloopExit: 0x4D, .autoLoop: 0x14, .loopHalf: 0x12, .loopDouble: 0x13, .headphoneCue: 0x54, .hotCueMode: 0x1B, .jumpToStart: 0x48,
         .padFx1Mode: 0x1E, .beatJumpMode: 0x20, .padFx2Mode: 0x6B,
+        .searchFwd: 0x71, .searchRev: 0x70, .bendUp: 0x73, .bendDown: 0x72,
     ]
     static let deckCC: [BridgeControl: UInt8] = [.tempo: 0x00, .trim: 0x04, .eqHigh: 0x07, .eqMid: 0x0B, .eqLow: 0x0F, .channelFader: 0x13]
     static let jogCC: [BridgeControl: UInt8] = [.jogScratch: 0x22, .jogBend: 0x23]
@@ -142,6 +145,8 @@ public enum DeckBridgeMap {
             (.beatJumpMode, "BeatJump", "BeatJumpMode", "Fast", "BEAT JUMP pad mode"),
             (.padFx1Mode, "PadFx1", "PadFx1Mode", "Fast", "PAD FX 1 pad mode"),
             (.padFx2Mode, "PadFx2", "PadFx2Mode", "Fast", "PAD FX 2 pad mode"),
+            (.searchFwd, "SearchFwd", "SearchFwd", "Fast", "Search forward (jog top turning right)"),
+            (.searchRev, "SearchRev", "SearchRev", "Fast", "Search back (jog top turning left)"),
         ]
         for (c, name, fn, opt, comment) in deckRows {
             let code = hex(0x90, deckNote[c]!)
@@ -162,9 +167,9 @@ public enum DeckBridgeMap {
         for (c, name, comment) in cc {
             rows.append(Row(name: name, function: name, type: "KnobSliderHiRes", input: hex(0xB0, deckCC[c]!), decks: four, output: "", outDecks: "", option: "Fast", comment: comment))
         }
-        rows.append(Row(name: "JogScratch", function: "JogScratch", type: "JogRotate", input: hex(0xB0, 0x22), decks: four, output: "", outDecks: "", option: "", comment: "Jog: scratch (touching)"))
-        rows.append(Row(name: "JogPitchBend", function: "JogPitchBend", type: "JogRotate", input: hex(0xB0, 0x23), decks: four, output: "", outDecks: "", option: "", comment: "Jog: pitch bend (edge)"))
-        rows.append(Row(name: "JogTouch", function: "JogTouch", type: "JogTouch", input: hex(0x90, jogTouchNote), decks: four, output: "", outDecks: "", option: "", comment: "Jog: touch"))
+        // no jog rows: rekordbox drops JogRotate / JogTouch rows from a generic device's mapping on import. The
+        // platter presses SearchFwd / SearchRev (above) and pitch bend (learned once in rekordbox: Deck Bridge →
+        // ⚙ → Learn helper → Bend +/−, notes 0x73 / 0x72 on the deck's channel) instead.
         for d in 0..<4 {
             rows.append(Row(name: "CFXParameterCH\(d + 1)", function: "CFXParameterCH\(d + 1)", type: "KnobSliderHiRes", input: hex(0xB0 | globalChannel, 0x17 + UInt8(d)), decks: ",,,", output: "", outDecks: "", option: "Fast", comment: "CH\(d + 1) filter (Sound Color FX)"))
             rows.append(Row(name: "FX1Assign.CH\(d + 1)", function: "", type: "Button", input: hex(0x90 | fxChannel, 0x10 + UInt8(d)), decks: ",,,", output: "", outDecks: "", option: "", comment: "Beat FX on CH\(d + 1)"))

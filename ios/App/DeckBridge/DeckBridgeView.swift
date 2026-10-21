@@ -118,7 +118,7 @@ struct DeckBridgeSetup: View {
     @State private var shared: URL?
     @State private var bluetooth = false
     let learnable: [(String, BridgeControl)] = [("PLAY", .playPause), ("CUE", .cue), ("SYNC", .sync), ("Loop in", .loopIn), ("Loop out", .loopOut),
-                                                 ("Jog touch", .jogTouch), ("Channel fader", .channelFader), ("Tempo", .tempo), ("Filter", .filter)]
+                                                 ("Channel fader", .channelFader), ("Tempo", .tempo), ("Filter", .filter)]
     var body: some View {
         NavigationStack {
             Form {
@@ -151,8 +151,11 @@ struct DeckBridgeSetup: View {
                             }
                         }
                     }
-                    Button("Send jog (scratch), deck \(bridge.sides[0].deck + 1)") { bridge.jogTouch(side: 0, true); bridge.jog(side: 0, degrees: 20, edge: false); bridge.jogTouch(side: 0, false) }
-                } header: { Text("Learn helper") } footer: { Text("In rekordbox's MIDI window press LEARN on a function, then tap Send here. Messages sent: \(bridge.sentCount).") }
+                    ForEach(0..<2, id: \.self) { s in
+                        Button("Send Bend + (pitch bend up), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendUp, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendUp, side: s, on: false) } }
+                        Button("Send Bend − (pitch bend down), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendDown, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendDown, side: s, on: false) } }
+                    }
+                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: the platter's top holds Search, its edge holds Pitch Bend. Search comes in the mapping file. For Pitch Bend, once per deck: in rekordbox's MIDI window ADD the pitch bend up / down functions for the deck, press LEARN on each, then tap its Send Bend button here. Messages sent: \(bridge.sentCount).") }
             }
             .navigationTitle("Deck Bridge setup")
             .toolbar { Button("Done") { dismiss() } }

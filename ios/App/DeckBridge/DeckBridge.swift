@@ -220,21 +220,35 @@ final class DeckBridge: ObservableObject {
         fxAssign[d].toggle()
         send(DeckBridgeMap.button(.fxAssign, deck: d, on: true)); send(DeckBridgeMap.button(.fxAssign, deck: d, on: false))
     }
-    // jog: turns in degrees → relative ticks (about 2 per degree at 1×, like a hardware platter)
-    private var jogRemainder = [0.0, 0.0]
+    // The platter. rekordbox takes no jog wheel from a generic MIDI device, so while it turns it holds down
+    // rekordbox's search buttons (the top) or pitch bend buttons (the edge) in the direction it's turning, and
+    // lets go when it stops. Quick flicks give short nudges, a steady turn a held search or bend.
+    private var jogHeld: [BridgeControl?] = [nil, nil]
+    private var jogRelease: [DispatchWorkItem?] = [nil, nil]
     func jog(side: Int, degrees: Double, edge: Bool) {
         let d = sides[side]
         d.jogAngle += degrees
-        let ticks = degrees * 2 * jogSensitivity + jogRemainder[side]
-        let whole = Int(ticks.rounded(.towardZero))
-        jogRemainder[side] = ticks - Double(whole)
-        if whole != 0 { send(DeckBridgeMap.relative(edge ? .jogBend : .jogScratch, deck: d.deck, ticks: whole)) }
         d.objectWillChange.send()
+        guard abs(degrees) > 0.2 else { return }
+        let want: BridgeControl = edge ? (degrees > 0 ? .bendUp : .bendDown) : (degrees > 0 ? .searchFwd : .searchRev)
+        if jogHeld[side] != want {
+            if let h = jogHeld[side] { button(h, side: side, on: false) }
+            button(want, side: side, on: true)
+            jogHeld[side] = want
+        }
+        // let go once the platter stops turning (sooner the more sensitive the setting)
+        jogRelease[side]?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.jogLetGo(side) }
+        jogRelease[side] = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 / max(0.5, jogSensitivity), execute: w)
+    }
+    func jogLetGo(_ side: Int) {
+        jogRelease[side]?.cancel(); jogRelease[side] = nil
+        if let h = jogHeld[side] { button(h, side: side, on: false); jogHeld[side] = nil }
     }
     func jogTouch(side: Int, _ on: Bool) {
         sides[side].jogTouched = on
-        jogRemainder[side] = 0
-        button(.jogTouch, side: side, on: on)
+        if !on { jogLetGo(side) }
     }
     func browse(_ ticks: Int) { send(DeckBridgeMap.relative(.browse, deck: 0, ticks: ticks)) }
     func load(side: Int) { button(.load, side: side, on: true); button(.load, side: side, on: false) }

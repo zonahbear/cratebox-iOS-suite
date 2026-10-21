@@ -18,6 +18,8 @@ HotCue,HotCueMode,Button,901B,0,1,2,3,901B,0,1,2,3,Fast,HOT CUE pad mode
 BeatJump,BeatJumpMode,Button,9020,0,1,2,3,9020,0,1,2,3,Fast,BEAT JUMP pad mode
 PadFx1,PadFx1Mode,Button,901E,0,1,2,3,901E,0,1,2,3,Fast,PAD FX 1 pad mode
 PadFx2,PadFx2Mode,Button,906B,0,1,2,3,906B,0,1,2,3,Fast,PAD FX 2 pad mode
+SearchFwd,SearchFwd,Button,9071,0,1,2,3,9071,0,1,2,3,Fast,Search forward (jog top turning right)
+SearchRev,SearchRev,Button,9070,0,1,2,3,9070,0,1,2,3,Fast,Search back (jog top turning left)
 PAD1_HotCue,PAD1.HotCue.Call,Pad,9000,7,8,9,10,9000,7,8,9,10,Fast,Hot cue 1
 PAD1_HotCue+Shift,PAD1.HotCue.Delete,Pad,9008,7,8,9,10,,,,,,Fast,Delete hot cue 1
 PAD2_HotCue,PAD2.HotCue.Call,Pad,9001,7,8,9,10,9001,7,8,9,10,Fast,Hot cue 2
@@ -64,9 +66,6 @@ EQHigh,EQHigh,KnobSliderHiRes,B007,0,1,2,3,,,,,,Fast,EQ high
 EQMid,EQMid,KnobSliderHiRes,B00B,0,1,2,3,,,,,,Fast,EQ mid
 EQLow,EQLow,KnobSliderHiRes,B00F,0,1,2,3,,,,,,Fast,EQ low
 ChannelFader,ChannelFader,KnobSliderHiRes,B013,0,1,2,3,,,,,,Fast,Channel fader
-JogScratch,JogScratch,JogRotate,B022,0,1,2,3,,,,,,,Jog: scratch (touching)
-JogPitchBend,JogPitchBend,JogRotate,B023,0,1,2,3,,,,,,,Jog: pitch bend (edge)
-JogTouch,JogTouch,JogTouch,9036,0,1,2,3,,,,,,,Jog: touch
 CFXParameterCH1,CFXParameterCH1,KnobSliderHiRes,B617,,,,,,,,,,Fast,CH1 filter (Sound Color FX)
 FX1Assign.CH1,,Button,9410,,,,,,,,,,,Beat FX on CH1
 CFXParameterCH2,CFXParameterCH2,KnobSliderHiRes,B618,,,,,,,,,,Fast,CH2 filter (Sound Color FX)
