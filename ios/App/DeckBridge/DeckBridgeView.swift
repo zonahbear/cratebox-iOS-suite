@@ -43,17 +43,15 @@ struct BridgeKey: View {
     }
 }
 
-/// The platter: the middle scratches (with touch), the outer ring bends the pitch, like a CDJ
+/// The platter: turning it anywhere seeks through the track (rekordbox's Search)
 struct BridgeJog: View {
     @ObservedObject var bridge: DeckBridge
     @ObservedObject var deck: BridgeDeckState
     let side: Int
     let color: Color
     @State private var last: Double?
-    @State private var edge = false
     var body: some View {
         GeometryReader { g in
-            let r = min(g.size.width, g.size.height) / 2
             let c = CGPoint(x: g.size.width / 2, y: g.size.height / 2)
             ZStack {
                 // the same platter as Performance Mode's JogView
@@ -72,16 +70,14 @@ struct BridgeJog: View {
                         var da = a - l
                         if da > 180 { da -= 360 }
                         if da < -180 { da += 360 }
-                        bridge.jog(side: side, degrees: da, edge: edge)
+                        bridge.jog(side: side, degrees: da)
                     } else {
-                        // where the finger lands decides: the top scratches (touch), the outer ring bends
-                        edge = sqrt(dx * dx + dy * dy) > Double(r) * 0.8
-                        if !edge { bridge.jogTouch(side: side, true) }
+                        bridge.jogTouch(side: side, true)
                     }
                     last = a
                 }
                 .onEnded { _ in
-                    if !edge { bridge.jogTouch(side: side, false) }
+                    bridge.jogTouch(side: side, false)
                     last = nil
                 })
         }
@@ -119,7 +115,7 @@ struct DeckBridgeSetup: View {
     @State private var bluetooth = false
     let learnable: [(String, BridgeControl)] = [("PLAY", .playPause), ("CUE", .cue), ("SYNC", .sync), ("Loop in", .loopIn), ("Loop out", .loopOut),
                                                  ("Channel fader", .channelFader), ("Tempo", .tempo), ("Filter", .filter),
-                                                 ("Search ▶ (jog top right)", .searchFwd), ("Search ◀ (jog top left)", .searchRev), ("Reloop/Exit", .reloopExit),
+                                                 ("Search ▶ (jog right)", .searchFwd), ("Search ◀ (jog left)", .searchRev), ("Reloop/Exit", .reloopExit),
                                                  ("HOT CUE pad mode", .hotCueMode), ("BEAT JUMP pad mode", .beatJumpMode), ("PAD FX 1 pad mode", .padFx1Mode),
                                                  ("PAD FX 2 pad mode", .padFx2Mode), ("Beat FX assign", .fxAssign)]
     var body: some View {
@@ -162,10 +158,8 @@ struct DeckBridgeSetup: View {
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { bridge.send(DeckBridgeMap.pad(0, bank: b, deck: d, on: false)) }
                             }
                         }
-                        Button("Send Bend + (pitch bend up), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendUp, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendUp, side: s, on: false) } }
-                        Button("Send Bend − (pitch bend down), deck \(bridge.sides[s].deck + 1)") { bridge.button(.bendDown, side: s, on: true); DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { bridge.button(.bendDown, side: s, on: false) } }
                     }
-                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: the platter's top holds Search, its edge holds Pitch Bend. Both come in the mapping file. If Pitch Bend doesn't respond, learn it once per deck: in rekordbox's MIDI window ADD pitch bend up / down for the deck, press LEARN on each, then tap its Send Bend button here (don't touch the platter while LEARN is on, or rekordbox takes the Search note instead). The same goes for any row from the file that does nothing: LEARN it with its button here. Messages sent: \(bridge.sentCount).") }
+                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: turning the platter holds Search, which comes in the mapping file. For any row from the file that does nothing: in rekordbox's MIDI window ADD the function for the deck, press LEARN, then tap its button here (don't touch the platter while LEARN is on, or rekordbox takes the Search note instead). Messages sent: \(bridge.sentCount).") }
             }
             .navigationTitle("Deck Bridge setup")
             .toolbar { Button("Done") { dismiss() } }

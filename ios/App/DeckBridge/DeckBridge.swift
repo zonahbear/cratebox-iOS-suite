@@ -226,13 +226,13 @@ final class DeckBridge: ObservableObject {
         fxAssign[d].toggle()
         send(DeckBridgeMap.button(.fxAssign, deck: d, on: true)); send(DeckBridgeMap.button(.fxAssign, deck: d, on: false))
     }
-    // The platter. rekordbox takes no jog wheel from a generic MIDI device, so while it turns it holds down
-    // rekordbox's search buttons (the top) or pitch bend buttons (the edge) in the direction it's turning, and
-    // lets go when it stops. Quick flicks give short nudges, a steady turn a held search or bend.
+    // The platter seeks. rekordbox takes no jog wheel from a generic MIDI device, so while it turns it holds down
+    // rekordbox's search button in the direction it's turning, and lets go when it stops. Quick flicks give
+    // short nudges, a steady turn a held search.
     private var jogHeld: [BridgeControl?] = [nil, nil]
     private var jogRelease: [DispatchWorkItem?] = [nil, nil]
     private var jogTravel = [0.0, 0.0]
-    func jog(side: Int, degrees: Double, edge: Bool) {
+    func jog(side: Int, degrees: Double) {
         let d = sides[side]
         d.jogAngle += degrees
         d.objectWillChange.send()
@@ -241,7 +241,7 @@ final class DeckBridge: ObservableObject {
         guard abs(jogTravel[side]) >= 0.5 else { return }
         let turn = jogTravel[side]
         jogTravel[side] = 0
-        let want: BridgeControl = edge ? (turn > 0 ? .bendUp : .bendDown) : (turn > 0 ? .searchFwd : .searchRev)
+        let want: BridgeControl = turn > 0 ? .searchFwd : .searchRev
         if jogHeld[side] != want {
             if let h = jogHeld[side] { button(h, side: side, on: false) }
             button(want, side: side, on: true)

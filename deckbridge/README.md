@@ -37,10 +37,11 @@ Files → Cratebox → Deck Bridge is rewritten each time Deck Bridge starts.
 
 ## The platter
 
-rekordbox takes no jog wheel from a generic MIDI device, so the platter presses rekordbox buttons while it
-turns: the top holds **Search** forward / back (`SearchFwd` / `SearchRev`, notes 0x71 / 0x70 on the deck's
-channel), the outer ring holds **Pitch Bend** up / down (`PitchBendUp` / `PitchBendDown`, notes 0x73 / 0x72).
-Each lets go about 0.15 s after the platter stops (sooner at higher jog sensitivity).
+rekordbox takes no jog wheel from a generic MIDI device (the old `JogRotate` rows import but move nothing), so
+turning the platter holds rekordbox's **Search** forward / back (`SearchFwd` / `SearchRev`, notes 0x71 / 0x70
+on the deck's channel) and lets go about 0.15 s after it stops. These two rows are written the way rekordbox
+exports a learned row (empty function column, one code per deck); rekordbox ignored them in the deck-number
+form the other rows use.
 
 ## Tested against rekordbox (Windows, rtpMIDI, 2026-10-21)
 
@@ -49,9 +50,9 @@ EQ, channel faders, filter, crossfader, browse / back / load, hot cues and SHIFT
 
 Still open:
 
-- Search, beat jump and Pad FX were tested with an older mapping file that lacked those rows; retest after
-  re-importing.
-- Pitch Bend rows are named as rekordbox's own MIDI LEARN exports them; not yet confirmed to bend.
+- Search works once learned (names confirmed from rekordbox's export); the file's own rows need a retest.
+- Beat jump and Pad FX (pad modes and pads) do nothing: their function names are guesses. Learn them with
+  ⚙ → Learn helper and send the exported file so the real names go in.
 - Beat FX channel assign (`FX1Assign.CHn`) does nothing: the function name is wrong.
 - Reloop / Exit can leave the loop stuck.
 - rekordbox doesn't send fader positions back, so the phone's faders don't follow rekordbox's on-screen ones.

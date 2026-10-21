@@ -15,7 +15,7 @@ public enum BridgeControl: String, CaseIterable, Codable {
     case playPause, cue, sync, keylock, quantize, slip, loopIn, loopOut, reloopExit, autoLoop, loopHalf, loopDouble, headphoneCue, hotCueMode, jumpToStart
     case padFx1Mode, beatJumpMode, padFx2Mode
     // what the platter presses while it turns: rekordbox takes no jog wheel from a generic MIDI device, only these
-    case searchFwd, searchRev, bendUp, bendDown
+    case searchFwd, searchRev
     // deck continuous (14-bit CC on the deck's channel)
     case tempo, trim, eqHigh, eqMid, eqLow, channelFader
     // jog (relative CC / touch note on the deck's channel)
@@ -33,7 +33,7 @@ public enum DeckBridgeMap {
         .playPause: 0x0B, .cue: 0x0C, .sync: 0x58, .keylock: 0x1A, .quantize: 0x35, .slip: 0x40, .loopIn: 0x10, .loopOut: 0x11,
         .reloopExit: 0x4D, .autoLoop: 0x14, .loopHalf: 0x12, .loopDouble: 0x13, .headphoneCue: 0x54, .hotCueMode: 0x1B, .jumpToStart: 0x48,
         .padFx1Mode: 0x1E, .beatJumpMode: 0x20, .padFx2Mode: 0x6B,
-        .searchFwd: 0x71, .searchRev: 0x70, .bendUp: 0x73, .bendDown: 0x72,
+        .searchFwd: 0x71, .searchRev: 0x70,
     ]
     static let deckCC: [BridgeControl: UInt8] = [.tempo: 0x00, .trim: 0x04, .eqHigh: 0x07, .eqMid: 0x0B, .eqLow: 0x0F, .channelFader: 0x13]
     static let jogCC: [BridgeControl: UInt8] = [.jogScratch: 0x22, .jogBend: 0x23]
@@ -145,17 +145,16 @@ public enum DeckBridgeMap {
             (.beatJumpMode, "BeatJump", "BeatJumpMode", "Fast", "BEAT JUMP pad mode"),
             (.padFx1Mode, "PadFx1", "PadFx1Mode", "Fast", "PAD FX 1 pad mode"),
             (.padFx2Mode, "PadFx2", "PadFx2Mode", "Fast", "PAD FX 2 pad mode"),
-            (.searchFwd, "SearchFwd", "SearchFwd", "Fast", "Search forward (jog top turning right)"),
-            (.searchRev, "SearchRev", "SearchRev", "Fast", "Search back (jog top turning left)"),
         ]
         for (c, name, fn, opt, comment) in deckRows {
             let code = hex(0x90, deckNote[c]!)
             rows.append(Row(name: name, function: fn, type: "Button", input: code, decks: four, output: code, outDecks: four, option: opt, comment: comment))
         }
-        // pitch bend for the platter's edge, named as rekordbox's own MIDI LEARN exports it (function column empty)
-        for (c, name, comment) in [(BridgeControl.bendUp, "PitchBendUp", "Pitch bend + (jog edge turning right)"), (.bendDown, "PitchBendDown", "Pitch bend - (jog edge turning left)")] {
-            let code = hex(0x90, deckNote[c]!)
-            rows.append(Row(name: name, function: "", type: "Button", input: code, decks: four, output: code, outDecks: four, option: "Fast", comment: comment))
+        // search for the platter, written the way rekordbox exports a learned row (it ignored the deck-number form
+        // of these): empty function, one code per deck
+        for (c, name, comment) in [(BridgeControl.searchFwd, "SearchFwd", "Search forward (jog turning right)"), (.searchRev, "SearchRev", "Search back (jog turning left)")] {
+            let codes = (0..<4).map { hex(0x90 | UInt8($0), deckNote[c]!) }.joined(separator: ",")
+            rows.append(Row(name: name, function: "", type: "Button", input: "", decks: codes, output: "", outDecks: codes, option: "Fast", comment: comment))
         }
         for k in 0..<8 {
             rows.append(Row(name: "PAD\(k + 1)_HotCue", function: "PAD\(k + 1).HotCue.Call", type: "Pad", input: hex(0x90, UInt8(k)), decks: pads, output: hex(0x90, UInt8(k)), outDecks: pads, option: "Fast", comment: "Hot cue \(k + 1)"))
@@ -172,7 +171,7 @@ public enum DeckBridgeMap {
         for (c, name, comment) in cc {
             rows.append(Row(name: name, function: name, type: "KnobSliderHiRes", input: hex(0xB0, deckCC[c]!), decks: four, output: "", outDecks: "", option: "Fast", comment: comment))
         }
-        // no jog rows: the platter presses SearchFwd / SearchRev and PitchBendUp / PitchBendDown (above) instead
+        // no jog rows: the platter presses SearchFwd / SearchRev (above) instead
         for d in 0..<4 {
             rows.append(Row(name: "CFXParameterCH\(d + 1)", function: "CFXParameterCH\(d + 1)", type: "KnobSliderHiRes", input: hex(0xB0 | globalChannel, 0x17 + UInt8(d)), decks: ",,,", output: "", outDecks: "", option: "Fast", comment: "CH\(d + 1) filter (Sound Color FX)"))
             rows.append(Row(name: "FX1Assign.CH\(d + 1)", function: "", type: "Button", input: hex(0x90 | fxChannel, 0x10 + UInt8(d)), decks: ",,,", output: "", outDecks: "", option: "", comment: "Beat FX on CH\(d + 1)"))

@@ -18,10 +18,8 @@ HotCue,HotCueMode,Button,901B,0,1,2,3,901B,0,1,2,3,Fast,HOT CUE pad mode
 BeatJump,BeatJumpMode,Button,9020,0,1,2,3,9020,0,1,2,3,Fast,BEAT JUMP pad mode
 PadFx1,PadFx1Mode,Button,901E,0,1,2,3,901E,0,1,2,3,Fast,PAD FX 1 pad mode
 PadFx2,PadFx2Mode,Button,906B,0,1,2,3,906B,0,1,2,3,Fast,PAD FX 2 pad mode
-SearchFwd,SearchFwd,Button,9071,0,1,2,3,9071,0,1,2,3,Fast,Search forward (jog top turning right)
-SearchRev,SearchRev,Button,9070,0,1,2,3,9070,0,1,2,3,Fast,Search back (jog top turning left)
-PitchBendUp,,Button,9073,0,1,2,3,9073,0,1,2,3,Fast,Pitch bend + (jog edge turning right)
-PitchBendDown,,Button,9072,0,1,2,3,9072,0,1,2,3,Fast,Pitch bend - (jog edge turning left)
+SearchFwd,,Button,,9071,9171,9271,9371,,9071,9171,9271,9371,Fast,Search forward (jog turning right)
+SearchRev,,Button,,9070,9170,9270,9370,,9070,9170,9270,9370,Fast,Search back (jog turning left)
 PAD1_HotCue,PAD1.HotCue.Call,Pad,9000,7,8,9,10,9000,7,8,9,10,Fast,Hot cue 1
 PAD1_HotCue+Shift,PAD1.HotCue.Delete,Pad,9008,7,8,9,10,,,,,,Fast,Delete hot cue 1
 PAD2_HotCue,PAD2.HotCue.Call,Pad,9001,7,8,9,10,9001,7,8,9,10,Fast,Hot cue 2
