@@ -5,7 +5,12 @@ decks 3 and 4 (or 1 and 2): jog wheels, PLAY / CUE, sync, key lock, quantize, sl
 deletes), loops, tempo, trim, 3-band EQ, filter, channel faders, headphone cue, crossfader, Beat FX, browse and
 load. rekordbox lights the buttons back (PLAY, CUE, SYNC, loops, hot cues).
 
-No desktop companion app is needed: the link is standard MIDI.
+Cratebox doesn't ship its own desktop companion app; the link is standard MIDI.
+
+> **On Windows, install rtpMIDI before anything else** ([download page](https://www.tobias-erichsen.de/software/rtpmidi.html),
+> by Tobias Erichsen, not part of Cratebox). Deck Bridge can't reach rekordbox on a Windows PC without it, over Wi-Fi
+> *or* a USB cable: Windows has no network MIDI of its own and doesn't see a plugged-in iPhone as a MIDI device.
+> On a Mac nothing extra is needed. Step-by-step setup: the main [README](../README.md#deck-bridge).
 
 ## 1. Link the phone to the computer
 
@@ -14,7 +19,8 @@ No desktop companion app is needed: the link is standard MIDI.
 | Mac, Wi-Fi | Audio MIDI Setup → Window → Show MIDI Studio → the globe (Network). Under **Directory** pick the phone, press **Connect**. |
 | Mac, cable | Plug the phone in. In Audio MIDI Setup → Window → Show Audio Devices, click **Enable** under the iPhone/iPad. |
 | Mac, Bluetooth | Deck Bridge → ⚙ → Bluetooth MIDI… (the phone advertises). Audio MIDI Setup → MIDI Studio → Bluetooth → Connect. |
-| Windows | Install **rtpMIDI** (free, Tobias Erichsen). Add the phone under Directory, press Connect. |
+| Windows, Wi-Fi | **rtpMIDI required.** Make an enabled session (its local Name is what rekordbox lists), then in Directory select the phone and press Connect. |
+| Windows, cable | **rtpMIDI required.** Plug in and turn on the phone's Personal Hotspot; the cable becomes a network and rtpMIDI connects over it the same way. Needs Apple's iPhone driver (iTunes or Apple Devices). |
 
 Same Wi-Fi for both; a phone hotspot or a direct cable is steadier than a busy venue network.
 

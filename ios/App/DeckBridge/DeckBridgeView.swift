@@ -289,7 +289,7 @@ struct DeckBridgeSetup: View {
                     LabeledContent("Status", value: bridge.status)
                     Button("Bluetooth MIDI…") { bluetooth = true }
                 } header: { Text("Link to the computer running rekordbox") } footer: {
-                    Text("Mac: Audio MIDI Setup → Window → Show MIDI Studio → Network: find this phone under Directory and press Connect (or plug in with a cable and press Enable under the iPhone in Audio MIDI Setup). Windows: install rtpMIDI (free), add this phone under Directory and press Connect. Both on the same Wi-Fi; a phone hotspot or a direct cable is steadier than a busy venue network.")
+                    Text("Windows: install rtpMIDI (tobias-erichsen.de) first: without it Windows can't see this phone, over Wi-Fi or a cable. In rtpMIDI add an enabled session, then select this phone under Directory and press Connect. For a cable, plug in and turn on Personal Hotspot; rtpMIDI connects over it the same way. Mac: nothing to install. Audio MIDI Setup → Window → Show MIDI Studio → Network: find this phone under Directory and press Connect (or with a cable: Show Audio Devices → Enable under the iPhone).")
                 }
                 Section {
                     Button("Share the rekordbox mapping file…") { shared = bridge.writeMapping() }
