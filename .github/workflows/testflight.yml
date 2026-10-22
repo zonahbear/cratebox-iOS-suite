@@ -86,8 +86,9 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/dd" -archivePath "$RUNNER_TEMP/Cratebox.xcarchive" archive \
             CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="${{ steps.sign.outputs.team }}" CB_PROFILE_NAME="${{ steps.sign.outputs.name }}" \
-            CURRENT_PROJECT_VERSION="$BUILD" OTHER_CODE_SIGN_FLAGS="--keychain $KC" 2>&1 | tee "$RUNNER_TEMP/xcb.log" \
-            | grep -E "error:|BUILD|ARCHIVE (SUCCEEDED|FAILED)|\*\* " | head -100 | tee -a ../ci.log
+            CURRENT_PROJECT_VERSION="$BUILD" OTHER_CODE_SIGN_FLAGS="--keychain $KC" > "$RUNNER_TEMP/xcb.log" 2>&1 \
+            || { grep -iE -A4 "error|failed" "$RUNNER_TEMP/xcb.log" | tail -150 | tee -a ../ci.log; echo "** ARCHIVE FAILED **" | tee -a ../ci.log; exit 1; }
+          grep -E "warning: .*(sign|profile)|\*\* " "$RUNNER_TEMP/xcb.log" | tail -20 | tee -a ../ci.log
       - name: Export the App Store IPA
         if: steps.check.outputs.ready == 'true'
         run: |
