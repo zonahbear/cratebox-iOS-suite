@@ -1,4 +1,5 @@
-# XcodeGen project (CI runs `xcodegen generate` in ios/). Unsigned builds: SideStore / AltStore sign the IPA.
+# XcodeGen project (CI runs `xcodegen generate` in ios/). Unsigned by default (ios.yml's simulator runs, local builds);
+# testflight.yml turns signing on for the app target through the CB_* settings below.
 name: Cratebox
 options:
   bundleIdPrefix: com.zonahbear
@@ -44,5 +45,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.zonahbear.cratebox.suite
         SWIFT_OBJC_BRIDGING_HEADER: App/Cratebox-Bridging-Header.h
-        ASSETCATALOG_COMPILER_APPICON_NAME: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # CB_* are set only by testflight.yml. Signing is switched on here, for the app alone, rather than on the
+        # command line: forced on there it also signs the package's resource bundle, which codesign rejects.
+        CODE_SIGNING_ALLOWED: $(CB_SIGN)
+        CODE_SIGNING_REQUIRED: $(CB_SIGN)
+        CODE_SIGN_IDENTITY: $(CB_IDENTITY)
+        PROVISIONING_PROFILE_SPECIFIER: $(CB_PROFILE_NAME)
         ENABLE_PREVIEWS: "NO"
