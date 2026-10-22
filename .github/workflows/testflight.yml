@@ -8,7 +8,7 @@
 name: TestFlight
 on:
   push:
-    branches: [main]
+    branches: [main, preview/truecurve-usb]   # this branch too: Jonah asked for its build on TestFlight
     paths: ["ios/**", ".github/workflows/testflight.yml"]
   workflow_dispatch:
 permissions:
