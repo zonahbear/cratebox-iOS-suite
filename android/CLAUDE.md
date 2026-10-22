@@ -15,6 +15,7 @@ settings.gradle.kts   :core always; :app only when an Android SDK is found (ANDR
 core/                 plain Kotlin/JVM port of ios/CrateboxKit (no Android imports). Java 17 bytecode.
   src/main/kotlin/com/zonahbear/cratebox/core/
     TrueCurve.kt      = CrateboxKit TrueCurve.swift (curve, Driver, Learner, SimHeater, paste, Lorax bytes)
+    DeckPlayer.kt FxUnit.kt Mixer.kt Engine.kt   = the Swift DSP; DSPTest matches the web oracles exactly
   src/test/kotlin/... JUnit ports of CrateboxKitTests; system property cratebox.repo = repo root (fixtures)
 app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Access Framework
 ```
@@ -37,5 +38,5 @@ app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Acce
 ## Open work
 
 - Phase 2: port the rest of CrateboxKit (Core, DSP, Analysis, Controller, DeckBridgeMap, PDB/ANLZ/OneLibrary/
-  SQLCipher, preflight, writers). Reference branch: preview/truecurve-usb. Done: TrueCurve.
+  SQLCipher, preflight, writers). Reference branch: preview/truecurve-usb. Done: TrueCurve, DSP chain (DeckPlayer, FxUnit, Mixer, Engine).
 - Phase 3+: :app (Performance Mode, HEAT, Deck Bridge via USB MIDI then RTP-MIDI, Cratebox USB).
