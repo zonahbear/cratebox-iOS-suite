@@ -93,7 +93,7 @@ struct PhoneTopBar: View {
                 Circle().fill(app.controllerName.isEmpty ? Theme.dim : Theme.ok).frame(width: 7, height: 7)
                 Text(app.controllerName.isEmpty ? "No controller" : app.controllerName).font(.system(size: 11)).lineLimit(1)
             }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise)).frame(maxWidth: m.narrowBar ? 96 : 180)
-            Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: m.narrowBar ? 116 : 150)
+            Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: m.narrowBar ? 132 : 150)
             Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
             // a narrow phone: CUE/MST, MST and MASTER in a popover behind one button
             if m.narrowBar { MasterButton() } else { MixerView(masterBar: true) }
