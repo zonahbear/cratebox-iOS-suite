@@ -25,6 +25,8 @@ final class HeatController: NSObject, ObservableObject {
     /// curves pasted from TrueCurve ({name: {points, smooth}}, same JSON as its tc_curves)
     @Published private(set) var saved: [String: TrueCurve.CurveDef]
     @Published private(set) var found: [Found] = []
+    /// other named Bluetooth devices nearby, offered when no Puffco is recognised (a renamed device, say)
+    @Published private(set) var others: [Found] = []
     @Published private(set) var scanning = false
     var running: Bool { phase != .idle }
     var connected: Bool { dev != nil }
@@ -76,13 +78,16 @@ final class HeatController: NSObject, ObservableObject {
     /// look for a Puffco; the one used last time connects by itself, others are listed to pick from.
     /// The Bluetooth permission prompt comes up here, the first time, not at launch.
     func scan() {
-        found = []
+        found = []; others = []
         scanning = true
         say("Looking for your Puffco… (wake it up if it's asleep)")
         if let c = central { stateChanged(c) }
         else { central = CBCentralManager(delegate: self, queue: .main) }   // scans once it says it's on
     }
     private func startScan(_ c: CBCentralManager) {
+        // a Puffco already connected to the phone (the Puffco app, or iOS holding the bond) stops advertising, so
+        // a scan never sees it; iOS shares that connection with any app that asks for it by service
+        for p in c.retrieveConnectedPeripherals(withServices: PuffcoBle.services) { add(p, name: p.name ?? "Puffco", puffco: true) }
         // name filters are unreliable on Apple platforms, so scan everything and filter here
         c.scanForPeripherals(withServices: nil, options: nil)
         scanStop?.cancel()
@@ -90,7 +95,10 @@ final class HeatController: NSObject, ObservableObject {
             try? await Task.sleep(for: .seconds(15))
             guard let self, !Task.isCancelled, self.scanning else { return }
             self.stopScan()
-            if self.dev == nil && self.ble == nil { self.say(self.found.isEmpty ? "No Puffco found. Is it awake and not connected to the Puffco app?" : "Pick your device.") }
+            if self.dev == nil && self.ble == nil {
+                self.say(!self.found.isEmpty ? "Pick your device." : self.others.isEmpty ? "No Bluetooth devices found. Is Bluetooth on, and the Puffco awake?"
+                    : "No Puffco recognised. If yours has its own name, pick it from the list below.")
+            }
         }
     }
     private func stopScan() { central?.stopScan(); scanning = false }
@@ -273,16 +281,24 @@ extension HeatController: CBCentralManagerDelegate {
     nonisolated func centralManager(_ c: CBCentralManager, didDiscover p: CBPeripheral, advertisementData ad: [String: Any], rssi: NSNumber) {
         let name = p.name ?? (ad[CBAdvertisementDataLocalNameKey] as? String) ?? ""
         let svcs = (ad[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID]) ?? []
+        // like the web app's filters: the Lorax service, a Puffco name, or Puffco's Bluetooth company id (0x0c03)
+        let mfr = ad[CBAdvertisementDataManufacturerDataKey] as? Data
         let looksPuffco = svcs.contains { [Lorax.service, Lorax.serviceLegacy].contains($0.uuidString.lowercased()) }
             || ["peak", "proxy", "puff", "pivot"].contains { name.lowercased().hasPrefix($0) }
-        guard looksPuffco else { return }
-        MainActor.assumeIsolated {
-            guard scanning, !found.contains(where: { $0.id == p.identifier }) else { return }
-            let f = Found(id: p.identifier, name: name.isEmpty ? "Puffco" : name, p: p)
-            found.append(f)
-            if p.identifier.uuidString == defaults.string(forKey: "cb.tc.device") { pick(f) }
-            else if found.count == 1 { say("Found \(f.name). Tap it to connect.") }
+            || (mfr.map { $0.count >= 2 && $0[$0.startIndex] == 0x03 && $0[$0.startIndex + 1] == 0x0c } ?? false)
+        MainActor.assumeIsolated { add(p, name: name, puffco: looksPuffco) }
+    }
+    fileprivate func add(_ p: CBPeripheral, name: String, puffco: Bool) {
+        guard scanning, !found.contains(where: { $0.id == p.identifier }) else { return }
+        let f = Found(id: p.identifier, name: name.isEmpty ? "Puffco" : name, p: p)
+        if !puffco {
+            if !name.isEmpty && others.count < 12 && !others.contains(where: { $0.id == p.identifier }) { others.append(f) }
+            return
         }
+        others.removeAll { $0.id == p.identifier }
+        found.append(f)
+        if p.identifier.uuidString == defaults.string(forKey: "cb.tc.device") || p.state == .connected { pick(f) }
+        else if found.count == 1 { say("Found \(f.name). Tap it to connect.") }
     }
     nonisolated func centralManager(_ c: CBCentralManager, didConnect p: CBPeripheral) {
         MainActor.assumeIsolated { if ble?.p == p { ble?.didConnect() } }
