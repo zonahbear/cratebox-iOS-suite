@@ -10,6 +10,8 @@ sourceSets { main { resources.srcDir("../../ios/CrateboxKit/Sources/CrateboxKit/
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     testImplementation(kotlin("test"))
+    // the tests' SQLite (the app uses android.database.sqlite through SQLite.opener)
+    testImplementation("org.xerial:sqlite-jdbc:3.46.1.3")
 }
 
 tasks.test {
