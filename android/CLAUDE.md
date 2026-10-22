@@ -65,6 +65,6 @@ app/src/main/kotlin/com/zonahbear/cratebox/platform/   Android layer (no UI yet,
 - Phase 3 platform layer done (2026-10-22): everything under platform/ compiles via :platformcheck; 83 core
   tests green. Untested on a device. minSdk 29: no API 33+ calls without a Build.VERSION gate.
 - Manifest must set android:largeHeap (decoded decks are float PCM in RAM).
-- Phase 4 (needs the Android SDK, so a session that reaches dl.google.com): :app app/build.gradle.kts + manifest +
+- Phase 4 (needs the Android SDK, so a session that reaches dl.google.com): app/build.gradle.kts + manifest +
   Compose UI over AppModel (Performance Mode, HEAT, Deck Bridge, Cratebox USB behind Proving Ground), signed
   private APK (keys in GitHub secrets), manual-only CI.
