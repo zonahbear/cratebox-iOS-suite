@@ -22,7 +22,7 @@ class SafStickFS(context: Context, val tree: Uri) : StickFS {
 
     private class Entry(val id: String, val dir: Boolean, val size: Long)
     // path → document, filled as paths are looked up; cleared when names change
-    private val cache = HashMap<String, Entry>()
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, Entry>()      // the library scans on a background thread
 
     private fun uri(id: String) = DocumentsContract.buildDocumentUriUsingTree(tree, id)
     private fun parts(rel: String) = rel.split('/').filter { it.isNotEmpty() && it != "." }
@@ -152,6 +152,31 @@ class SafStickFS(context: Context, val tree: Uri) : StickFS {
                 Entry(DocumentsContract.getDocumentId(made), true, 0).also { cache[path] = it }
             }
         }
+    }
+
+    /** a file's document URI (for the decoder), or null when there's no such file */
+    fun documentUri(rel: String): Uri? = find(rel)?.takeIf { !it.dir }?.let { uri(it.id) }
+
+    /** every file under dir whose extension is in `ext` (lower case), as (rel, size, modified seconds) */
+    fun walk(dir: String, ext: Set<String>, cancelled: () -> Boolean = { false }): List<Triple<String, Long, Double>> {
+        val out = ArrayList<Triple<String, Long, Double>>()
+        val start = find(dir)?.takeIf { it.dir } ?: return out
+        val todo = ArrayDeque<Pair<String, String>>().apply { add(parts(dir).joinToString("/") to start.id) }
+        while (todo.isNotEmpty() && !cancelled()) {
+            val (path, id) = todo.removeFirst()
+            val q = DocumentsContract.buildChildDocumentsUriUsingTree(tree, id)
+            cr.query(q, arrayOf(Document.COLUMN_DOCUMENT_ID, Document.COLUMN_DISPLAY_NAME, Document.COLUMN_MIME_TYPE, Document.COLUMN_SIZE, Document.COLUMN_LAST_MODIFIED), null, null, null)?.use { c ->
+                while (c.moveToNext()) {
+                    val name = c.getString(1) ?: continue
+                    if (name.startsWith(".")) continue
+                    val rel = if (path.isEmpty()) name else "$path/$name"
+                    if (c.getString(2) == Document.MIME_TYPE_DIR) { todo.add(rel to c.getString(0)); continue }
+                    if (name.substringAfterLast('.', "").lowercase() !in ext) continue
+                    out.add(Triple(rel, if (c.isNull(3)) 0 else c.getLong(3), if (c.isNull(4)) 0.0 else c.getLong(4) / 1000.0))
+                }
+            }
+        }
+        return out
     }
 
     /** the stick's name as the phone shows it */
