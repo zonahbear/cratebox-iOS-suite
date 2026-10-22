@@ -1,8 +1,7 @@
 name: iOS build
+# Manual only (Actions → iOS build → Run workflow, pick the branch): each run costs ~130 of the private repo's
+# monthly minutes (macOS counts 10x). TestFlight (testflight.yml) is the normal install route now.
 on:
-  push:
-    branches: [main, "preview/**"]
-    paths: ["ios/**", ".github/workflows/ios.yml"]
   workflow_dispatch:
 permissions:
   contents: write
