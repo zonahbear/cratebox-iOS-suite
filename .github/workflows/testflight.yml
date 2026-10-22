@@ -8,7 +8,7 @@
 name: TestFlight
 on:
   push:
-    branches: [main]
+    branches: [main, claude/project-thread-m2p6wf]   # branch entry is temporary, for the first signed test run
     paths: ["ios/**", ".github/workflows/testflight.yml"]
   workflow_dispatch:
 permissions:
