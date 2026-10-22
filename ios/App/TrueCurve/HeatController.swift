@@ -284,7 +284,7 @@ extension HeatController: CBCentralManagerDelegate {
         // like the web app's filters: the Lorax service, a Puffco name, or Puffco's Bluetooth company id (0x0c03)
         let mfr = ad[CBAdvertisementDataManufacturerDataKey] as? Data
         let looksPuffco = svcs.contains { [Lorax.service, Lorax.serviceLegacy].contains($0.uuidString.lowercased()) }
-            || ["peak", "proxy", "puff", "pivot"].contains { name.lowercased().hasPrefix($0) }
+            || ["peak", "prox", "puff", "pivot"].contains { name.lowercased().hasPrefix($0) }
             || (mfr.map { $0.count >= 2 && $0[$0.startIndex] == 0x03 && $0[$0.startIndex + 1] == 0x0c } ?? false)
         MainActor.assumeIsolated { add(p, name: name, puffco: looksPuffco) }
     }
