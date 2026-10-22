@@ -86,8 +86,8 @@ jobs:
           cd ios && xcodegen generate 2>&1 | tail -3 | tee -a ../ci.log
           xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/dd" -archivePath "$RUNNER_TEMP/Cratebox.xcarchive" archive \
-            CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="${{ steps.sign.outputs.team }}" CB_PROFILE_NAME="${{ steps.sign.outputs.name }}" \
+            CB_SIGN=YES CB_IDENTITY="Apple Distribution" CB_PROFILE_NAME="${{ steps.sign.outputs.name }}" \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="${{ steps.sign.outputs.team }}" \
             CURRENT_PROJECT_VERSION="$BUILD" OTHER_CODE_SIGN_FLAGS="--keychain $KC" > "$RUNNER_TEMP/xcb.log" 2>&1 \
             || { grep -iE -B12 -A2 "error|failed" "$RUNNER_TEMP/xcb.log" | grep -v "^ *export \|^ *cd /" | tail -150 | tee -a ../ci.log; echo "** ARCHIVE FAILED **" | tee -a ../ci.log; exit 1; }
           grep -E "warning: .*(sign|profile)|\*\* " "$RUNNER_TEMP/xcb.log" | tail -20 | tee -a ../ci.log
