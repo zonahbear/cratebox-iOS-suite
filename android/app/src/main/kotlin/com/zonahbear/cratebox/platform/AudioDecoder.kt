@@ -121,6 +121,31 @@ object AudioDecoder {
         return PCMTrack(l, r, rate.toDouble())
     }
 
+    /** Deep Scan's decode test: open the file and read a little from its start, middle and end; null when fine */
+    fun decodeCheck(context: Context, uri: Uri): String? {
+        val ex = MediaExtractor()
+        try {
+            ex.setDataSource(context, uri, null)
+            val ti = (0 until ex.trackCount).firstOrNull { ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("audio/") == true }
+                ?: return "it has no audio"
+            val fmt = ex.getTrackFormat(ti)
+            val mime = fmt.getString(MediaFormat.KEY_MIME)!!
+            if (android.media.MediaCodecList(android.media.MediaCodecList.REGULAR_CODECS).findDecoderForFormat(fmt) == null)
+                return "this phone has no decoder for $mime"
+            ex.selectTrack(ti)
+            val dur = if (fmt.containsKey(MediaFormat.KEY_DURATION)) fmt.getLong(MediaFormat.KEY_DURATION) else 0L
+            if (dur <= 0) return "it has no audio frames"
+            val buf = java.nio.ByteBuffer.allocate(1 shl 16)
+            for (frac in listOf(0.0, 0.5, 0.97)) {
+                ex.seekTo((dur * frac).toLong(), MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+                if (ex.readSampleData(buf, 0) <= 0 && frac < 0.9) return "reading stopped at ${(frac * 100).toInt()}%"
+            }
+            return null
+        } catch (e: Exception) {
+            return "Android can't read it: ${e.message ?: e}"
+        } finally { ex.release() }
+    }
+
     /** the analysis's mono signal, at about `target` Hz */
     fun mono(t: PCMTrack, target: Double): Pair<FloatArray, Double> = Analysis.monoFor(listOf(t.left, t.right), t.count, t.sampleRate, target)
 }

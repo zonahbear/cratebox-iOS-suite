@@ -743,3 +743,23 @@ object Keys {
         return x.letter == y.letter && (abs(x.num - y.num) == 1 || abs(x.num - y.num) == 11)
     }
 }
+
+/** The audio clock for the screen (AppModel.smoothClock / USBPreview.smoothClock on iOS): the engine's last report
+ *  carried forward on the host clock, eased toward each new report instead of jumping, and pulled back by the
+ *  output latency so waveforms move with what you hear. */
+class SmoothClock(private val core: Core, private val latency: () -> Double) {
+    private var cAudio = 0.0; private var cHost = 0.0
+    fun now(): Double {
+        val s = core.lastSnapshot
+        if (s.host == 0.0) return s.time
+        val now = hostSeconds()
+        val raw = s.time + min(0.25, max(0.0, now - s.host))
+        if (cHost == 0.0) { cAudio = raw; cHost = now; return raw }
+        val dt = max(0.0, now - cHost)
+        var t = cAudio + dt
+        val err = raw - t
+        if (abs(err) > 0.08) t = raw else t += err * min(1.0, dt * 2)
+        cAudio = t; cHost = now
+        return t - latency()
+    }
+}
