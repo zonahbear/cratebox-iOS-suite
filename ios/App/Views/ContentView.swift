@@ -58,7 +58,19 @@ struct ContentView: View {
         }
     }
     @ViewBuilder func mix(compact: Bool, short: Bool = false) -> some View {
-        if core.four {
+        if core.four && short {
+            // 4 decks on a short iPad (mini): two columns of decks don't fit, so like the iPhone it shows the two
+            // decks the controller is on (DECK 1 / 3, 2 / 4 switch on each) around their two channels
+            let l = app.midi.side[0], r = app.midi.side[1]
+            VStack(spacing: 6) {
+                VStack(spacing: 3) { ForEach(0..<4, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: 54) } }
+                HStack(alignment: .top, spacing: 6) {
+                    DeckView(deck: core.decks[l], phone: true).id(l)
+                    MixerView(phone: true)
+                    DeckView(deck: core.decks[r], phone: true).id(r)
+                }
+            }
+        } else if core.four {
             // 4 decks on an iPad: all four waveforms across the top, the decks' controls in two columns
             VStack(spacing: 6) {
                 VStack(spacing: 3) { ForEach(0..<4, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: compact ? 54 : 70) } }

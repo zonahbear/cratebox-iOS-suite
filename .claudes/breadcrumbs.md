@@ -11,3 +11,6 @@
 - ios.yml has a `devices` input (manual run) for SE / 16 / iPad mini screenshots.
 - Not done: picking the layout by window size instead of device (risky with safe areas, untestable here).
 - Next: check the screenshots from the manual run and tune the sizes. No local Swift toolchain, so CI is the compiler.
+- 2026-10-22 23:51: CI run 39871146676 was green. SE, 16, 16 Pro Max and iPad mini (2 decks) all fit. iPad mini in 4-deck
+  mode overflowed (two columns of decks), so on a short iPad 4-deck mode now uses the iPhone pattern: the two decks the
+  controller is on, plus the 2-channel phone mixer. SE MIX/LIBRARY picker widened to 132 (LIBRARY was truncating).
