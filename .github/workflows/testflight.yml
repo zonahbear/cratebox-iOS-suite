@@ -63,6 +63,8 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "$KCPASS" "$KC" > /dev/null
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           security find-identity -v -p codesigning "$KC" | tee -a ci.log
+          # signing smoke test, so a keychain problem shows here rather than deep inside the archive
+          echo hi > "$RUNNER_TEMP/smoke.txt" && codesign -f -s "Apple Distribution" --keychain "$KC" "$RUNNER_TEMP/smoke.txt" 2>&1 | sed 's/^/CODESIGN TEST /' | tee -a ci.log || true
           security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/profile.plist"
           UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/profile.plist")
           NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$RUNNER_TEMP/profile.plist")
@@ -87,7 +89,7 @@ jobs:
             CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_STYLE=Manual CODE_SIGN_IDENTITY="Apple Distribution" \
             DEVELOPMENT_TEAM="${{ steps.sign.outputs.team }}" CB_PROFILE_NAME="${{ steps.sign.outputs.name }}" \
             CURRENT_PROJECT_VERSION="$BUILD" OTHER_CODE_SIGN_FLAGS="--keychain $KC" > "$RUNNER_TEMP/xcb.log" 2>&1 \
-            || { grep -iE -A4 "error|failed" "$RUNNER_TEMP/xcb.log" | tail -150 | tee -a ../ci.log; echo "** ARCHIVE FAILED **" | tee -a ../ci.log; exit 1; }
+            || { grep -iE -B12 -A2 "error|failed" "$RUNNER_TEMP/xcb.log" | grep -v "^ *export \|^ *cd /" | tail -150 | tee -a ../ci.log; echo "** ARCHIVE FAILED **" | tee -a ../ci.log; exit 1; }
           grep -E "warning: .*(sign|profile)|\*\* " "$RUNNER_TEMP/xcb.log" | tail -20 | tee -a ../ci.log
       - name: Export the App Store IPA
         if: steps.check.outputs.ready == 'true'
@@ -129,7 +131,7 @@ jobs:
       - name: Log summary to the ci-logs-testflight branch
         if: always() && steps.check.outputs.ready == 'true'
         run: |
-          { echo "run ${{ github.run_id }} sha ${{ github.sha }} build $BUILD at $(date -u)"; grep -E "error:|ERROR|FAIL|BUILD|ARCHIVE|PROFILE|UPLOADED|identities|\*\* " ci.log | head -200; echo "---- tail"; tail -60 ci.log; } > testflight.txt || true
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} build $BUILD at $(date -u)"; grep -E "error:|ERROR|FAIL|BUILD|ARCHIVE|PROFILE|UPLOADED|identities|CODESIGN|\*\* " ci.log | head -200; echo "---- tail"; tail -60 ci.log; } > testflight.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
           git add -f testflight.txt && git commit -qm "testflight ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs-testflight
