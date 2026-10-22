@@ -4,6 +4,10 @@ name: iOS checks
 # monthly minutes (macOS counts 10x). TestFlight (testflight.yml) is the normal install route now.
 on:
   workflow_dispatch:
+    inputs:
+      devices:
+        description: "Simulators to screenshot, comma-separated (e.g. iPhone SE (3rd generation),iPhone 16,iPad mini (A17 Pro))"
+        default: "iPhone 16 Pro Max,iPad Pro 13-inch (M4)"
 permissions:
   contents: write
 concurrency: { group: "ios-${{ github.ref }}", cancel-in-progress: true }
@@ -31,7 +35,8 @@ jobs:
           cd ios/CrateboxKit && CRATEBOX_MUSIC="$RUNNER_TEMP/music" swift test -c release -Xswiftc -enable-testing 2>&1 | tee -a ../../ci.log
       - name: Launch in the simulators (screenshots)
         continue-on-error: true
-        timeout-minutes: 12
+        timeout-minutes: 30
+        env: { DEVICES: "${{ inputs.devices || 'iPhone 16 Pro Max,iPad Pro 13-inch (M4)' }}" }
         run: |
           cd ios
           brew install xcodegen >/dev/null 2>&1 || true
@@ -40,7 +45,9 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/dds" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|BUILD" | tee -a ../ci.log
           APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Release-iphonesimulator/*.app | head -1)
           mkdir -p "$RUNNER_TEMP/shots"
-          for dev in "iPhone 16 Pro Max" "iPad Pro 13-inch (M4)"; do
+          IFS=, read -ra DEVS <<< "$DEVICES"
+          for dev in "${DEVS[@]}"; do
+            dev=$(echo "$dev" | sed 's/^ *//; s/ *$//')
             UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for r in d.values() for x in r if x['name']=='$dev'), ''))")
             [ -z "$UDID" ] && UDID=$(xcrun simctl list devices available -j | python3 -c "import json,sys; d=json.load(sys.stdin)['devices']; print(next((x['udid'] for r in d.values() for x in r if x['name'].startswith('${dev%% *}')), ''))")
             echo "SIM $dev $UDID" | tee -a ../ci.log

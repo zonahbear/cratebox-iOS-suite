@@ -24,15 +24,18 @@ struct PhoneScreen: View {
 
     var body: some View {
         let ins = PhoneScreen.windowInsets()
-        let band = max(46, min(ins.left, ins.right))
+        // the strips use the island's inset; a phone without one (SE) gets narrower strips
+        let band = max(40, min(ins.left, ins.right))
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
         // the whole screen: a reader that itself ignores the safe area gets the full size
-        return GeometryReader { g in HStack(spacing: 0) {
+        return GeometryReader { g in
+        let m = PhoneMetrics.make(width: g.size.width - 2 * band, height: g.size.height - ins.top)
+        HStack(spacing: 0) {
             EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
             VStack(spacing: 4) {
                 PhoneTopBar(settings: $settings).frame(height: 30)
                 if app.tab == 0 {
-                    Group { if app.waveMode { WaveStack() } else { mix(l, r) } }.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
+                    Group { if app.waveMode { WaveStack() } else { mix(l, r, m) } }.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
                 } else { LibraryPane() }
                 // the home-bar strip: text only, so a swipe home never lands on a control
                 HStack {
@@ -46,6 +49,7 @@ struct PhoneScreen: View {
         }
         .padding(.top, ins.top)
         .frame(width: g.size.width, height: g.size.height)
+        .environment(\.phoneMetrics, m)
         }
         .background(Theme.bg)
         .ignoresSafeArea()
@@ -59,14 +63,14 @@ struct PhoneScreen: View {
         }
     }
 
-    func mix(_ l: Int, _ r: Int) -> some View {
+    func mix(_ l: Int, _ r: Int, _ m: PhoneMetrics) -> some View {
         VStack(spacing: 4) {
             VStack(spacing: 3) {
                 PhoneLane(deck: core.decks[l]); PhoneLane(deck: core.decks[r])
                 if core.four {
                     HStack(spacing: 4) { ForEach([0, 1, 2, 3].filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
                 }
-            }.frame(minHeight: 120, maxHeight: .infinity)
+            }.frame(minHeight: m.wavesMin, maxHeight: .infinity)
             HStack(alignment: .top, spacing: 4) {
                 PhoneDeck(deck: core.decks[l], side: 0).id(l)
                 MixerView(phone: true)
@@ -81,16 +85,18 @@ struct PhoneTopBar: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var core: Core
     @Binding var settings: Bool
+    @Environment(\.phoneMetrics) var m
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: m.narrowBar ? 6 : 8) {
             ModeSwitcher(compact: true)
             HStack(spacing: 4) {
                 Circle().fill(app.controllerName.isEmpty ? Theme.dim : Theme.ok).frame(width: 7, height: 7)
                 Text(app.controllerName.isEmpty ? "No controller" : app.controllerName).font(.system(size: 11)).lineLimit(1)
-            }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise))
-            Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: 150)
+            }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise)).frame(maxWidth: m.narrowBar ? 96 : 180)
+            Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: m.narrowBar ? 116 : 150)
             Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
-            MixerView(masterBar: true)
+            // a narrow phone: CUE/MST, MST and MASTER in a popover behind one button
+            if m.narrowBar { MasterButton() } else { MixerView(masterBar: true) }
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
             LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
             Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
@@ -108,6 +114,7 @@ struct EdgeStrip: View {
     let top: CGFloat, bottom: CGFloat
     @State private var fxSheet = false
     @State private var tools = false
+    @Environment(\.phoneMetrics) var metrics
     var color: Color { Theme.deck[deck.i] }
     var body: some View {
         VStack(spacing: 5) {
@@ -148,7 +155,7 @@ struct EdgeStrip: View {
             edge("Q", deck.quant, color) { deck.quant.toggle() }
             Color.clear.frame(height: bottom)
         }
-        .padding(.horizontal, 7)
+        .padding(.horizontal, metrics.narrowStrip ? 4 : 7)
     }
     func edge(_ s: String, _ on: Bool, _ c: Color, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
@@ -186,6 +193,7 @@ struct PhoneDeck: View {
     @EnvironmentObject var app: AppModel
     @ObservedObject var deck: DeckModel
     let side: Int
+    @Environment(\.phoneMetrics) var m
     var color: Color { Theme.deck[deck.i] }
     var body: some View {
         VStack(spacing: 5) {
@@ -202,24 +210,24 @@ struct PhoneDeck: View {
                 }
             }
             HStack(spacing: 0) {
-                if side == 0 { TempoFader(deck: deck).frame(width: 30); Spacer(minLength: 10) }
-                else { loopCol; Spacer(minLength: 6); transport; Spacer(minLength: 6) }
-                JogView(deck: deck, color: color).frame(width: 100, height: 100)
-                if side == 0 { Spacer(minLength: 6); transport; Spacer(minLength: 6); loopCol }
-                else { Spacer(minLength: 10); TempoFader(deck: deck).frame(width: 30) }
-            }.frame(height: 102)
+                if side == 0 { TempoFader(deck: deck).frame(width: m.fader); Spacer(minLength: m.outer) }
+                else { loopCol; Spacer(minLength: m.gap); transport; Spacer(minLength: m.gap) }
+                JogView(deck: deck, color: color).frame(width: m.jog, height: m.jog)
+                if side == 0 { Spacer(minLength: m.gap); transport; Spacer(minLength: m.gap); loopCol }
+                else { Spacer(minLength: m.outer); TempoFader(deck: deck).frame(width: m.fader) }
+            }.frame(height: m.deckRow)
             HStack(spacing: 4) {
-                ForEach([(PadMode.hotcue, "CUES"), (.beatloop, "LOOP"), (.beatjump, "JUMP"), (.padfx, "FX1"), (.padfx2, "FX2")], id: \.1) { m, s in
-                    Button { deck.padMode = m } label: {
-                        Text(s).font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 22)
-                            .foregroundStyle(deck.padMode == m ? Theme.fg : Theme.muted)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(deck.padMode == m ? Theme.line2 : Theme.raise))
+                ForEach([(PadMode.hotcue, "CUES"), (.beatloop, "LOOP"), (.beatjump, "JUMP"), (.padfx, "FX1"), (.padfx2, "FX2")], id: \.1) { mode, s in
+                    Button { deck.padMode = mode } label: {
+                        Text(s).font(.system(size: 11, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: m.tabH)
+                            .foregroundStyle(deck.padMode == mode ? Theme.fg : Theme.muted)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(deck.padMode == mode ? Theme.line2 : Theme.raise))
                     }.buttonStyle(.plain)
                 }
             }
             VStack(spacing: 4) {
-                HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? 30 : 33) } }
-                HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? 30 : 33) } }
+                HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? m.pad - 3 : m.pad) } }
+                HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? m.pad - 3 : m.pad) } }
             }
         }
         .padding(6)
@@ -229,11 +237,11 @@ struct PhoneDeck: View {
     var transport: some View {
         VStack(spacing: 6) {
             HoldButton(down: { deck.cueDown() }, up: { deck.cueUp() }) {
-                Text("CUE").font(.system(size: 13, weight: .bold)).frame(width: 70, height: 44)
+                Text("CUE").font(.system(size: 13, weight: .bold)).frame(width: m.cap, height: m.capH)
                     .background(Capsule().fill(Theme.raise)).overlay(Capsule().stroke(Theme.cue, lineWidth: 2))
             }
             Button { deck.togglePlay() } label: {
-                Image(systemName: deck.playing ? "pause.fill" : "play.fill").font(.system(size: 17)).frame(width: 70, height: 44)
+                Image(systemName: deck.playing ? "pause.fill" : "play.fill").font(.system(size: 17)).frame(width: m.cap, height: m.capH)
                     .background(Capsule().fill(deck.playing ? Theme.ok.opacity(0.25) : Theme.raise)).overlay(Capsule().stroke(Theme.ok, lineWidth: 2))
             }.buttonStyle(.plain)
         }
@@ -243,11 +251,11 @@ struct PhoneDeck: View {
             loopBtn("IN", deck.loop.a != nil && deck.loop.b == nil) { deck.loopIn() }
             loopBtn("OUT", deck.loop.on) { deck.loopOut() }
             loopBtn(deck.loop.on ? "EXIT" : "RELOOP", deck.loop.b != nil) { deck.reloopExit() }
-        }.frame(width: 70)
+        }.frame(width: m.cap)
     }
     func loopBtn(_ s: String, _ on: Bool, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
-            Text(s).font(.system(size: 12, weight: .bold)).frame(maxWidth: .infinity, minHeight: 30)
+            Text(s).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: m.loopH)
                 .foregroundStyle(on ? Color.white : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.loop : Theme.raise))
         }.buttonStyle(.plain)
@@ -285,5 +293,58 @@ struct TempoFader: View {
                 .onTapGesture(count: 2) { deck.setPitch(0) }
             }
         }
+    }
+}
+
+/// The phone layout's sizes, worked out from the room between the edge strips, so the same screen fits an SE
+/// (587 pt between 40 pt strips) and a Pro Max (808 pt). The defaults are the Pro Max sizes the layout was drawn at.
+/// Compact (under 640 pt, the SE): smaller fader, mixer and pads. The jog and the CUE / PLAY and loop columns
+/// share what's left of each deck's width in both.
+struct PhoneMetrics {
+    var narrowBar = false                // top bar: the master section goes in a popover
+    var narrowStrip = false
+    var fader: CGFloat = 30, outer: CGFloat = 10, gap: CGFloat = 6
+    var jog: CGFloat = 100, cap: CGFloat = 70, capH: CGFloat = 44, loopH: CGFloat = 30
+    var tabH: CGFloat = 22, pad: CGFloat = 33
+    var mixW: CGFloat = 140, knob: CGFloat = 22, mixLabel: CGFloat = 30, cueH: CGFloat = 22, mixFader: CGFloat = 70, xfH: CGFloat = 18
+    var wavesMin: CGFloat = 120
+    /// the jog / transport / loops row: the tallest of the three
+    var deckRow: CGFloat { max(jog, 2 * capH + 6, 3 * loopH + 8) + 2 }
+
+    static func make(width w: CGFloat, height h: CGFloat) -> PhoneMetrics {
+        var m = PhoneMetrics()
+        if w < 640 || h < 340 {
+            m.fader = 24; m.outer = 6; m.gap = 4; m.capH = 38; m.loopH = 26; m.tabH = 20; m.pad = 28
+            m.mixW = 120; m.knob = 18; m.mixLabel = 26; m.cueH = 20; m.mixFader = 48; m.xfH = 16; m.wavesMin = 70
+        } else {
+            // the mixer no taller than the decks (it was 236 pt against their 209)
+            m.knob = 20; m.mixFader = 56; m.wavesMin = 76
+        }
+        let room = (w - m.mixW - 8) / 2                                     // each deck's share of the row
+        let budget = room - 12 - m.fader - m.outer - 2 * m.gap               // jog + CUE/PLAY + loops
+        m.jog = min(100, max(64, (budget * 0.42).rounded(.down)))
+        m.cap = min(70, max(46, ((budget - m.jog) / 2).rounded(.down)))
+        m.narrowBar = w < 680
+        m.narrowStrip = w < 640
+        return m
+    }
+}
+private struct PhoneMetricsKey: EnvironmentKey { static let defaultValue = PhoneMetrics() }
+extension EnvironmentValues {
+    var phoneMetrics: PhoneMetrics {
+        get { self[PhoneMetricsKey.self] }
+        set { self[PhoneMetricsKey.self] = newValue }
+    }
+}
+
+/// a narrow phone's top bar: MASTER opens the master section (CUE/MST, MST, MASTER) as a popover
+struct MasterButton: View {
+    @EnvironmentObject var core: Core
+    @State private var open = false
+    var body: some View {
+        LitButton(label: "MASTER", on: core.mixer.masterCue, color: Theme.cue) { open = true }
+            .popover(isPresented: $open, arrowEdge: .top) {
+                MixerView(masterBar: true).padding(12).presentationCompactAdaptation(.popover)
+            }
     }
 }
