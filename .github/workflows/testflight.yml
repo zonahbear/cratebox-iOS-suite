@@ -1,5 +1,5 @@
-# Signed App Store build of main, uploaded to TestFlight. ios.yml (unsigned IPA for SideStore, preview builds,
-# tests, screenshots) is untouched and keeps running beside this. Until the six secrets below exist this
+# Signed App Store build of main, uploaded to TestFlight: the only way the app is installed (sideloading is retired;
+# ios.yml is tests and screenshots, started by hand). Until the six secrets below exist this
 # workflow just says so and passes, so merging it early turns nothing red.
 #   IOS_DIST_P12_BASE64  IOS_DIST_P12_PASSWORD   Apple Distribution certificate + private key (.p12, base64)
 #   IOS_PROFILE_BASE64                           App Store provisioning profile for com.zonahbear.cratebox.suite

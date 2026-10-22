@@ -1,4 +1,4 @@
-# XcodeGen project (CI runs `xcodegen generate` in ios/). ios.yml builds unsigned (SideStore / AltStore sign the IPA);
+# XcodeGen project (CI runs `xcodegen generate` in ios/). Unsigned by default (ios.yml's simulator runs, local builds);
 # testflight.yml turns signing on for the app target through the CB_* settings below.
 name: Cratebox
 options:

@@ -2,8 +2,7 @@
 
 `.github/workflows/testflight.yml` builds a signed App Store copy of `main` and uploads it to TestFlight. It
 needs six GitHub secrets, which only the Apple Developer account holder can make. Until they all exist the
-workflow skips itself and passes. The unsigned SideStore builds (`ios.yml`, `ios-latest`, `ios-preview-*`) don't
-change.
+workflow skips itself and passes. TestFlight is the only install route; sideloaded builds are retired.
 
 Everything below is a browser plus PowerShell on Windows. `openssl` comes with Git for Windows. Never paste any
 of these files or values into a chat; they go only into GitHub's secret boxes.
