@@ -8,7 +8,7 @@
 name: TestFlight
 on:
   push:
-    branches: [main, claude/project-thread-m2p6wf]   # branch entry is temporary, for the first signed test run
+    branches: [main]
     paths: ["ios/**", ".github/workflows/testflight.yml"]
   workflow_dispatch:
 permissions:
@@ -24,12 +24,13 @@ jobs:
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-      KC: ${{ runner.temp }}/signing.keychain-db
       BUILD: ${{ github.run_number }}.${{ github.run_attempt }}
     steps:
       - name: Secrets present?
         id: check
         run: |
+          # runner.temp isn't allowed in job-level env, so the keychain path is set here
+          echo "KC=$RUNNER_TEMP/signing.keychain-db" >> "$GITHUB_ENV"
           missing=""
           for v in P12 P12_PASSWORD PROFILE ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do [ -n "${!v}" ] || missing="$missing $v"; done
           if [ -n "$missing" ]; then
