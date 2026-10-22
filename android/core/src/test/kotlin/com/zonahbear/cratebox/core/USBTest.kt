@@ -153,6 +153,17 @@ class USBTest {
         assertEquals(1, rec.size)
         assertTrue(rec[0] is USBSafeWrite.Recovery.Restored, "$rec")
         assertContentEquals(before, fs.read(rel))
+        // cut off between delete and rename (Android's document provider has no atomic rename-over): the
+        // staged file is the complete new version, so it's moved into place
+        val j2 = USBJournal(rel, backup, USBSafeWrite.hash(before), USBSafeWrite.hash(new), before.size, new.size, "staged", USBJournal.now())
+        fs.write(USBSafeWrite.journalRel(rel), j2.json().toByteArray())
+        fs.write("PIONEER/rekordbox/export.pdb.cratebox-stage", new)
+        fs.delete(rel)
+        val rec2 = USBSafeWrite.recover(fs)
+        assertTrue(rec2.single() is USBSafeWrite.Recovery.CleanedUp, "$rec2")
+        assertContentEquals(new, fs.read(rel))
+        assertFalse(fs.exists("PIONEER/rekordbox/export.pdb.cratebox-stage"))
+        assertEquals(emptyList(), USBSafeWrite.recover(fs))
     }
 
     @Test fun readsAJournalTheIOSAppWrote() {

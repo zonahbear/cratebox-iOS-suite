@@ -48,12 +48,19 @@ interface StickFS {
     fun mkdirs(dir: String)
 }
 
+/** up to `max` bytes from a stream (InputStream.readNBytes is Android 13+) */
+fun java.io.InputStream.readUpTo(max: Int): ByteArray {
+    val b = ByteArray(max); var n = 0
+    while (n < max) { val k = read(b, n, max - n); if (k < 0) break; n += k }
+    return if (n == max) b else b.copyOf(n)
+}
+
 /** StickFS on a directory (the tests; a stick the platform mounts as a path) */
 class FileStickFS(val root: File) : StickFS {
     private fun f(rel: String) = File(root, rel)
     override fun read(rel: String): ByteArray? = runCatching { f(rel).takeIf { it.isFile }?.readBytes() }.getOrNull()
     override fun readHead(rel: String, max: Int): ByteArray? = runCatching {
-        f(rel).takeIf { it.isFile }?.inputStream()?.use { s -> s.readNBytes(max) }
+        f(rel).takeIf { it.isFile }?.inputStream()?.use { s -> s.readUpTo(max) }
     }.getOrNull()
     override fun size(rel: String): Long? = f(rel).takeIf { it.isFile }?.length()
     override fun write(rel: String, bytes: ByteArray) {
@@ -212,7 +219,16 @@ object USBSafeWrite {
             val stage = parentOf(j.target) + lastComponent(j.target) + ".cratebox-stage"
             val cur = fs.read(j.target)?.let(::hash)
             val b = fs.read(j.backup)
-            if (cur == j.oldHash || cur == j.newHash) {
+            val staged = if (cur == null) fs.read(stage)?.let(::hash) else null
+            if (cur == null && staged == j.newHash) {
+                // a platform without an atomic rename-over (Android's document provider: delete, then rename)
+                // stopped between the two steps: the complete new version is the staged file
+                try {
+                    fs.replace(stage, j.target)
+                    runCatching { fs.delete(ju) }
+                    out.add(Recovery.CleanedUp("${j.target}: the change had been saved completely"))
+                } catch (e: Exception) { out.add(Recovery.NeedsAttention("${j.target}: the new version is staged but couldn't be moved into place (${e.message})")) }
+            } else if (cur == j.oldHash || cur == j.newHash) {
                 runCatching { fs.delete(stage) }; runCatching { fs.delete(ju) }
                 out.add(Recovery.CleanedUp(if (cur == j.newHash) "${j.target}: the change had been saved completely" else "${j.target}: the change hadn't been saved; the stick is as it was"))
             } else if (b != null && hash(b) == j.oldHash) {
