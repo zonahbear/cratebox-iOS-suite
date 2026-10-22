@@ -20,6 +20,7 @@ core/                 plain Kotlin/JVM port of ios/CrateboxKit (no Android impor
     Core.kt Controller.kt   decks/sync/FX state/Keys, controller profiles + MIDI engine (mixxx_maps.json read
                       from ios/CrateboxKit/Sources/CrateboxKit/Resources via a resources srcDir). Core is not
                       observable: the app redraws from it each frame; after editing core.mixer call mixerChanged()
+    DeckBridgeMap.kt  = DeckBridgeMap.swift; rekordboxCSV() must equal deckbridge/Cratebox Deck Bridge.midi.csv
   src/test/kotlin/... JUnit ports of CrateboxKitTests; system property cratebox.repo = repo root (fixtures)
 app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Access Framework
 ```
@@ -41,6 +42,7 @@ app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Acce
 
 ## Open work
 
-- Phase 2: port the rest of CrateboxKit (Core, DSP, Analysis, Controller, DeckBridgeMap, PDB/ANLZ/OneLibrary/
-  SQLCipher, preflight, writers). Reference branch: preview/truecurve-usb. Done: TrueCurve, DSP, Analysis, Core, Controller (29 tests).
+- Phase 2: port the rest of CrateboxKit. Reference branch: preview/truecurve-usb. Done: TrueCurve, DSP,
+  Analysis, Core, Controller, DeckBridgeMap (7 test classes, all green). Next: PDB/ANLZ/OneLibrary/SQLCipher,
+  USBLibrary, preflight, SafeWrite, writers (ports of PDBTests, USBTests, USBWriterTests).
 - Phase 3+: :app (Performance Mode, HEAT, Deck Bridge via USB MIDI then RTP-MIDI, Cratebox USB).
