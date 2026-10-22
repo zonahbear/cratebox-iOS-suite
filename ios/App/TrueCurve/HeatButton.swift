@@ -54,6 +54,12 @@ struct HeatPanel: View {
                         .buttonStyle(.bordered).controlSize(.small)
                 }
             }
+            if !heat.connected && heat.found.isEmpty && !heat.others.isEmpty && !heat.scanning {
+                Text("Other devices nearby").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                ScrollView { VStack(spacing: 4) { ForEach(heat.others) { f in
+                    Button { heat.pick(f) } label: { Text(f.name).frame(maxWidth: .infinity, alignment: .leading) }.buttonStyle(.bordered).controlSize(.small)
+                } } }.frame(maxHeight: 120)
+            }
             HStack {
                 Text("Curve").font(.system(size: 12)).foregroundStyle(Theme.muted)
                 Picker("Curve", selection: $heat.name) {
