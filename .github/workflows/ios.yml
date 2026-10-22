@@ -99,6 +99,11 @@ jobs:
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -four -wave > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_wave4.png" || true
+            # HEAT (TrueCurve mini) on the simulator device, preheating to the Quartz Banger's 520°F while the demo plays
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -heat > /dev/null || true
+            sleep 25
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_heat.png" || true
             # the suite's other two modes: Deck Bridge, and Cratebox USB on a copy of the test stick (no audio: the scan flags it)
             xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -bridge > /dev/null || true
