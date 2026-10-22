@@ -114,4 +114,14 @@ class TrueCurveTest {
     }
 
     private fun hex(s: String): List<Int> = (s.indices step 2).map { s.substring(it, it + 2).toInt(16) }
+
+    @Test fun curvesAndModelRoundTrip() {
+        val c = mapOf("Mine" to TrueCurve.CurveDef(listOf(TrueCurve.Point(0.0, 500.0), TrueCurve.Point(30.5, 455.0)), false))
+        assertEquals(c, TrueCurve.parseCurves(TrueCurve.encodeCurves(c)))
+        val m = TrueCurve.HeaterModel(tau = 3.5, heatMax = 13.0, coolK = 0.012, dead = 0.5, runs = 4)
+        assertEquals(m, TrueCurve.parseModel(TrueCurve.encodeModel(m)))
+        // what iOS's JSONEncoder writes
+        assertEquals(m, TrueCurve.parseModel("""{"dead":0.5,"runs":4,"tau":3.5,"coolK":0.012,"heatMax":13}"""))
+        assertEquals(null, TrueCurve.parseModel("""{"tau":1}"""))
+    }
 }

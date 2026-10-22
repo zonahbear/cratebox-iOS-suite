@@ -13,5 +13,6 @@ kotlin {
 
 dependencies {
     implementation(project(":core"))
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
     compileOnly("org.robolectric:android-all:16-robolectric-13921718")
 }

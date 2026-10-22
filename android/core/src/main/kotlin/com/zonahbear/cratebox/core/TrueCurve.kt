@@ -5,6 +5,10 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.doubleOrNull
 import java.security.MessageDigest
 import kotlin.math.abs
@@ -221,6 +225,26 @@ object TrueCurve {
             if (pts.size >= 2) out[prefixCodePoints(k, 24)] = CurveDef(pts, smooth)
         }
         return out
+    }
+
+    /** the saved curves as the same JSON parseCurves reads (and TrueCurve's tc_curves) */
+    fun encodeCurves(c: Map<String, CurveDef>): String = buildJsonObject {
+        for ((k, v) in c) put(k, buildJsonObject {
+            put("points", buildJsonArray { for (p in v.points) add(buildJsonObject { put("t", p.t); put("f", p.f) }) })
+            put("smooth", v.smooth)
+        })
+    }.toString()
+
+    /** a learned model as stored per device (the iOS app's Codable keys) */
+    fun encodeModel(m: HeaterModel): String = buildJsonObject {
+        put("tau", m.tau); put("heatMax", m.heatMax); put("coolK", m.coolK); put("dead", m.dead); put("runs", m.runs)
+    }.toString()
+    fun parseModel(text: String?): HeaterModel? {
+        val o = try { text?.let { Json.parseToJsonElement(it) as? JsonObject } } catch (_: Exception) { null } ?: return null
+        fun d(k: String) = (o[k] as? JsonPrimitive)?.doubleOrNull?.takeIf { it.isFinite() }
+        val m = HeaterModel(tau = d("tau") ?: return null, heatMax = d("heatMax") ?: return null, coolK = d("coolK") ?: return null,
+                            dead = d("dead") ?: return null, runs = d("runs")?.toInt() ?: 0)
+        return m
     }
 
     private fun prefixCodePoints(s: String, n: Int): String =
