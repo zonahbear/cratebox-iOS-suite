@@ -1,6 +1,5 @@
-// Deck Bridge's screen: landscape, two decks around a mixer, every control big enough for a thumb.
-// Left deck: jog, CUE / PLAY, pads, loops, tempo on the outside edge. Right deck mirrored. Middle: each
-// channel's trim, EQ, filter, CUE and fader, the crossfader, Beat FX.
+// Deck Bridge's screen (the layout itself is BridgeScreen.swift, built like Performance Mode's), its momentary
+// keys and jog, and the setup sheet: linking, the rekordbox mapping, deck options, the learn helper.
 import SwiftUI
 import CoreAudioKit
 import CrateboxKit
@@ -9,34 +8,9 @@ struct DeckBridgeView: View {
     @ObservedObject var bridge: DeckBridge
     @State private var setup = false
     var body: some View {
-        VStack(spacing: 4) {
-            ModeBar(title: "DECK BRIDGE", subtitle: "rekordbox decks \(bridge.sides[0].deck + 1) and \(bridge.sides[1].deck + 1)") {
-                linkPill
-                Picker("", selection: $bridge.pair) { Text("1 · 2").tag(0); Text("3 · 4").tag(1) }.pickerStyle(.segmented).frame(width: 110)
-                LitButton(label: "SHIFT", on: bridge.shift, color: Theme.accent) { bridge.shift.toggle() }
-                Button { setup = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
-            }
-            GeometryReader { g in
-                let mixW = min(230, max(170, g.size.width * 0.24))
-                HStack(spacing: 6) {
-                    BridgeDeckPanel(bridge: bridge, deck: bridge.sides[0], side: 0)
-                    BridgeMixer(bridge: bridge, a: bridge.sides[0], b: bridge.sides[1]).frame(width: mixW)
-                    BridgeDeckPanel(bridge: bridge, deck: bridge.sides[1], side: 1)
-                }
-            }
-            .padding(.horizontal, 6).padding(.bottom, 4)
-        }
-        .background(Theme.bg)
-        .sheet(isPresented: $setup) { DeckBridgeSetup(bridge: bridge) }
-        .onAppear { if !CommandLine.arguments.contains("-bridge") && !bridge.linked && bridge.sentCount == 0 && !UserDefaults.standard.bool(forKey: "cb.bridge.setupSeen") { UserDefaults.standard.set(true, forKey: "cb.bridge.setupSeen"); setup = true } }
-    }
-    var linkPill: some View {
-        HStack(spacing: 5) {
-            Circle().fill(bridge.linked ? (bridge.heardRecently ? Theme.ok : Theme.accent) : Theme.dim).frame(width: 7, height: 7)
-            Text(bridge.linked ? (bridge.heardRecently ? "rekordbox linked" : "Linked") : "Not linked").font(.system(size: 11)).lineLimit(1)
-        }
-        .padding(.horizontal, 8).frame(height: 26).background(Capsule().fill(Theme.raise))
-        .onTapGesture { setup = true }
+        BridgeScreen(bridge: bridge, setup: $setup)
+            .sheet(isPresented: $setup) { DeckBridgeSetup(bridge: bridge) }
+            .onAppear { if !CommandLine.arguments.contains("-bridge") && !bridge.linked && bridge.sentCount == 0 && !UserDefaults.standard.bool(forKey: "cb.bridge.setupSeen") { UserDefaults.standard.set(true, forKey: "cb.bridge.setupSeen"); setup = true } }
     }
 }
 
@@ -47,14 +21,19 @@ struct BridgeKey: View {
     var color: Color = Theme.accent
     var height: CGFloat = 34
     var big = false
+    var radius: CGFloat = 7
+    var fontSize: CGFloat? = nil
+    var plain = false                   // a pad: no outline, like Performance Mode's pads
+    var textColor: Color? = nil
     let press: (Bool) -> Void
     @State private var down = false
     var body: some View {
-        Text(label).font(.system(size: big ? 15 : 11, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.5)
+        Text(label).font(.system(size: fontSize ?? (big ? 15 : 11), weight: plain ? .semibold : .bold)).lineLimit(1).minimumScaleFactor(0.5)
             .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
-            .foregroundStyle(lit ? Color.black : (down ? color : Theme.fg))
-            .background(RoundedRectangle(cornerRadius: 7).fill(lit ? color : Theme.raise))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(down ? color : Theme.line2, lineWidth: down ? 2 : 1))
+            .foregroundStyle(lit ? Color.black : (textColor ?? Theme.fg))
+            .background(RoundedRectangle(cornerRadius: radius).fill(lit ? color : Theme.raise))
+            .overlay(RoundedRectangle(cornerRadius: radius).stroke(down ? color : (plain ? Color.clear : Theme.line2), lineWidth: down ? 2 : (plain ? 0 : 1)))
+            .opacity(down && !lit ? 0.85 : 1)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .onChanged { _ in if !down { down = true; press(true); UIImpactFeedbackGenerator(style: .light).impactOccurred() } }
@@ -64,116 +43,23 @@ struct BridgeKey: View {
     }
 }
 
-struct BridgeDeckPanel: View {
-    @ObservedObject var bridge: DeckBridge
-    @ObservedObject var deck: BridgeDeckState
-    let side: Int
-    var color: Color { Theme.deck[deck.deck] }
-    var body: some View {
-        GeometryReader { g in
-            let tempoW: CGFloat = 40
-            let jog = max(110, min(g.size.height * 0.58, (g.size.width - tempoW) * 0.5))
-            HStack(spacing: 6) {
-                if side == 0 { tempo.frame(width: tempoW) }
-                VStack(spacing: 6) {
-                    HStack(spacing: 4) {
-                        Text("\(deck.deck + 1)").font(.system(size: 18, weight: .heavy)).foregroundStyle(Color.black).frame(width: 28, height: 28).background(RoundedRectangle(cornerRadius: 6).fill(color))
-                        key("SYNC", .sync); key("MT", .keylock); key("Q", .quantize); key("SLIP", .slip)
-                    }
-                    HStack(alignment: .top, spacing: 6) {
-                        VStack(spacing: 6) {
-                            BridgeJog(bridge: bridge, deck: deck, side: side, color: color).frame(width: jog, height: jog)
-                            HStack(spacing: 6) {
-                                BridgeKey(label: "CUE", lit: deck.cueLit, color: Theme.cue, height: 46, big: true) { on in
-                                    bridge.button(bridge.shift ? .jumpToStart : .cue, side: side, on: on)
-                                }
-                                BridgeKey(label: "▶︎ ‖", lit: deck.playing, color: Theme.ok, height: 46, big: true) { bridge.button(.playPause, side: side, on: $0) }
-                            }.frame(width: jog)
-                        }
-                        VStack(spacing: 6) {
-                            pads
-                            loops
-                        }
-                    }
-                }
-                if side == 1 { tempo.frame(width: tempoW) }
-            }
-        }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.35)))
-    }
-    func key(_ l: String, _ c: BridgeControl) -> some View {
-        BridgeKey(label: l, lit: deck.lit(c), color: c == .sync ? Theme.accent : Theme.fg, height: 28) { bridge.button(c, side: side, on: $0) }
-    }
-    var pads: some View {
-        VStack(spacing: 5) {
-            HStack(spacing: 4) {
-                Text(bridge.shift ? "HOT CUE · DELETE" : "HOT CUE").font(.system(size: 9, weight: .bold)).foregroundStyle(bridge.shift ? Theme.hot : Theme.muted)
-                Spacer()
-                Button { bridge.button(.hotCueMode, side: side, on: true); bridge.button(.hotCueMode, side: side, on: false) } label: {
-                    Text("MODE").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.muted)
-                }.buttonStyle(.plain)
-            }
-            ForEach(0..<2, id: \.self) { r in
-                HStack(spacing: 5) {
-                    ForEach(0..<4, id: \.self) { c in
-                        let k = r * 4 + c
-                        BridgeKey(label: String(UnicodeScalar(65 + k)!), lit: deck.hot[k], color: Theme.hot, height: 40, big: true) { bridge.hotCue(k, side: side, on: $0) }
-                    }
-                }
-            }
-        }
-    }
-    var loops: some View {
-        VStack(spacing: 5) {
-            HStack(spacing: 5) {
-                BridgeKey(label: "IN", lit: deck.loopIn, color: Theme.loop) { bridge.button(.loopIn, side: side, on: $0) }
-                BridgeKey(label: "OUT", lit: deck.loopOut, color: Theme.loop) { bridge.button(.loopOut, side: side, on: $0) }
-                BridgeKey(label: "RELOOP", lit: deck.reloop, color: Theme.loop) { bridge.button(.reloopExit, side: side, on: $0) }
-            }
-            HStack(spacing: 5) {
-                BridgeKey(label: "½") { bridge.button(.loopHalf, side: side, on: $0) }
-                BridgeKey(label: "4 BEAT", lit: deck.autoLoop, color: Theme.loop) { bridge.button(.autoLoop, side: side, on: $0) }
-                BridgeKey(label: "×2") { bridge.button(.loopDouble, side: side, on: $0) }
-            }
-        }
-    }
-    var tempo: some View {
-        VStack(spacing: 4) {
-            Text("TEMPO").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.muted)
-            Text("−").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.muted)
-            // like a CDJ: up = slower
-            GeometryReader { g in
-                VFader(value: 1 - deck.tempo, color: color, height: g.size.height) { bridge.value(.tempo, side: side, 1 - $0) }
-                    .frame(maxWidth: .infinity)
-                    .overlay(Rectangle().fill(Theme.line2).frame(height: 1))
-            }
-            Text("+").font(.system(size: 10, weight: .bold)).foregroundStyle(Theme.muted)
-            Button { bridge.value(.tempo, side: side, 0.5) } label: { Text("0").font(.system(size: 10, weight: .bold)).frame(width: 30, height: 22).background(Capsule().fill(Theme.raise)) }.buttonStyle(.plain)
-        }
-    }
-}
-
-/// The platter: the middle scratches (with touch), the outer ring bends the pitch, like a CDJ
+/// The platter: turning it anywhere seeks through the track (rekordbox's Search)
 struct BridgeJog: View {
     @ObservedObject var bridge: DeckBridge
     @ObservedObject var deck: BridgeDeckState
     let side: Int
     let color: Color
     @State private var last: Double?
-    @State private var edge = false
     var body: some View {
         GeometryReader { g in
-            let r = min(g.size.width, g.size.height) / 2
             let c = CGPoint(x: g.size.width / 2, y: g.size.height / 2)
             ZStack {
-                Circle().fill(Theme.raise).overlay(Circle().stroke(deck.jogTouched ? Theme.accent : Theme.line2, lineWidth: deck.jogTouched ? 3 : 2))
-                Circle().fill(Theme.panel).padding(r * 0.2)
-                    .overlay(Circle().stroke(Theme.line, lineWidth: 1).padding(r * 0.2))
-                Rectangle().fill(color).frame(width: 4, height: r * 0.3).offset(y: -r * 0.62)
+                // the same platter as Performance Mode's JogView
+                Circle().fill(Theme.raise).overlay(Circle().stroke(deck.jogTouched ? color : Theme.line2, lineWidth: 2))
+                Circle().fill(Theme.panel).padding(g.size.width * 0.18)
+                Rectangle().fill(color).frame(width: 3, height: g.size.width * 0.18).offset(y: -g.size.width * 0.38)
                     .rotationEffect(.degrees(deck.jogAngle))
-                Text("JOG").font(.system(size: 9, weight: .bold)).foregroundStyle(Theme.dim)
+                Text("\(deck.deck + 1)").font(.system(size: max(14, g.size.width * 0.12), weight: .heavy)).foregroundStyle(color.opacity(0.8))
             }
             .contentShape(Circle())
             .gesture(DragGesture(minimumDistance: 0)
@@ -184,16 +70,14 @@ struct BridgeJog: View {
                         var da = a - l
                         if da > 180 { da -= 360 }
                         if da < -180 { da += 360 }
-                        bridge.jog(side: side, degrees: da, edge: edge)
+                        bridge.jog(side: side, degrees: da)
                     } else {
-                        // where the finger lands decides: the top scratches (touch), the outer ring bends
-                        edge = sqrt(dx * dx + dy * dy) > Double(r) * 0.8
-                        if !edge { bridge.jogTouch(side: side, true) }
+                        bridge.jogTouch(side: side, true)
                     }
                     last = a
                 }
                 .onEnded { _ in
-                    if !edge { bridge.jogTouch(side: side, false) }
+                    bridge.jogTouch(side: side, false)
                     last = nil
                 })
         }
@@ -201,56 +85,6 @@ struct BridgeJog: View {
     }
 }
 
-struct BridgeMixer: View {
-    @ObservedObject var bridge: DeckBridge
-    @ObservedObject var a: BridgeDeckState
-    @ObservedObject var b: BridgeDeckState
-    var body: some View {
-        VStack(spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                channel(a, 0)
-                VStack(spacing: 6) {
-                    Text("FX").font(.system(size: 9, weight: .heavy)).foregroundStyle(Theme.hot)
-                    Knob(label: "DEPTH", value: bridge.fxDepth, color: Theme.hot, size: 34) { bridge.setFxDepth($0) }
-                    BridgeKey(label: "ON", lit: bridge.fxOn, color: Theme.hot, height: 28) { bridge.global(.fxOn, on: $0) }
-                    BridgeKey(label: "SELECT", height: 24) { bridge.global(.fxSelect, on: $0) }
-                    HStack(spacing: 3) {
-                        BridgeKey(label: "◀", height: 24) { bridge.global(.fxBeatDown, on: $0) }
-                        BridgeKey(label: "▶", height: 24) { bridge.global(.fxBeatUp, on: $0) }
-                    }
-                    Spacer(minLength: 0)
-                    Text("BROWSE").font(.system(size: 8, weight: .bold)).foregroundStyle(Theme.muted)
-                    HStack(spacing: 3) {
-                        BridgeKey(label: "▲", height: 26) { if $0 { bridge.browse(-1) } }
-                        BridgeKey(label: "▼", height: 26) { if $0 { bridge.browse(1) } }
-                    }
-                    BridgeKey(label: "BACK", height: 22) { bridge.global(.back, on: $0) }
-                }.frame(width: 62)
-                channel(b, 1)
-            }
-            HFader(value: bridge.xfader) { bridge.setXfader($0) }.frame(height: 30)
-        }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-    }
-    func channel(_ d: BridgeDeckState, _ side: Int) -> some View {
-        VStack(spacing: 4) {
-            BridgeKey(label: "LOAD", height: 22) { if $0 { bridge.load(side: side) } }
-            Knob(label: "TRIM", value: d.trim, size: 26, bipolar: true) { bridge.value(.trim, side: side, $0) }
-            Knob(label: "HI", value: d.hi, size: 26, bipolar: true) { bridge.value(.eqHigh, side: side, $0) }
-            Knob(label: "MID", value: d.mid, size: 26, bipolar: true) { bridge.value(.eqMid, side: side, $0) }
-            Knob(label: "LOW", value: d.low, size: 26, bipolar: true) { bridge.value(.eqLow, side: side, $0) }
-            Knob(label: "FILTER", value: d.filter, color: Theme.accent, size: 26, bipolar: true) { bridge.value(.filter, side: side, $0) }
-            HStack(spacing: 3) {
-                BridgeKey(label: "CUE", lit: d.headphoneCue, color: Theme.cue, height: 22) { bridge.button(.headphoneCue, side: side, on: $0) }
-                BridgeKey(label: "FX", lit: bridge.fxAssign[d.deck], color: Theme.hot, height: 22) { if $0 { bridge.toggleFxAssign(side: side) } }
-            }
-            GeometryReader { g in VFader(value: d.fader, color: Theme.deck[d.deck], height: g.size.height) { bridge.value(.channelFader, side: side, $0) }.frame(maxWidth: .infinity) }
-                .frame(minHeight: 60)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
 
 /// a horizontal fader (the crossfader); double-tap centres it
 struct HFader: View {
@@ -280,7 +114,10 @@ struct DeckBridgeSetup: View {
     @State private var shared: URL?
     @State private var bluetooth = false
     let learnable: [(String, BridgeControl)] = [("PLAY", .playPause), ("CUE", .cue), ("SYNC", .sync), ("Loop in", .loopIn), ("Loop out", .loopOut),
-                                                 ("Jog touch", .jogTouch), ("Channel fader", .channelFader), ("Tempo", .tempo), ("Filter", .filter)]
+                                                 ("Channel fader", .channelFader), ("Tempo", .tempo), ("Filter", .filter),
+                                                 ("Search ▶ (jog right)", .searchFwd), ("Search ◀ (jog left)", .searchRev), ("Reloop/Exit", .reloopExit),
+                                                 ("HOT CUE pad mode", .hotCueMode), ("BEAT JUMP pad mode", .beatJumpMode), ("PAD FX 1 pad mode", .padFx1Mode),
+                                                 ("PAD FX 2 pad mode", .padFx2Mode), ("Beat FX assign", .fxAssign)]
     var body: some View {
         NavigationStack {
             Form {
@@ -313,8 +150,16 @@ struct DeckBridgeSetup: View {
                             }
                         }
                     }
-                    Button("Send jog (scratch), deck \(bridge.sides[0].deck + 1)") { bridge.jogTouch(side: 0, true); bridge.jog(side: 0, degrees: 20, edge: false); bridge.jogTouch(side: 0, false) }
-                } header: { Text("Learn helper") } footer: { Text("In rekordbox's MIDI window press LEARN on a function, then tap Send here. Messages sent: \(bridge.sentCount).") }
+                    ForEach(0..<2, id: \.self) { s in
+                        ForEach(Array(DeckBridgeMap.PadBank.allCases.dropFirst()), id: \.self) { b in
+                            Button("Send \(b.title) pad 1, deck \(bridge.sides[s].deck + 1)") {
+                                let d = bridge.sides[s].deck
+                                bridge.send(DeckBridgeMap.pad(0, bank: b, deck: d, on: true))
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { bridge.send(DeckBridgeMap.pad(0, bank: b, deck: d, on: false)) }
+                            }
+                        }
+                    }
+                } header: { Text("Learn helper") } footer: { Text("rekordbox takes no jog wheel from a generic MIDI device: turning the platter holds Search, which comes in the mapping file. For any row from the file that does nothing: in rekordbox's MIDI window ADD the function for the deck, press LEARN, then tap its button here (don't touch the platter while LEARN is on, or rekordbox takes the Search note instead). Messages sent: \(bridge.sentCount).") }
             }
             .navigationTitle("Deck Bridge setup")
             .toolbar { Button("Done") { dismiss() } }

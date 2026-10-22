@@ -28,6 +28,9 @@ final class BridgeDeckState: ObservableObject {
     @Published var autoLoop = false
     @Published var headphoneCue = false
     @Published var hot = [Bool](repeating: false, count: 8)
+    /// rekordbox's pad mode on this deck (as last chosen here), and its pads' lights per mode
+    @Published var padBank: DeckBridgeMap.PadBank = .hotCue
+    @Published var padLit = [[Bool]](repeating: [Bool](repeating: false, count: 8), count: 4)
     // what the touch controls are at (rekordbox doesn't send faders back)
     @Published var tempo = 0.5
     @Published var trim = 0.5
@@ -68,6 +71,9 @@ final class BridgeDeckState: ObservableObject {
         case .reloopExit: reloop = on
         case .autoLoop: autoLoop = on
         case .headphoneCue: headphoneCue = on
+        // rekordbox lights the pad mode it's in: follow it, so a mode picked on the computer reaches the pads here
+        case .hotCueMode, .beatJumpMode, .padFx1Mode, .padFx2Mode:
+            if on, let b = DeckBridgeMap.PadBank.allCases.first(where: { $0.mode == c }) { padBank = b }
         default: break
         }
     }
@@ -97,6 +103,8 @@ final class DeckBridge: ObservableObject {
     @Published var status = ""
     var heardRecently: Bool { lastHeard > 0 && hostSeconds() - lastHeard < 30 }
     var linked: Bool { !destinations.isEmpty }
+    /// a computer is really there: iOS lists it, or rekordbox has sent something back lately
+    var confirmed: Bool { !peers.isEmpty || heardRecently }
 
     private var client = MIDIClientRef(), inPort = MIDIPortRef(), outPort = MIDIPortRef()
     private var virtualSource = MIDIEndpointRef()
@@ -130,6 +138,11 @@ final class DeckBridge: ObservableObject {
         NotificationCenter.default.addObserver(forName: Notification.Name(MIDINetworkNotificationContactsDidChange), object: nil, queue: .main) { [weak self] _ in self?.refresh() }
         applyNetwork()
         refresh()
+        // keep the copy in Files → Cratebox → Deck Bridge the same as this build's mapping (an older build's file
+        // there lacks rows this build sends)
+        _ = writeMapping()
+        // incoming connections don't always post a notification: look again every few seconds
+        Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in self?.refresh() }
     }
 
     func applyNetwork() {
@@ -146,7 +159,9 @@ final class DeckBridge: ObservableObject {
         peers = s.connections().map { $0.host.name }
         var ds = [MIDIEndpointRef](), names = [String]()
         let netDest = s.isEnabled ? s.destinationEndpoint() : 0
-        if netDest != 0 && !peers.isEmpty { ds.append(netDest); names.append("Network: " + peers.joined(separator: ", ")) }
+        // Always send into the network session while it's on. A connection the computer starts (rtpMIDI's
+        // Connect) doesn't always show up in connections(), and sending with nobody connected is harmless.
+        if netDest != 0 { ds.append(netDest); names.append(peers.isEmpty ? "Network session" : "Network: " + peers.joined(separator: ", ")) }
         for i in 0..<MIDIGetNumberOfDestinations() {
             let d = MIDIGetDestination(i)
             if d == netDest { continue }
@@ -162,7 +177,8 @@ final class DeckBridge: ObservableObject {
                 MIDIPortConnectSource(inPort, src, nil)
             }
         }
-        status = linked ? "Linked: \(names.joined(separator: " · "))" : networkOn ? "Waiting for rekordbox's computer to connect (\(s.networkName.isEmpty ? "this phone" : s.networkName))" : "Not linked"
+        status = !peers.isEmpty || heardRecently ? "Linked: \(names.joined(separator: " · "))"
+            : networkOn ? "Sending on the network session \"\(s.networkName.isEmpty ? "this phone" : s.networkName)\". Connect to it from rtpMIDI / Audio MIDI Setup." : linked ? "Sending to \(names.joined(separator: " · "))" : "Not linked"
     }
 
     // ---- out ----
@@ -180,6 +196,15 @@ final class DeckBridge: ObservableObject {
     func button(_ c: BridgeControl, side: Int, on: Bool) { send(DeckBridgeMap.button(c, deck: sides[side].deck, on: on)) }
     func global(_ c: BridgeControl, on: Bool) { send(DeckBridgeMap.button(c, deck: 0, on: on)) }
     func hotCue(_ k: Int, side: Int, on: Bool) { send(DeckBridgeMap.hotCue(k, deck: sides[side].deck, on: on, shift: shift)) }
+    /// a pad in the deck's current pad mode (SHIFT only does something for hot cues: delete)
+    func pad(_ k: Int, side: Int, on: Bool) {
+        let d = sides[side]
+        send(DeckBridgeMap.pad(k, bank: d.padBank, deck: d.deck, on: on, shift: shift && d.padBank == .hotCue))
+    }
+    func setPadBank(_ b: DeckBridgeMap.PadBank, side: Int) {
+        sides[side].padBank = b
+        button(b.mode, side: side, on: true); button(b.mode, side: side, on: false)
+    }
     func value(_ c: BridgeControl, side: Int, _ v: Double) {
         let d = sides[side]
         switch c {
@@ -201,21 +226,41 @@ final class DeckBridge: ObservableObject {
         fxAssign[d].toggle()
         send(DeckBridgeMap.button(.fxAssign, deck: d, on: true)); send(DeckBridgeMap.button(.fxAssign, deck: d, on: false))
     }
-    // jog: turns in degrees → relative ticks (about 2 per degree at 1×, like a hardware platter)
-    private var jogRemainder = [0.0, 0.0]
-    func jog(side: Int, degrees: Double, edge: Bool) {
+    // The platter seeks. rekordbox takes no jog wheel from a generic MIDI device, so while it turns it holds down
+    // rekordbox's search button in the direction it's turning, and lets go when it stops. Quick flicks give
+    // short nudges, a steady turn a held search.
+    private var jogHeld: [BridgeControl?] = [nil, nil]
+    private var jogRelease: [DispatchWorkItem?] = [nil, nil]
+    private var jogTravel = [0.0, 0.0]
+    func jog(side: Int, degrees: Double) {
         let d = sides[side]
         d.jogAngle += degrees
-        let ticks = degrees * 2 * jogSensitivity + jogRemainder[side]
-        let whole = Int(ticks.rounded(.towardZero))
-        jogRemainder[side] = ticks - Double(whole)
-        if whole != 0 { send(DeckBridgeMap.relative(edge ? .jogBend : .jogScratch, deck: d.deck, ticks: whole)) }
         d.objectWillChange.send()
+        // a slow turn moves a fraction of a degree per touch event: add them up so it still counts
+        jogTravel[side] += degrees
+        guard abs(jogTravel[side]) >= 0.5 else { return }
+        let turn = jogTravel[side]
+        jogTravel[side] = 0
+        let want: BridgeControl = turn > 0 ? .searchFwd : .searchRev
+        if jogHeld[side] != want {
+            if let h = jogHeld[side] { button(h, side: side, on: false) }
+            button(want, side: side, on: true)
+            jogHeld[side] = want
+        }
+        // let go once the platter stops turning (sooner the more sensitive the setting)
+        jogRelease[side]?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.jogLetGo(side) }
+        jogRelease[side] = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15 / max(0.5, jogSensitivity), execute: w)
+    }
+    func jogLetGo(_ side: Int) {
+        jogRelease[side]?.cancel(); jogRelease[side] = nil
+        jogTravel[side] = 0
+        if let h = jogHeld[side] { button(h, side: side, on: false); jogHeld[side] = nil }
     }
     func jogTouch(side: Int, _ on: Bool) {
         sides[side].jogTouched = on
-        jogRemainder[side] = 0
-        button(.jogTouch, side: side, on: on)
+        if !on { jogLetGo(side) }
     }
     func browse(_ ticks: Int) { send(DeckBridgeMap.relative(.browse, deck: 0, ticks: ticks)) }
     func load(side: Int) { button(.load, side: side, on: true); button(.load, side: side, on: false) }
@@ -226,7 +271,8 @@ final class DeckBridge: ObservableObject {
         guard let f = DeckBridgeMap.feedback(m) else { return }
         switch f {
         case .button(let c, let deck, let on): sides.first { $0.deck == deck }?.set(c, on)
-        case .hotCue(let k, let deck, let on): if let s = sides.first(where: { $0.deck == deck }) { s.hot[k] = on }
+        case .hotCue(let k, let deck, let on): if let s = sides.first(where: { $0.deck == deck }) { s.hot[k] = on; s.padLit[0][k] = on }
+        case .pad(let b, let k, let deck, let on): if let s = sides.first(where: { $0.deck == deck }) { s.padLit[b.rawValue][k] = on }
         case .fx(_, let on): fxOn = on
         }
     }
