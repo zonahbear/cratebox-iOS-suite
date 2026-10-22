@@ -1,4 +1,5 @@
-name: iOS build
+name: iOS checks
+# Tests and simulator screenshots only; installs come from TestFlight (testflight.yml), sideloading is retired.
 # Manual only (Actions → iOS build → Run workflow, pick the branch): each run costs ~130 of the private repo's
 # monthly minutes (macOS counts 10x). TestFlight (testflight.yml) is the normal install route now.
 on:
@@ -28,42 +29,13 @@ jobs:
         run: |
           set -o pipefail
           cd ios/CrateboxKit && CRATEBOX_MUSIC="$RUNNER_TEMP/music" swift test -c release -Xswiftc -enable-testing 2>&1 | tee -a ../../ci.log
-      - name: App (unsigned IPA)
-        id: app
-        run: |
-          set -o pipefail
-          brew install xcodegen >/dev/null 2>&1 || true
-          cd ios && xcodegen generate 2>&1 | tail -3 | tee -a ../ci.log
-          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
-            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee "$RUNNER_TEMP/xcb.log" | grep -E "error:|warning: .*(deprecated|never used)|BUILD (SUCCEEDED|FAILED)" | head -150 | tee -a ../ci.log
-          APP=$(ls -d "$RUNNER_TEMP"/dd/Build/Products/Release-iphoneos/*.app | head -1)
-          mkdir -p "$RUNNER_TEMP/ipa/Payload" && cp -R "$APP" "$RUNNER_TEMP/ipa/Payload/"
-          (cd "$RUNNER_TEMP/ipa" && zip -qr ../CrateboxSuite.ipa Payload)
-          ls -la "$RUNNER_TEMP/CrateboxSuite.ipa" | tee -a ../ci.log
-      - name: Publish the IPA (release "ios-latest", main only, never from preview branches)
-        if: steps.app.outcome == 'success' && github.ref == 'refs/heads/main'
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          gh release view ios-latest >/dev/null 2>&1 || gh release create ios-latest --prerelease --target main --title "Cratebox iOS Suite (latest build)" --notes "Unsigned build of cratebox-iOS-suite main. Install with SideStore or AltStore."
-          gh release upload ios-latest "$RUNNER_TEMP/CrateboxSuite.ipa" --clobber
-          gh release edit ios-latest --notes "Unsigned build of cratebox-iOS-suite main, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC). Install with SideStore or AltStore." 
-          echo "PUBLISHED ios-latest from ${GITHUB_SHA::7}" | tee -a ci.log
-      - name: Publish a preview IPA (its own release per branch, "ios-preview-<branch>", preview branches only)
-        if: steps.app.outcome == 'success' && startsWith(github.ref, 'refs/heads/preview/')
-        env: { GH_TOKEN: "${{ github.token }}" }
-        run: |
-          # one release per preview branch, so two branches in flight don't overwrite each other's IPA
-          NAME="${GITHUB_REF_NAME#preview/}"; TAG="ios-preview-${NAME//\//-}"
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --prerelease --target main --title "Cratebox iOS Suite (preview: ${NAME})" --notes "Preview build of ${GITHUB_REF_NAME} for testing before it goes to main."
-          gh release upload "$TAG" "$RUNNER_TEMP/CrateboxSuite.ipa" --clobber
-          gh release edit "$TAG" --notes "Preview build of ${GITHUB_REF_NAME}, commit ${GITHUB_SHA::7} ($(date -u +%Y-%m-%d\ %H:%M) UTC), for testing before it goes to main. Install with SideStore or AltStore." 
-          echo "PUBLISHED $TAG from ${GITHUB_SHA::7}" | tee -a ci.log
       - name: Launch in the simulators (screenshots)
-        if: steps.app.outcome == 'success'
         continue-on-error: true
         timeout-minutes: 12
         run: |
           cd ios
+          brew install xcodegen >/dev/null 2>&1 || true
+          xcodegen generate 2>&1 | tail -3 | tee -a ../ci.log
           xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/dds" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|BUILD" | tee -a ../ci.log
           APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Release-iphonesimulator/*.app | head -1)
