@@ -4,6 +4,9 @@ plugins { kotlin("jvm") }
 java { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 kotlin { compilerOptions { jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17) } }
 
+// mixxx_maps.json comes straight from the iOS package, so both apps share one copy
+sourceSets { main { resources.srcDir("../../ios/CrateboxKit/Sources/CrateboxKit/Resources") } }
+
 dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     testImplementation(kotlin("test"))
