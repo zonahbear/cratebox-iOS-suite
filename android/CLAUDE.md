@@ -30,7 +30,17 @@ core/                 plain Kotlin/JVM port of ios/CrateboxKit (no Android impor
                       StickFS (DocumentsContract has no atomic rename-over: delete + rename, the journal covers it).
                       Journal JSON matches iOS (`when` = seconds since 2001), so recovery works across both apps.
   src/test/kotlin/... JUnit ports of CrateboxKitTests; system property cratebox.repo = repo root (fixtures)
-app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Access Framework
+platformcheck/        compiles app/.../platform against android-all (robolectric jar) so the platform layer is
+                      type-checked without an SDK: `gradle :platformcheck:compileKotlin`. Not a runtime test.
+app/src/main/kotlin/com/zonahbear/cratebox/platform/   Android layer (no UI yet, no app/build.gradle.kts yet)
+    AudioHost AudioDecoder Recorder   AAudio-less AudioTrack host, MediaCodec decode, wav/aac recording to MediaStore
+    MidiHost Main                     android.media.midi in/out (+ framer from core), main-thread helpers
+    PuffcoBle HeatController          HEAT: BluetoothGatt Lorax, SimPuffco; safety rules kept
+    SafStickFS AndroidSQLite          StickFS over DocumentsContract; SQLite.opener for OneLibrary
+    Library Devices USBSession USBPreview AndroidPrefs   library/folders, mounted sticks, Cratebox USB (gated)
+    RtpMidiSession DeckBridge         Deck Bridge: USB MIDI peripheral mode + own AppleMIDI session (Bonjour
+                                      _apple-midi._udp, ports 5004/5005+). No BLE MIDI peripheral on Android.
+    AppModel                          wires it all (decks, library views, MIDI learn, LEDs, HEAT, USB); ControlTarget
 ```
 
 ## Build / test
@@ -52,4 +62,9 @@ app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Acce
 
 - Phase 2 done (2026-10-22): all of CrateboxKit (preview/truecurve-usb) in :core, 64 tests green, every Swift
   test ported with the same expected values. Stick fixture: tests/fixtures/rekordbox_usb.
-- Phase 3+ (needs the Android SDK, so a session that reaches dl.google.com): :app (Performance Mode, HEAT, Deck Bridge via USB MIDI then RTP-MIDI, Cratebox USB).
+- Phase 3 platform layer done (2026-10-22): everything under platform/ compiles via :platformcheck; 83 core
+  tests green. Untested on a device. minSdk 29: no API 33+ calls without a Build.VERSION gate.
+- Manifest must set android:largeHeap (decoded decks are float PCM in RAM).
+- Phase 4 (needs the Android SDK, so a session that reaches dl.google.com): :app app/build.gradle.kts + manifest +
+  Compose UI over AppModel (Performance Mode, HEAT, Deck Bridge, Cratebox USB behind Proving Ground), signed
+  private APK (keys in GitHub secrets), manual-only CI.

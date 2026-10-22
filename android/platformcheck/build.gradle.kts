@@ -14,5 +14,6 @@ kotlin {
 dependencies {
     implementation(project(":core"))
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.2")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.9.0")
     compileOnly("org.robolectric:android-all:16-robolectric-13921718")
 }
