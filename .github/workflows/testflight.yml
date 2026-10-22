@@ -1,26 +1,29 @@
-# Signed App Store build of main, uploaded to TestFlight. ios.yml (unsigned IPA for SideStore, preview builds,
+# personal/heat ONLY: Jonah's own "Cratebox HEAT" app (bundle id com.zonahbear.cratebox.heat, its own App Store Connect
+# record), uploaded to TestFlight for internal testers and NEVER submitted for review. HEAT is removed from the real
+# app (com.zonahbear.cratebox.suite); this branch never merges back. Setup: ios/HEAT-APP.md.
+# Signed App Store build, uploaded to TestFlight. ios.yml (unsigned IPA for SideStore, preview builds,
 # tests, screenshots) is untouched and keeps running beside this. Until the six secrets below exist this
 # workflow just says so and passes, so merging it early turns nothing red.
 #   IOS_DIST_P12_BASE64  IOS_DIST_P12_PASSWORD   Apple Distribution certificate + private key (.p12, base64)
-#   IOS_PROFILE_BASE64                           App Store provisioning profile for com.zonahbear.cratebox.suite
+#   IOS_PROFILE_HEAT_BASE64                      App Store provisioning profile for com.zonahbear.cratebox.heat
 #   ASC_KEY_ID  ASC_ISSUER_ID  ASC_KEY_P8        App Store Connect API key (the .p8 file's text, as is)
 # The team ID is read from the profile. Build number = run number.attempt, so re-runs never collide.
 name: TestFlight
 on:
   push:
-    branches: [main, preview/truecurve-usb]   # this branch too: Jonah asked for its build on TestFlight
+    branches: [personal/heat]
     paths: ["ios/**", ".github/workflows/testflight.yml"]
   workflow_dispatch:
 permissions:
   contents: write
-concurrency: { group: testflight, cancel-in-progress: false }
+concurrency: { group: testflight-heat, cancel-in-progress: false }
 jobs:
   upload:
     runs-on: macos-15
     env:
       P12: ${{ secrets.IOS_DIST_P12_BASE64 }}
       P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
-      PROFILE: ${{ secrets.IOS_PROFILE_BASE64 }}
+      PROFILE: ${{ secrets.IOS_PROFILE_HEAT_BASE64 }}
       ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
@@ -71,7 +74,7 @@ jobs:
           TEAM=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$RUNNER_TEMP/profile.plist")
           APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" "$RUNNER_TEMP/profile.plist")
           echo "PROFILE '$NAME' $UUID team $TEAM app $APPID expires $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' "$RUNNER_TEMP/profile.plist")" | tee -a ci.log
-          [ "$APPID" = "$TEAM.com.zonahbear.cratebox.suite" ] || { echo "PROFILE is for $APPID, not com.zonahbear.cratebox.suite" | tee -a ci.log; exit 1; }
+          [ "$APPID" = "$TEAM.com.zonahbear.cratebox.heat" ] || { echo "PROFILE is for $APPID, not com.zonahbear.cratebox.heat" | tee -a ci.log; exit 1; }
           # Xcode 16 reads the second folder; older Xcodes the first
           for d in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
             mkdir -p "$d" && cp "$RUNNER_TEMP/app.mobileprovision" "$d/$UUID.mobileprovision"
@@ -105,7 +108,7 @@ jobs:
             <key>teamID</key><string>${{ steps.sign.outputs.team }}</string>
             <key>signingCertificate</key><string>Apple Distribution</string>
             <key>provisioningProfiles</key><dict>
-              <key>com.zonahbear.cratebox.suite</key><string>${{ steps.sign.outputs.name }}</string>
+              <key>com.zonahbear.cratebox.heat</key><string>${{ steps.sign.outputs.name }}</string>
             </dict>
             <key>uploadSymbols</key><true/>
           </dict></plist>
@@ -134,4 +137,4 @@ jobs:
           { echo "run ${{ github.run_id }} sha ${{ github.sha }} build $BUILD at $(date -u)"; grep -E "error:|ERROR|FAIL|BUILD|ARCHIVE|PROFILE|UPLOADED|identities|CODESIGN|\*\* " ci.log | head -200; echo "---- tail"; tail -60 ci.log; } > testflight.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
-          git add -f testflight.txt && git commit -qm "testflight ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs-testflight
+          git add -f testflight.txt && git commit -qm "testflight ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs-testflight-heat

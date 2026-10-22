@@ -28,7 +28,7 @@ targets:
     info:
       path: App/Info.plist
       properties:
-        CFBundleDisplayName: Cratebox Suite
+        CFBundleDisplayName: Cratebox HEAT
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
@@ -44,7 +44,7 @@ targets:
         UIUserInterfaceStyle: Dark
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.zonahbear.cratebox.suite
+        PRODUCT_BUNDLE_IDENTIFIER: com.zonahbear.cratebox.heat
         SWIFT_OBJC_BRIDGING_HEADER: App/Cratebox-Bridging-Header.h
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # CB_* are set only by testflight.yml. Signing is switched on here, for the app alone, rather than on the
