@@ -21,6 +21,14 @@ core/                 plain Kotlin/JVM port of ios/CrateboxKit (no Android impor
                       from ios/CrateboxKit/Sources/CrateboxKit/Resources via a resources srcDir). Core is not
                       observable: the app redraws from it each frame; after editing core.mixer call mixerChanged()
     DeckBridgeMap.kt  = DeckBridgeMap.swift; rekordboxCSV() must equal deckbridge/Cratebox Deck Bridge.midi.csv
+    PDB.kt PDBWrite.kt ANLZ.kt RekordboxXML.kt   export.pdb / analysis files / XML (playlist writer byte-identical
+                      to the web app's). UInt32 fields are Longs.
+    SQLCipher.kt OneLibrary.kt   javax.crypto codec; OneLibrary via SQLiteDB, a seam: set SQLite.opener (app:
+                      android.database.sqlite, not written yet; tests: JdbcSQLite.install(), sqlite-jdbc)
+    USBLibrary.kt USBHardware.kt USBPreflight.kt USBSafeWrite.kt USBTrackWrite.kt   stick files through StickFS
+                      (paths relative to the stick root). FileStickFS for tests / real paths; the app needs a SAF
+                      StickFS (DocumentsContract has no atomic rename-over: delete + rename, the journal covers it).
+                      Journal JSON matches iOS (`when` = seconds since 2001), so recovery works across both apps.
   src/test/kotlin/... JUnit ports of CrateboxKitTests; system property cratebox.repo = repo root (fixtures)
 app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Access Framework
 ```
@@ -42,7 +50,6 @@ app/                  (not yet) Compose app: audio host, MIDI, BLE, Storage Acce
 
 ## Open work
 
-- Phase 2: port the rest of CrateboxKit. Reference branch: preview/truecurve-usb. Done: TrueCurve, DSP,
-  Analysis, Core, Controller, DeckBridgeMap (7 test classes, all green). Next: PDB/ANLZ/OneLibrary/SQLCipher,
-  USBLibrary, preflight, SafeWrite, writers (ports of PDBTests, USBTests, USBWriterTests).
-- Phase 3+: :app (Performance Mode, HEAT, Deck Bridge via USB MIDI then RTP-MIDI, Cratebox USB).
+- Phase 2 done (2026-10-22): all of CrateboxKit (preview/truecurve-usb) in :core, 64 tests green, every Swift
+  test ported with the same expected values. Stick fixture: tests/fixtures/rekordbox_usb.
+- Phase 3+ (needs the Android SDK, so a session that reaches dl.google.com): :app (Performance Mode, HEAT, Deck Bridge via USB MIDI then RTP-MIDI, Cratebox USB).
