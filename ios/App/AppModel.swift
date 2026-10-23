@@ -328,11 +328,12 @@ final class AppModel: ObservableObject, ControlTarget {
 
     // ---- ControlTarget: what the controller's actions do ----
     var fourDecks: Bool { core.four }
-    func absValue(_ name: String, deck: Int) -> Double? { core.mixerValue(name, deck) }
+    func absValue(_ name: String, deck: Int) -> Double? { name == "micVol" ? WatchMicReceiver.shared.volume : core.mixerValue(name, deck) }
     func setAbs(_ name: String, deck: Int, _ v: Double) {
         switch name {
         case "tempo": core.decks[deck].setPitch(v * 2 - 1)        // top = slower, bottom = faster, like a CDJ
         case "fxDepth": core.fx.setDepth(v)
+        case "micVol": DispatchQueue.main.async { WatchMicReceiver.shared.volume = v }
         default: core.setMixer(name, deck, v)
         }
     }

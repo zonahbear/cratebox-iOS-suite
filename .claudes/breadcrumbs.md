@@ -65,3 +65,9 @@
 ### 2026-10-23 06:55 Cratebox Mic: Bluetooth fallback didn't connect on build 14
 - Jonah: "still no bluetooth". Cause unknown (WC errors were swallowed). Build 15 change: phone starts Watch Connectivity at app launch (not on Listen, so a background launch by the watch still has a delegate), both sides show the link state (activated / reachable / app installed / last error), the watch's timeout message includes it.
 - Next: Jonah reads the watch's "BT …" line and the phone's "Watch link …" line with phone Wi-Fi off. If "phone NOT in reach" or errors persist with the phone app open, WC can't carry it during a CallKit call → Wi-Fi + travel router.
+
+### 2026-10-23 08:05 Cratebox Mic: Wi-Fi only; gain, board volume, feedback filter
+- Bluetooth (Watch Connectivity) fallback: no packet ever reached the phone with Wi-Fi off; phone saw "watch app open: no". Jonah moved on ("right"), so treat the mic as Wi-Fi only. The WC code is still in, harmless.
+- Added: Settings → Apple Watch as a mic → Mic gain (-12...+24 dB, `cb.watchMicGainDb`), Feedback filter (`cb.watchMicFeedback`, `ios/App/MicFeedback.swift`: 100 Hz HPF + up to 8 auto notches, Q 30, detector = peak ≥25 dB over bins 3-8 away, same bin, not fading, ~200 ms), notch list + Reset.
+- Board: MIC knob in the mixer (top bar on iPhone, master row on iPad) while Listen is on; `cb.watchMicVol`, squared curve, MIDI-learnable action `micVol` ("Watch mic volume"). The FLX4 MIC LEVEL knob sends no MIDI (absent from Mixxx's full FLX4 mapping; Pioneer's MIDI list not reachable), so it can't be mapped.
+- Soft knee above 0.8 on the mic in mix(). Untested on device; the detector thresholds are first guesses.

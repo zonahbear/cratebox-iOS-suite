@@ -18,6 +18,19 @@ struct WatchMicView: View {
             } footer: {
                 Text("On the watch, open Cratebox Mic and tap Go live. It finds this phone by itself on the same Wi-Fi; if it doesn't, type the address above into the watch. With no shared Wi-Fi it falls back to Bluetooth (slower).")
             }
+            Section {
+                LabeledContent("Mic gain") {
+                    HStack {
+                        Slider(value: $mic.gainDb, in: -12...24, step: 1).frame(width: 180)
+                        Text("\(mic.gainDb >= 0 ? "+" : "")\(Int(mic.gainDb)) dB").monospacedDigit().frame(width: 56, alignment: .trailing)
+                    }
+                }
+                Toggle("Feedback filter", isOn: $mic.feedbackOn)
+                LabeledContent("Notches", value: mic.notches.isEmpty ? "none yet" : mic.notches.map { $0 >= 1000 ? String(format: "%.1f kHz", $0 / 1000) : "\(Int($0)) Hz" }.joined(separator: ", "))
+                Button("Reset notches") { mic.resetFeedback() }.disabled(mic.notches.isEmpty)
+            } header: { Text("Gain and feedback") } footer: {
+                Text("Mic gain is set once for the room. The MIC knob in the mixer is the live volume on top of it; map it to a knob on your controller in Settings → Controller → MIDI learn → Watch mic volume (the FLX4's own MIC LEVEL knob sends no MIDI, so it can't be used). The feedback filter cuts rumble below 100 Hz and drops a narrow notch on any tone that rings steadily for about 0.2 s, up to 8. Ring the room out before the set: raise the gain until it just starts to howl, let it notch, repeat.")
+            }
             if mic.listening {
                 Section("Live") {
                     HStack {
@@ -28,7 +41,7 @@ struct WatchMicView: View {
                     }
                     Toggle("Mute (phone)", isOn: $mic.phoneMuted)
                     if mic.watchMuted { Text("Muted on the watch").font(.caption).foregroundStyle(Theme.muted) }
-                    LabeledContent("Level (phone)") { Slider(value: $mic.phoneLevel, in: 0...1.5).frame(width: 200) }
+                    LabeledContent("Volume (board)", value: "\(Int(mic.volume * 100))%")
                 }
                 Section {
                     Picker("Jitter buffer", selection: $mic.targetMs) { ForEach([20, 40, 60, 100, 150], id: \.self) { Text("\($0) ms").tag($0) } }
