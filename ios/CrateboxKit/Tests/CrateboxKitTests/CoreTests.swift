@@ -68,6 +68,14 @@ final class CoreTests: XCTestCase {
         d.cueDown(); render(e, c, secs: 0.1)        // playing: back to the cue point and stop
         XCTAssertFalse(d.playing)
     }
+    func testUnloadForEject() {
+        let (c, e) = makeCore(); load(c, 0, bpm: 120)
+        let d = c.decks[0]
+        d.togglePlay(); render(e, c, secs: 0.5)
+        d.unload(); render(e, c, secs: 0.1)
+        XCTAssertFalse(d.playing); XCTAssertFalse(d.loaded); XCTAssertNil(d.track)
+        XCTAssertNil(c.engine.decks[0].track)        // the engine let go of the audio too
+    }
     func testSyncHalftimeAndBeatLock() {
         let (c, e) = makeCore(); load(c, 0, bpm: 140); load(c, 1, bpm: 70.5)
         render(e, c, secs: 0.1)

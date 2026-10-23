@@ -264,6 +264,13 @@ public final class DeckModel: ObservableObject, Identifiable {
         loading = false; track = nil; ana = nil; duration = 0
         core.status("Couldn't load that file: \(err)", 8)
     }
+    /// empty the deck (its drive is being ejected): stopped, and the audio let go
+    public func unload() {
+        if playing { setPlaying(false) }
+        loading = false; track = nil; ana = nil; mono = nil; duration = 0
+        loop = Loop(); previewing = false
+        core.engine.post([.deck(i, .unload), .track(i, nil)])
+    }
     public func finishLoad(_ t: TrackInfo, pcm: PCMTrack, analysis a: DeckAnalysis, mono: (x: [Float], fs: Double)?) {
         guard track === t else { return }
         sr = pcm.sampleRate; duration = Double(pcm.count) / pcm.sampleRate
