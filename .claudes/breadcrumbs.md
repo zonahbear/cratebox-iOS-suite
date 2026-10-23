@@ -51,3 +51,17 @@
   security-scope start fixed in addFolder.
 - CI: `-demo -eject [-stopped]` shots (stand-in "DJ USB"). Not tested on a real stick yet.
 - Next: check CI run, screenshots to Jonah, port to personal/heat (his OK before pushing it: it uploads to TestFlight).
+
+## 2026-10-23 19:40: SYNC retimed a playing deck when the other deck loaded (branch claude/project-thread-wtndnj)
+
+- Jonah's repros: 140 playing with SYNC, load a 75 on the other deck → 75; 72.5 playing synced, load a 72.5 → 36.25.
+- Cause (Core.swift DeckModel, same in cratebox.html Deck): master() preferred an unsynced deck over a playing one, so
+  the playing synced deck followed the freshly loaded, stopped deck; syncTick re-picked half/double time only when
+  the master *object* changed, so a new track on the same deck kept the old multiplier (½ from a 145 → 36.25).
+- Fix: a playing synced deck only follows the playing deck it already follows (syncWith + syncTrack). When that
+  master stops or loads, it holds its tempo and leads (syncSince set oldest). rate() uses syncRate whenever synced,
+  setSync with no master starts from the fader's rate, the fader moves a leader relatively, beginLoad resets sync state.
+- Tests: CoreTests testLoadingTheOtherDeckNeverRetimesAPlayingSyncedDeck / testSyncedDeckWithNoMasterHoldsWhenATrackLoads
+  (not run: no Swift here; ios.yml is the compiler). Web: Cratebox tests/test_sync.py 14/14 with the new checks.
+- Not changed: SYNC off still jumps to the tempo fader's position (old behaviour).
+- personal/heat still needs the same commit (Core.swift applies cleanly there; push to it uploads TestFlight).
