@@ -2,14 +2,16 @@
 // watchOS only lets a third-party app open its own network connection during a CallKit call (TN3135), so going
 // live starts an outgoing call "to Cratebox". While the call runs: the mic goes into a sink node, a 5 ms timer
 // turns it into 24 kHz 16-bit packets and sends them over UDP to the phone, found by Bonjour or a typed address.
+// With no shared Wi-Fi (no reply over UDP for 2 s) the same packets go by Watch Connectivity instead, 4 a message.
 import AVFoundation
 import CallKit
 import Network
 import os
 import SwiftUI
+import WatchConnectivity
 import WatchKit
 
-final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
+final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDelegate {
     @Published private(set) var live = false
     @Published private(set) var status = "Ready"
     @Published private(set) var link = ""
@@ -22,6 +24,8 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
     @Published private(set) var connected = false
     /// connected, but nothing back from the phone for 3 s
     @Published private(set) var lost = false
+    /// "Wi-Fi" or "Bluetooth": which way the voice is going
+    @Published private(set) var path = ""
     @Published private(set) var inputInfo = ""
     @Published var muted = false { didSet { if oldValue != muted { syncMute() } } }
     /// 0...2, the crown
@@ -45,6 +49,8 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
     private var pingID: UInt32 = 0
     private var tick = 0
     private var lastHeard = 0.0
+    private var udpHeard = 0.0
+    private var wcBatch: [Data] = []
     private var giveUp: DispatchWorkItem?
     // resampler state (on `queue`)
     private var pending: [Float] = []
@@ -63,7 +69,10 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
         provider = CXProvider(configuration: cfg)
         super.init()
         provider.setDelegate(self, queue: nil)
+        if WCSession.isSupported() { WCSession.default.delegate = self; WCSession.default.activate() }
     }
+
+    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {}
 
     func askForMic() { AVAudioApplication.requestRecordPermission { ok in if !ok { DispatchQueue.main.async { self.status = "Mic not allowed: Settings → Privacy → Microphone" } } } }
 
@@ -125,7 +134,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
             // the network only works during the call, so the call has to start first; give the phone 10 s to answer
             let w = DispatchWorkItem { [weak self] in
                 guard let self, self.live, !self.connected else { return }
-                self.fail("No answer from Cratebox on the phone. Is Listen on, and are both on the same Wi-Fi?")
+                self.fail("No answer from Cratebox on the phone. Is Listen on in Cratebox HEAT, and is the phone nearby?")
             }
             self.giveUp = w
             DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: w)
@@ -222,22 +231,39 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
             let used = min(Int(pos), pending.count - 1)
             if used > 0 { pending.removeFirst(used); pos -= Double(used) }
         }
-        let g = Float(gain), m = muted
+        let g = Float(gain), m = muted, now = ProcessInfo.processInfo.systemUptime
+        // Wi-Fi while the phone answers over it; otherwise Watch Connectivity (Bluetooth) if the phone is reachable
+        let udp = ready && now - udpHeard < 2
+        let wc = WCSession.default.activationState == .activated && WCSession.default.isReachable
         while out.count >= WatchMic.packetSamples {
             let chunk = Array(out.prefix(WatchMic.packetSamples))
             out.removeFirst(WatchMic.packetSamples)
             seq &+= 1
-            if ready { conn?.send(content: WatchMicPacket.audio(seq: seq, gain: g, muted: m, samples: chunk).encode(), completion: .idempotent) }
+            let pkt = WatchMicPacket.audio(seq: seq, gain: g, muted: m, samples: chunk).encode()
+            if udp { conn?.send(content: pkt, completion: .idempotent) } else if wc { wcBatch.append(pkt) }
         }
+        if !udp, wcBatch.count >= 4 {
+            if wc { WCSession.default.sendMessageData(WatchMicFrames.join(wcBatch), replyHandler: nil, errorHandler: nil) }
+            wcBatch.removeAll(keepingCapacity: true)
+        }
+        if udp { wcBatch.removeAll(keepingCapacity: true) }
         tick += 1
-        if tick % 200 == 0 || (!connected && tick % 40 == 0), ready {   // a ping a second, 5 a second until the phone answers
+        if tick % 200 == 0 || (!connected && tick % 40 == 0) {   // a ping a second, 5 a second until the phone answers
             pingID &+= 1
-            conn?.send(content: WatchMicPacket.ping(id: pingID, sent: ProcessInfo.processInfo.systemUptime).encode(), completion: .idempotent)
+            let ping = WatchMicPacket.ping(id: pingID, sent: now).encode()
+            if ready { conn?.send(content: ping, completion: .idempotent) }
+            if !udp, wc {
+                WCSession.default.sendMessageData(WatchMicFrames.join([ping]), replyHandler: { [weak self] d in
+                    guard let self else { return }
+                    self.queue.async { for f in WatchMicFrames.split(d) { if let p = WatchMicPacket.decode(f) { self.incoming(p) } } }
+                }, errorHandler: nil)
+            }
         }
         if tick % 20 == 0 {                          // meter at 10 Hz
             let p = peak; peak = 0
-            let gone = connected && ProcessInfo.processInfo.systemUptime - lastHeard > 3
-            DispatchQueue.main.async { self.level = p; if self.lost != gone { self.lost = gone } }
+            let gone = connected && now - lastHeard > 3
+            let way = udp ? "Wi-Fi" : wc ? "Bluetooth" : "no link"
+            DispatchQueue.main.async { self.level = p; if self.lost != gone { self.lost = gone }; if self.path != way { self.path = way } }
         }
     }
 
@@ -287,18 +313,24 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
         c.receiveMessage { [weak self] data, _, _, error in
             guard let self else { return }
             if let data, let p = WatchMicPacket.decode(data) {
-                switch p {
-                case let .pong(_, sent):
-                    self.heard()
-                    let ms = Int((ProcessInfo.processInfo.systemUptime - sent) * 1000)
-                    DispatchQueue.main.async { self.rttMs = ms }
-                case let .stats(buffered, under, lost):
-                    self.heard()
-                    DispatchQueue.main.async { self.phoneBufferMs = Int(buffered); self.phoneDropouts = Int(under); self.phoneLost = Int(lost) }
-                default: break
-                }
+                self.udpHeard = ProcessInfo.processInfo.systemUptime
+                self.incoming(p)
             }
             if error == nil, self.conn === c { self.receive(c) }
+        }
+    }
+
+    /// on `queue`: a pong or stats from the phone, by either path
+    private func incoming(_ p: WatchMicPacket) {
+        switch p {
+        case let .pong(_, sent):
+            heard()
+            let ms = Int((ProcessInfo.processInfo.systemUptime - sent) * 1000)
+            DispatchQueue.main.async { self.rttMs = ms }
+        case let .stats(buffered, under, lost):
+            heard()
+            DispatchQueue.main.async { self.phoneBufferMs = Int(buffered); self.phoneDropouts = Int(under); self.phoneLost = Int(lost) }
+        default: break
         }
     }
 }

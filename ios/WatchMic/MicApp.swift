@@ -62,6 +62,7 @@ struct MicView: View {
 
     private var stats: some View {
         VStack(alignment: .leading, spacing: 2) {
+            Text("Via \(mic.path)")
             Text(mic.link)
             Text("Round trip " + (mic.rttMs.map { "\($0) ms" } ?? "—"))
             Text("Phone buffer " + (mic.phoneBufferMs.map { "\($0) ms" } ?? "—") + " · drops \(mic.phoneDropouts) · lost \(mic.phoneLost)")

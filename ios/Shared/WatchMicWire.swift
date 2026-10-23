@@ -59,6 +59,30 @@ enum WatchMicPacket {
     }
 }
 
+/// Watch Connectivity (the Bluetooth fallback when there's no shared Wi-Fi) carries several packets per message:
+/// each one prefixed with its length as a little-endian UInt16.
+enum WatchMicFrames {
+    static func join(_ packets: [Data]) -> Data {
+        var d = Data()
+        for p in packets {
+            withUnsafeBytes(of: UInt16(p.count).littleEndian) { d.append(contentsOf: $0) }
+            d.append(p)
+        }
+        return d
+    }
+    static func split(_ d: Data) -> [Data] {
+        var out = [Data](), i = d.startIndex
+        while i + 2 <= d.endIndex {
+            let n = Int(d[i]) | Int(d[i + 1]) << 8
+            i += 2
+            guard i + n <= d.endIndex else { break }
+            out.append(d.subdata(in: i..<(i + n)))
+            i += n
+        }
+        return out
+    }
+}
+
 /// Fixed-size float FIFO shared by a real-time audio thread and a normal one. Nothing allocates after init; the
 /// audio side uses the try… calls, which give up (return nil) rather than wait if the other side holds the lock.
 final class FloatRing {
