@@ -15,6 +15,9 @@ final class WatchMicReceiver: ObservableObject {
     @Published private(set) var status = "Off"
     @Published private(set) var peer = ""
     @Published private(set) var bufferedMs = 0
+    /// the watch's round trip and late drops, as the watch reports them (its own screen is under the call screen)
+    @Published private(set) var watchRttMs: Int?
+    @Published private(set) var watchLateDrops = 0
     @Published private(set) var underruns = 0
     @Published private(set) var lost = 0
     @Published private(set) var watchMuted = false
@@ -274,6 +277,8 @@ final class WatchMicReceiver: ObservableObject {
             }
         case let .ping(id, sent):
             send(WatchMicPacket.pong(id: id, sent: sent).encode())
+        case let .report(rtt, late):
+            DispatchQueue.main.async { self.watchRttMs = rtt > 0 ? Int(min(rtt, 60_000)) : nil; self.watchLateDrops = Int(late) }
         default: break
         }
     }

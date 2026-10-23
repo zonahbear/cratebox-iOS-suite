@@ -19,6 +19,8 @@ enum WatchMicPacket {
     case pong(id: UInt32, sent: Double)
     /// phone → watch: how the phone's jitter buffer is doing
     case stats(bufferedMs: Float, underruns: UInt32, lost: UInt32)
+    /// watch → phone, once a second: the watch's own numbers, for the phone's screen (the call screen hides the watch's)
+    case report(rttMs: UInt32, lateDrops: UInt32)
 
     func encode() -> Data {
         var d = Data()
@@ -33,6 +35,7 @@ enum WatchMicPacket {
         case let .ping(id, sent): d.append(contentsOf: [UInt8(2), 0, 0, 0]); u32(id); f64(sent)
         case let .pong(id, sent): d.append(contentsOf: [UInt8(3), 0, 0, 0]); u32(id); f64(sent)
         case let .stats(ms, under, lost): d.append(contentsOf: [UInt8(4), 0, 0, 0]); f32(ms); u32(under); u32(lost)
+        case let .report(rtt, late): d.append(contentsOf: [UInt8(5), 0, 0, 0]); u32(rtt); u32(late)
         }
         return d
     }
@@ -53,6 +56,7 @@ enum WatchMicPacket {
             case 2: return b.count >= 16 ? .ping(id: u32(4), sent: f64(8)) : nil
             case 3: return b.count >= 16 ? .pong(id: u32(4), sent: f64(8)) : nil
             case 4: return b.count >= 16 ? .stats(bufferedMs: f32(4), underruns: u32(8), lost: u32(12)) : nil
+            case 5: return b.count >= 12 ? .report(rttMs: u32(4), lateDrops: u32(8)) : nil
             default: return nil
             }
         }

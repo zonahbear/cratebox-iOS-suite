@@ -97,3 +97,7 @@
   packets gather meanwhile (bigger messages), capped at 10 (100 ms), oldest dropped ("late drops"). Pings ride along.
 - Wi-Fi lag report: code path unchanged since build 20; suspected link mismatch (both apps default Bluetooth). Asked
   Jonah to set Link = Wi-Fi on both and read the watch's "Via". Next idea if confirmed: phone accepts both links always.
+- 19:05 Watch log from Jonah: no crashes; WC goes unreachable ~0.5 s into every CallKit call (Auto = Wi-Fi in
+  practice); Wi-Fi sessions really used UDP, so the link-mismatch theory was wrong. Watch stats are hidden under the
+  call screen, so a new `.report(rttMs, lateDrops)` packet (type 5) goes with each ping and the phone shows
+  "Round trip (watch)" / "Late drops (watch)" under Link. Wi-Fi lag cause still open (need Buffered now + output route).

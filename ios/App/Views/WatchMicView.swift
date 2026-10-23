@@ -77,10 +77,12 @@ struct WatchMicView: View {
                 Section {
                     Picker("Jitter buffer", selection: $mic.targetMs) { ForEach([20, 40, 60, 100, 150], id: \.self) { Text("\($0) ms").tag($0) } }
                     LabeledContent("Buffered now", value: "\(mic.bufferedMs) ms")
+                    LabeledContent("Round trip (watch)", value: mic.watchRttMs.map { "\($0) ms" } ?? "—")
+                    LabeledContent("Late drops (watch)", value: "\(mic.watchLateDrops)")
                     LabeledContent("Dropouts", value: "\(mic.underruns)")
                     LabeledContent("Lost packets", value: "\(mic.lost)")
                 } header: { Text("Link") } footer: {
-                    Text("Delay you hear ≈ the watch's own audio buffer + half the round trip shown on the watch + the jitter buffer + this phone's output. Measure the real total with a clap test. Lower the jitter buffer until dropouts start, then go one step up.")
+                    Text("Delay you hear ≈ the watch's own audio buffer + half the round trip + the jitter buffer + this phone's output. Measure the real total with a clap test. Lower the jitter buffer until dropouts start, then go one step up.")
                 }
             }
             Section {

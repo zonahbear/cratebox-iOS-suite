@@ -69,6 +69,8 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
     static let wcMaxBatch = 10
     /// times the watch threw away audio it was too late to send (on `queue`)
     private var backlogDrops = 0
+    /// the last round trip (ms, on `queue`), sent on to the phone
+    private var lastRtt = 0
     /// the most mic audio allowed to wait on the watch (frames at the mic's rate), set when the mic starts
     private var keepFrames = 1440
     /// the link chosen when going live, read on `queue`
@@ -356,11 +358,13 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
         // too much waiting for a free send: drop the oldest, never let it queue up
         if wcBatch.count > MicCall.wcMaxBatch { wcBatch.removeFirst(wcBatch.count - MicCall.wcMaxBatch); backlogDrops += 1 }
         tick += 1
-        var ping: Data?
+        var ping: [Data]?
         if tick % 200 == 0 || (!connected && tick % 40 == 0) {   // a ping a second, 5 a second until the phone answers
             pingID &+= 1
-            let p = WatchMicPacket.ping(id: pingID, sent: now).encode()
-            if ready { conn?.send(content: p, completion: .idempotent) }
+            // with the ping goes the last round trip, so the phone can show it while the call screen covers ours
+            let p = [WatchMicPacket.ping(id: pingID, sent: now).encode(),
+                     WatchMicPacket.report(rttMs: UInt32(lastRtt), lateDrops: UInt32(backlogDrops)).encode()]
+            if ready { for x in p { conn?.send(content: x, completion: .idempotent) } }
             ping = p
         }
         // an answer that never comes (no reply and no error) mustn't hold a slot forever
@@ -368,7 +372,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
         // Bluetooth: at most 2 messages on the way. While they are, packets gather here (bigger messages, fewer of
         // them), so the link carries what it can and the delay stays put instead of growing.
         if !udp, wc, wcInFlight.count < MicCall.wcMaxInFlight, wcBatch.count >= 4 || (ping != nil && wcInFlight.isEmpty) {
-            if let ping { wcBatch.append(ping) }
+            if let ping { wcBatch += ping }
             sendWC(wcBatch)
             wcBatch.removeAll(keepingCapacity: true)
         }
@@ -459,6 +463,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
         case let .pong(_, sent):
             heard()
             let ms = Int(max(0, min(60_000, (ProcessInfo.processInfo.systemUptime - sent) * 1000)))
+            lastRtt = ms
             DispatchQueue.main.async { self.rttMs = ms }
         case let .stats(buffered, under, lost):
             heard()
