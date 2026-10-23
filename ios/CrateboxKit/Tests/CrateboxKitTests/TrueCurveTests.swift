@@ -98,4 +98,39 @@ final class TrueCurveTests: XCTestCase {
     }
 
     func hex(_ s: String) -> [UInt8] { stride(from: 0, to: s.count, by: 2).map { UInt8(s.dropFirst($0).prefix(2), radix: 16)! } }
+
+    /// PUFF: a HOLD at 500°F on the simulator; resting reads nothing, a hard draw reads a lot, and letting go
+    /// lets go within a couple of seconds
+    func testPuffDropFollowsADraw() {
+        var h = TC.SimHeater(), m = TC.PuffDrop(hold: 500)
+        h.slots[0] = (500, 120); h.y = 495; h.start()
+        var t = 0.0, peak = 0.0, rest = 0.0, after = 1.0
+        var noise = SystemRandomNumberGenerator()
+        while t < 25 {
+            h.airflow = t >= 10 && t < 14 ? 1 : 0
+            for _ in 0..<10 { h.advance(0.01) }
+            t += 0.1
+            let a = m.add(t, h.y + Double.random(in: -0.6...0.6, using: &noise))
+            if t < 10 && t > 2 { rest = max(rest, a) }
+            if t >= 10 && t < 14 { peak = max(peak, a) }
+            if t > 17 { after = min(after, a) }
+        }
+        XCTAssertEqual(rest, 0, "noise at rest isn't a hit")
+        XCTAssertGreaterThan(peak, 0.35)
+        XCTAssertEqual(after, 0, "the warble lets go once the draw stops")
+    }
+
+    func testPuffWarbleStaysFinite() {
+        let sr = 48000.0, fx = FxUnit(sampleRate: sr), n = 128
+        let l = UnsafeMutablePointer<Float>.allocate(capacity: n), r = UnsafeMutablePointer<Float>.allocate(capacity: n)
+        defer { l.deallocate(); r.deallocate() }
+        fx.beat.set(fx: .puff, depth: 1, on: true, mod: 1)
+        var k = 0, energy = 0.0
+        for b in 0..<400 {
+            for i in 0..<n { let v = Float(sin(Double(k) * 2 * .pi * 440 / sr)) * 0.5; l[i] = v; r[i] = v; k += 1 }
+            fx.process(l, r, n, time: Double(b * n) / sr)
+            for i in 0..<n { XCTAssertTrue(l[i].isFinite && abs(l[i]) <= 0.51); energy += Double(l[i] * l[i]) }
+        }
+        XCTAssertGreaterThan(energy, 1000, "the tone still comes through")
+    }
 }

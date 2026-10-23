@@ -141,11 +141,47 @@ public enum TrueCurve {
         }
     }
 
+    /// PUFF (Beat FX): turns a HOLD's bowl temperature into an effect amount. The device holds one temperature;
+    /// a draw cools the bowl and the heater fights back, so the dip below the settled temperature says how hard
+    /// you're hitting it. The settled temperature jumps up to any higher reading, stays put while the bowl is
+    /// falling (a pull), follows a recovery down in ~1.5 s (you've stopped, so the warble lets go) and drifts to
+    /// a steady reading in ~10 s. Nothing reads until the bowl first reaches the hold temperature (the preheat
+    /// climb isn't a hit). Readings ~10 a second, ±0.6°F noise in the simulator.
+    public struct PuffDrop {
+        /// drops under `dead` °F are noise; `full` °F of drop is the whole effect
+        public var dead = 3.0, full = 40.0
+        public private(set) var settled: Double? = nil, drop = 0.0, amount = 0.0, rate = 0.0
+        let hold: Double
+        var last: Double? = nil, lastY = 0.0
+        public init(hold: Double, full: Double = 40) { self.hold = hold; self.full = max(full, dead + 1) }
+        /// one reading (°F, nil = none) at time t (s); returns the amount, 0...1
+        public mutating func add(_ t: Double, _ y: Double?) -> Double {
+            guard let y else { return amount }
+            let dt = last.map { min(max(t - $0, 0), 1) } ?? 0
+            last = t
+            guard var b = settled else {
+                if y >= hold - 12 { settled = y; lastY = y }
+                return 0
+            }
+            if dt > 0 { rate += ((y - lastY) / dt - rate) * (1 - exp(-dt / 0.4)) }     // °F/s, smoothed
+            lastY = y
+            // never above the hold temperature + a little: an overshoot isn't the new normal
+            if y > b { b = min(y, hold + 10) }
+            else if rate >= -1 { b += (y - b) * (1 - exp(-dt / (rate > 1 ? 1.5 : 10))) }
+            settled = b
+            drop = max(0, b - y)
+            amount = clamp((drop - dead) / (full - dead), 0, 1)
+            return amount
+        }
+    }
+
     /// the simulator's heater (the app's Simulator device and the tests): a "truth" model that differs from the
     /// driver's default, a dead time on live targets, and a device that ends its own cycle after the slot's time
     public struct SimHeater {
         public var truth = HeaterModel(tau: 3.0, heatMax: 15, coolK: 0.011, dead: 0.45)
         public var y = 74.0, u = 74.0, state = 5, slotIdx = 0
+        /// a draw on the device (0 = none, 1 = a hard rip): extra cooling the heater has to fight, for PUFF
+        public var airflow = 0.0
         public var slots: [(temp: Double, time: Double)] = Array(repeating: (485, 45), count: 4)
         public private(set) var clock = 0.0
         var cmds: [(at: Double, u: Double)] = [], endAt = 0.0
@@ -154,7 +190,7 @@ public enum TrueCurve {
             clock += dt
             while let c = cmds.first, c.at <= clock { u = c.u; cmds.removeFirst() }
             let heating = state == 7 || state == 8
-            y = plantStep(y, heating ? u : 70, dt, truth)
+            y = plantStep(y, heating ? u : 70, dt, truth, extraCool: airflow * 12)
             if state == 7 && y >= u - 6 { state = 8; endAt = clock + slots[slotIdx].time }
             if state == 8 && clock >= endAt { state = 5 }
         }

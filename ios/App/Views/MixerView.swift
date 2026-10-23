@@ -197,7 +197,7 @@ struct BeatFXView: View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
                 Menu {
-                    ForEach(0..<FX_LIST.count, id: \.self) { k in Button(FX_LIST[k].0.rawValue) { fx.select(FX_LIST[k].0) } }
+                    ForEach(fx.kinds, id: \.self) { k in Button(k.rawValue) { fx.select(k) } }
                 } label: {
                     Text(fx.fx.rawValue).font(.system(size: 12, weight: .bold)).frame(maxWidth: .infinity, minHeight: 28)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
