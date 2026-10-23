@@ -3,7 +3,8 @@
 // nothing touches the stick until `apply`, which writes them one by one through USBSafeWrite and puts back
 // the ones already written if a later one fails. Only the kinds USBWriteGate allows are planned.
 //
-//  cues  → the track's ANLZ .DAT and .EXT (PCOB / PCO2), and OneLibrary's cue table
+//  cues  → the track's ANLZ .DAT and .EXT (PCOB / PCO2), and OneLibrary's cue table when rekordbox put the
+//          track's cues there (exports that leave the table empty keep it empty)
 //  grid  → the .DAT and .EXT (PQTZ; PQT2 dropped), and the BPM in both libraries' track rows
 //  info  → export.pdb's track rows and OneLibrary's content table
 import Foundation
@@ -81,6 +82,11 @@ public enum USBTrackWriter {
             return b
         }
         func exists(_ rel: String) -> Bool { FileManager.default.fileExists(atPath: root.appendingPathComponent(rel).path) }
+        var olCueTracks: Set<Int64>?
+        func olHasCues(_ id: Int64) -> Bool {
+            if olCueTracks == nil { olCueTracks = Set(((olBytes.flatMap { try? OneLibrary.read($0) })?.cues ?? []).map { $0.track }) }
+            return olCueTracks!.contains(id)
+        }
 
         for (key, c) in wanted.sorted(by: { $0.key < $1.key }) {
             guard let t = lib.track(key) else { throw USBWriteError.verifyFailed("\(key) isn't on this stick") }
@@ -113,7 +119,9 @@ public enum USBTrackWriter {
                     for (i, q) in h.prefix(8).enumerated() {
                         guard let q else { continue }
                         var p = ANLZCuePoint(hot: i + 1, ms: try ms(q.time), loopMs: try q.loopEnd.map(ms), comment: q.comment)
-                        p.color = hot.first { $0.hot == i + 1 }?.color
+                        let was = hot.first { $0.hot == i + 1 }
+                        p.color = was?.color
+                        if let w = was, w.ms == p.ms, w.loopMs == p.loopMs { p.pad = w.pad; p.tail = w.tail }
                         list.append(p)
                     }
                     hot = list
@@ -121,7 +129,9 @@ public enum USBTrackWriter {
                 if let m = c.memory {
                     memory = try m.map { q in
                         var p = ANLZCuePoint(hot: 0, ms: try ms(q.time), loopMs: try q.loopEnd.map(ms), comment: q.comment)
-                        p.colorId = memory.first { $0.ms == p.ms }?.colorId
+                        let was = memory.first { $0.ms == p.ms && $0.loopMs == p.loopMs }
+                        p.colorId = was?.colorId ?? memory.first { $0.ms == p.ms }?.colorId
+                        p.pad = was?.pad; p.tail = was?.tail
                         return p
                     }
                 }
@@ -132,9 +142,12 @@ public enum USBTrackWriter {
                         else { memory.append(ANLZCuePoint(hot: 0, ms: at)) }
                     }
                 }
+                // one memory cue per position (rekordbox doesn't keep two at the same spot)
+                var spots = Set<String>()
+                memory = memory.filter { spots.insert("\($0.ms)|\($0.loopMs.map(String.init) ?? "-")").inserted }
                 let all = hot + memory
                 for f in anlz { let b = try RekordboxANLZ.writeCues(try load(f), all); files[f]!.new = b }
-                if let id = t.olId, lib.hasOneLibrary { olCues[id] = all }
+                if let id = t.olId, lib.hasOneLibrary, olHasCues(id) { olCues[id] = all }
                 what.append("\(hot.count) hot cues, \(memory.count) memory cues")
             }
             if c.hasInfo {
