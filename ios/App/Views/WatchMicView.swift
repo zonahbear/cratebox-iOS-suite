@@ -35,6 +35,33 @@ struct WatchMicView: View {
             } header: { Text("Gain and feedback") } footer: {
                 Text("Mic gain is set once for the room. The MIC knob in the mixer is the live volume on top of it; map it to a knob on your controller in Settings → Controller → MIDI learn → Watch mic volume (on the FLX4, the MIC LEVEL knob works). The feedback filter cuts rumble below 100 Hz and drops a narrow notch on any tone that rings steadily for about 0.2 s, up to 8. Ring the room out before the set: raise the gain until it just starts to howl, let it notch, repeat.")
             }
+            Section {
+                Toggle("Duck tracks when I talk", isOn: $mic.duckOn)
+                if mic.duckOn {
+                    LabeledContent("Duck by") {
+                        HStack {
+                            Slider(value: $mic.duckDb, in: -30...(-3), step: 1).frame(width: 160)
+                            Text("\(Int(mic.duckDb)) dB").monospacedDigit().frame(width: 56, alignment: .trailing)
+                        }
+                    }
+                    Toggle("Mic on only while talking", isOn: $mic.gateOn)
+                    LabeledContent("Voice threshold") {
+                        HStack {
+                            Slider(value: $mic.voiceDb, in: -55...(-15), step: 1).frame(width: 160)
+                            Text("\(Int(mic.voiceDb)) dB").monospacedDigit().frame(width: 56, alignment: .trailing)
+                        }
+                    }
+                    LabeledContent("Hold") {
+                        HStack {
+                            Slider(value: $mic.holdS, in: 0.2...2, step: 0.1).frame(width: 160)
+                            Text(String(format: "%.1f s", mic.holdS)).monospacedDigit().frame(width: 56, alignment: .trailing)
+                        }
+                    }
+                    LabeledContent("Hearing you", value: mic.talking ? "YES" : "no")
+                }
+            } header: { Text("Auto duck") } footer: {
+                Text("While you talk, the tracks on the master drop by this much (about 15 ms down, half a second back up) and your voice goes through; headphones and recordings aren't ducked. Talking means louder than the threshold and 10 dB over the room's background (steady music bleeding into the watch doesn't count) for 30 ms. If it ducks on its own, raise the threshold; if it misses quiet words, lower it.")
+            }
             if mic.listening {
                 Section("Live") {
                     HStack {
