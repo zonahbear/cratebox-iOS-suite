@@ -97,7 +97,9 @@ jobs:
           set -o pipefail
           brew install xcodegen >/dev/null 2>&1 || true
           cd ios && xcodegen generate 2>&1 | tail -3 | tee -a ../ci.log
-          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+          # no -sdk: it would force the embedded watch app (Cratebox Mic) onto the iOS SDK too; the destination picks
+          # iphoneos for the app and Xcode builds the watch app with watchOS
+          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/dd" -archivePath "$RUNNER_TEMP/Cratebox.xcarchive" archive \
             CB_SIGN=YES CB_IDENTITY="Apple Distribution" CB_PROFILE_NAME="${{ steps.sign.outputs.name }}" CB_WATCH_PROFILE_NAME="${{ steps.sign.outputs.watch_name }}" \
             CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="${{ steps.sign.outputs.team }}" \
