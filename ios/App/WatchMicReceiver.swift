@@ -128,8 +128,9 @@ final class WatchMicReceiver: ObservableObject {
 
     func start() {
         guard !listening else { return }
-        queue.async { self.btCount = 0 }
-        btMessages = 0
+        // counts are per session, not since launch
+        queue.async { self.btCount = 0; self.lostCount = 0; self.underrunCount = 0; self.lastSeq = nil }
+        btMessages = 0; underruns = 0; lost = 0; watchRttMs = nil; watchLateDrops = 0
         if mode == "bt" {
             ctl.pointee.on = true
             listening = true
