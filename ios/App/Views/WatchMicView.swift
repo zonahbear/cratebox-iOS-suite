@@ -10,13 +10,17 @@ struct WatchMicView: View {
         Form {
             Section {
                 Toggle("Listen for Cratebox Mic", isOn: $on).onChange(of: on) { _, v in v ? mic.start() : mic.stop() }
+                Picker("Link", selection: $mic.mode) {
+                    Text("Bluetooth").tag("bt"); Text("Wi-Fi").tag("wifi"); Text("Auto").tag("auto")
+                }
                 LabeledContent("Status", value: mic.status)
                 if !mic.peer.isEmpty { LabeledContent("Watch", value: mic.peer) }
                 if !mic.path.isEmpty { LabeledContent("Arriving over", value: mic.path) }
                 LabeledContent("This phone", value: "\(mic.address) port \(WatchMic.port)")
                 Text(mic.wcInfo).font(.caption).foregroundStyle(Theme.muted)
+                if mic.listening && mic.mode != "wifi" { LabeledContent("Bluetooth messages from the watch", value: "\(mic.btMessages)") }
             } footer: {
-                Text("On the watch, open Cratebox Mic and tap Go live. It finds this phone by itself on the same Wi-Fi; if it doesn't, type the address above into the watch. With no shared Wi-Fi it falls back to Bluetooth (slower).")
+                Text("Pick the same link on the watch (Link: on its start screen), then tap Go live there. Bluetooth needs no Wi-Fi and no call. Wi-Fi finds this phone on the same network; if it doesn't, type the address above into the watch. Auto uses Wi-Fi when it answers, else Bluetooth.")
             }
             Section {
                 LabeledContent("Mic gain") {
@@ -29,7 +33,7 @@ struct WatchMicView: View {
                 LabeledContent("Notches", value: mic.notches.isEmpty ? "none yet" : mic.notches.map { $0 >= 1000 ? String(format: "%.1f kHz", $0 / 1000) : "\(Int($0)) Hz" }.joined(separator: ", "))
                 Button("Reset notches") { mic.resetFeedback() }.disabled(mic.notches.isEmpty)
             } header: { Text("Gain and feedback") } footer: {
-                Text("Mic gain is set once for the room. The MIC knob in the mixer is the live volume on top of it; map it to a knob on your controller in Settings → Controller → MIDI learn → Watch mic volume (the FLX4's own MIC LEVEL knob sends no MIDI, so it can't be used). The feedback filter cuts rumble below 100 Hz and drops a narrow notch on any tone that rings steadily for about 0.2 s, up to 8. Ring the room out before the set: raise the gain until it just starts to howl, let it notch, repeat.")
+                Text("Mic gain is set once for the room. The MIC knob in the mixer is the live volume on top of it; map it to a knob on your controller in Settings → Controller → MIDI learn → Watch mic volume (on the FLX4, the MIC LEVEL knob works). The feedback filter cuts rumble below 100 Hz and drops a narrow notch on any tone that rings steadily for about 0.2 s, up to 8. Ring the room out before the set: raise the gain until it just starts to howl, let it notch, repeat.")
             }
             if mic.listening {
                 Section("Live") {
@@ -52,6 +56,13 @@ struct WatchMicView: View {
                     Text("Delay you hear ≈ the watch's own audio buffer + half the round trip shown on the watch + the jitter buffer + this phone's output. Measure the real total with a clap test. Lower the jitter buffer until dropouts start, then go one step up.")
                 }
             }
+            Section {
+                if mic.watchLog.isEmpty { Text("Nothing yet. On the watch: Send log to phone.").foregroundStyle(Theme.muted) }
+                else {
+                    Text(String(mic.watchLog.suffix(6000))).font(.system(size: 10, design: .monospaced)).textSelection(.enabled)
+                    Button("Copy log") { UIPasteboard.general.string = mic.watchLog }
+                }
+            } header: { Text("Watch log") }
         }
         .navigationTitle("Watch mic (experiment)")
     }

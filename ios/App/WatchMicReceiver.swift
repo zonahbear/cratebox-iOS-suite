@@ -38,6 +38,18 @@ final class WatchMicReceiver: ObservableObject {
     }
     /// the notches the feedback filter has placed (Hz)
     @Published private(set) var notches: [Double] = []
+    /// which link to take the watch's voice from: "bt" (Watch Connectivity), "wifi" (UDP) or "auto" (both)
+    @Published var mode = UserDefaults.standard.string(forKey: "cb.watchMicMode") ?? "bt" {
+        didSet {
+            UserDefaults.standard.set(mode, forKey: "cb.watchMicMode")
+            let m = mode; queue.async { self.linkMode = m }
+            if listening { stop(); start() }
+        }
+    }
+    /// Bluetooth messages from the watch since Listen went on (to see whether anything arrives at all)
+    @Published private(set) var btMessages = 0
+    /// the watch's log, when it sends one (Send log to phone on the watch)
+    @Published private(set) var watchLog = UserDefaults.standard.string(forKey: "cb.watchMicLog") ?? ""
     /// jitter buffer target: more = fewer dropouts, more delay
     @Published var targetMs = UserDefaults.standard.object(forKey: "cb.watchMicMs") as? Int ?? 60 {
         didSet { UserDefaults.standard.set(targetMs, forKey: "cb.watchMicMs"); ctl.pointee.target = targetMs * 48 }
@@ -64,6 +76,8 @@ final class WatchMicReceiver: ObservableObject {
     // on `queue`
     private let fb = MicFeedback(rate: WatchMic.rate)
     private var fbOn = true
+    private var linkMode = "bt"
+    private var btCount = 0
     private let scratch: UnsafeMutablePointer<Float> = { let p = UnsafeMutablePointer<Float>.allocate(capacity: 4096); p.initialize(repeating: 0, count: 4096); return p }()
 
     /// Watch Connectivity starts with the app, not with Listen: a message from the watch can launch the app in the
@@ -71,15 +85,28 @@ final class WatchMicReceiver: ObservableObject {
     private init() {
         ctl.pointee.target = targetMs * 48
         fbOn = feedbackOn
+        linkMode = mode
         setLevel()
         fb.onChange = { [weak self] f in DispatchQueue.main.async { self?.notches = f } }
         wc.onData = { [weak self] d, reply in self?.queue.async { self?.fromWatchConnectivity(d, reply) } }
         wc.onChange = { [weak self] info in DispatchQueue.main.async { self?.wcInfo = info } }
+        wc.onLog = { [weak self] log in
+            UserDefaults.standard.set(log, forKey: "cb.watchMicLog")
+            DispatchQueue.main.async { self?.watchLog = log }
+        }
         wc.activate()
     }
 
     func start() {
-        guard listener == nil else { return }
+        guard !listening else { return }
+        queue.async { self.btCount = 0 }
+        btMessages = 0
+        if mode == "bt" {
+            ctl.pointee.on = true
+            listening = true
+            status = "Waiting for the watch (Bluetooth)"
+            return
+        }
         do {
             let params = NWParameters.udp
             params.allowLocalEndpointReuse = true
@@ -159,8 +186,10 @@ final class WatchMicReceiver: ObservableObject {
 
     /// on `queue`: a Watch Connectivity message (several packets). A ping's reply carries a pong and the stats.
     private func fromWatchConnectivity(_ d: Data, _ reply: ((Data) -> Void)?) {
-        // not listening: answer nothing (an empty reply), so the watch doesn't think the phone is taking the voice
-        guard ctl.pointee.on else { reply?(Data()); return }
+        // not listening, or Wi-Fi only: answer nothing (an empty reply), so the watch doesn't think the phone is taking the voice
+        guard ctl.pointee.on, linkMode != "wifi" else { reply?(Data()); return }
+        btCount += 1
+        if btCount == 1 || btCount % 25 == 0 { let n = btCount; DispatchQueue.main.async { self.btMessages = n } }
         var answers = [Data]()
         for f in WatchMicFrames.split(d) {
             guard let p = WatchMicPacket.decode(f) else { continue }
@@ -244,6 +273,7 @@ final class WatchMicReceiver: ObservableObject {
 final class WatchMicWC: NSObject, WCSessionDelegate {
     var onData: ((Data, ((Data) -> Void)?) -> Void)?
     var onChange: ((String) -> Void)?
+    var onLog: ((String) -> Void)?
     private var error = ""
     func activate() {
         guard WCSession.isSupported() else { onChange?("Watch link: not supported"); return }
@@ -265,6 +295,7 @@ final class WatchMicWC: NSObject, WCSessionDelegate {
     func sessionDidDeactivate(_ session: WCSession) { session.activate() }
     func sessionReachabilityDidChange(_ session: WCSession) { report() }
     func sessionWatchStateDidChange(_ session: WCSession) { report() }
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) { if let l = userInfo["micLog"] as? String { onLog?(l) } }
     func session(_ session: WCSession, didReceiveMessageData messageData: Data) { onData?(messageData, nil) }
     func session(_ session: WCSession, didReceiveMessageData messageData: Data, replyHandler: @escaping (Data) -> Void) { onData?(messageData, replyHandler) }
 }

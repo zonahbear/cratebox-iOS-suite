@@ -11,6 +11,9 @@ struct CrateboxMicApp: App {
 struct MicView: View {
     @EnvironmentObject var mic: MicCall
     @State private var crown = 1.0
+    @State private var showLog = false
+    static let next = ["bt": "wifi", "wifi": "auto", "auto": "bt"]
+    static let names = ["bt": "Bluetooth", "wifi": "Wi-Fi", "auto": "Auto (Wi-Fi, else Bluetooth)"]
 
     var body: some View {
         ScrollView {
@@ -42,9 +45,17 @@ struct MicView: View {
                     }
                     .tint(.red).buttonStyle(.borderedProminent)
                     Text(mic.status).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
-                    TextField("Phone address (blank = find it)", text: $mic.host).font(.footnote)
-                    Text("Phone: Cratebox HEAT → Settings → Apple Watch as a mic → Listen.").font(.caption2).foregroundStyle(.secondary)
+                    Button { mic.mode = MicView.next[mic.mode] ?? "bt" } label: {
+                        Text("Link: \(MicView.names[mic.mode] ?? "Bluetooth")").font(.footnote).frame(maxWidth: .infinity)
+                    }
+                    if mic.mode != "bt" { TextField("Phone address (blank = find it)", text: $mic.host).font(.footnote) }
+                    Text("Phone: Cratebox HEAT → Settings → Apple Watch as a mic → Listen, same link.").font(.caption2).foregroundStyle(.secondary)
                     Text(mic.wcInfo).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
+                    Button("Send log to phone") { mic.sendLog() }.font(.footnote)
+                    Button(showLog ? "Hide last session" : "Last session log") { showLog.toggle() }.font(.footnote)
+                    if showLog {
+                        Text(String(MicLog.previous.suffix(2500))).font(.system(size: 9, design: .monospaced)).frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         }

@@ -73,7 +73,7 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
         WKCompanionAppBundleIdentifier: com.zonahbear.cratebox.heat
-        UIBackgroundModes: [voip]
+        UIBackgroundModes: [voip, audio]
         NSMicrophoneUsageDescription: Cratebox Mic sends your voice to Cratebox on your iPhone while you're live.
         NSLocalNetworkUsageDescription: Cratebox Mic finds Cratebox on your iPhone over the network.
         NSBonjourServices: [_cbwatchmic._udp]

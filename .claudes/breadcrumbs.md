@@ -71,3 +71,13 @@
 - Added: Settings → Apple Watch as a mic → Mic gain (-12...+24 dB, `cb.watchMicGainDb`), Feedback filter (`cb.watchMicFeedback`, `ios/App/MicFeedback.swift`: 100 Hz HPF + up to 8 auto notches, Q 30, detector = peak ≥25 dB over bins 3-8 away, same bin, not fading, ~200 ms), notch list + Reset.
 - Board: MIC knob in the mixer (top bar on iPhone, master row on iPad) while Listen is on; `cb.watchMicVol`, squared curve, MIDI-learnable action `micVol` ("Watch mic volume"). The FLX4 MIC LEVEL knob sends no MIDI (absent from Mixxx's full FLX4 mapping; Pioneer's MIDI list not reachable), so it can't be mapped.
 - Soft knee above 0.8 on the mic in mix(). Untested on device; the detector thresholds are first guesses.
+
+### 2026-10-23 08:10 Cratebox Mic: tested good
+- Build 20 on device: FLX4 MIC LEVEL knob DOES send MIDI (my "no MIDI" call from the Mixxx map was wrong); Jonah mapped it to Watch mic volume. Feedback filter "MUCH better". Wi-Fi only.
+- Unmerged on claude/project-thread-uceof1: footer text fix (MIC LEVEL works). Rides the next personal/heat merge, to save macOS minutes.
+
+### 2026-10-23 08:45 Cratebox Mic: Link switch (Bluetooth / Wi-Fi / Auto), Bluetooth without CallKit, crash log
+- Jonah: on Bluetooth the phone shows the link connected but the call fails, then the watch app crashes. Bluetooth is his main case; latency OK.
+- Watch: Link button cycles bt/wifi/auto (`mic.mode`, default bt). Bluetooth = no CallKit: own .playAndRecord session + `audio` background mode, WC only. MicLog.swift writes a crash-surviving log (+ uncaught ObjC exceptions); "Last session log" on the watch, "Send log to phone" (transferUserInfo).
+- Phone: Link picker (`cb.watchMicMode`, default bt; bt = no NWListener), "Bluetooth messages from the watch" counter, Watch log section with Copy.
+- Crash cause still unknown (no log yet). Next: Jonah reproduces, sends log.
