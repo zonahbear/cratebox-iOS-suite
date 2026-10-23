@@ -190,6 +190,7 @@ struct SettingsView: View {
                         Toggle("Split (mono master left, mono cue right, with a splitter cable)", isOn: $split).onChange(of: split) { _, v in app.audio.setSplit(v) }
                     }
                 }
+                Section("Watch mic (personal build)") { NavigationLink("Apple Watch as a mic…") { WatchMicView() } }
                 Section("Look") {
                     Toggle("Phrases (Intro / Build / Drop… on the waveforms)", isOn: $phrases)
                     Picker("Waveform", selection: $waveStyle) { Text("RGB (red lows, green mids, blue highs)").tag("rgb"); Text("3-band").tag("3band") }

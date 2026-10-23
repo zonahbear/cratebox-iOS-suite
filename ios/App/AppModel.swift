@@ -92,6 +92,7 @@ final class AppModel: ObservableObject, ControlTarget {
     func start() {
         audio.start()
         midiHost.start()
+        if UserDefaults.standard.bool(forKey: "cb.watchMicOn") { WatchMicReceiver.shared.start() }
         let link = CADisplayLink(target: self, selector: #selector(tick))
         link.preferredFrameRateRange = CAFrameRateRange(minimum: 30, maximum: 60, preferred: 60)
         link.add(to: .main, forMode: .common)
