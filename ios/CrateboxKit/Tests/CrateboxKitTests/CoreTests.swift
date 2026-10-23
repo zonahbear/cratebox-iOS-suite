@@ -89,6 +89,40 @@ final class CoreTests: XCTestCase {
         XCTAssertNotNil(d.phaseErr)
         XCTAssertLessThan(abs(d.phaseErr ?? 1), 0.005, "beat lock holds the phase")
     }
+    // Jonah's bug (2026-10-23): a synced deck playing at 72.5 dropped to 36.25 when a 72.5 was loaded on the other
+    // deck. It followed the freshly loaded (stopped) deck, with the halftime it had picked against the old 145 there.
+    func testLoadingTheOtherDeckNeverRetimesAPlayingSyncedDeck() {
+        let (c, e) = makeCore(); load(c, 0, bpm: 145); load(c, 1, bpm: 72.5)
+        render(e, c, secs: 0.1)
+        let a = c.decks[0], b = c.decks[1]
+        a.togglePlay(); render(e, c, secs: 0.5)
+        b.setSync(true); XCTAssertEqual(b.syncMult, 0.5)
+        b.seek(5); b.togglePlay(); render(e, c, secs: 1)
+        XCTAssertEqual(b.effBpm(), 72.5, accuracy: 0.5)
+        a.setPlaying(false); load(c, 0, bpm: 72.5); render(e, c, secs: 1)
+        XCTAssertEqual(b.effBpm(), 72.5, accuracy: 0.05, "loading deck 1 must not touch deck 2's tempo")
+        a.togglePlay(); render(e, c, secs: 1)                // deck 1 played unsynced: deck 2 keeps leading
+        XCTAssertEqual(b.effBpm(), 72.5, accuracy: 0.05)
+        a.setPitch(0.5); render(e, c, secs: 0.5)
+        XCTAssertEqual(b.effBpm(), 72.5, accuracy: 0.05, "a deck it doesn't follow can't move it")
+        a.setPitch(0); a.setPlaying(false); load(c, 0, bpm: 75); render(e, c, secs: 0.2)
+        a.setSync(true)                                       // syncing the new track follows the playing deck
+        XCTAssertEqual(a.syncMult, 1); XCTAssertEqual(a.effBpm(), 72.5, accuracy: 0.05)
+        XCTAssertEqual(b.effBpm(), 72.5, accuracy: 0.05)
+        b.setPitch(0.2); render(e, c, secs: 0.2)              // the leader's fader still moves it, and the follower
+        XCTAssertEqual(b.effBpm(), 72.5 * 1.012, accuracy: 0.05)
+        XCTAssertEqual(a.effBpm(), 72.5 * 1.012, accuracy: 0.05)
+    }
+    // the first report: 140 playing with SYNC on (nothing to follow yet), a 75 loaded on the empty deck
+    func testSyncedDeckWithNoMasterHoldsWhenATrackLoads() {
+        let (c, e) = makeCore(); load(c, 1, bpm: 140)
+        render(e, c, secs: 0.1)
+        let b = c.decks[1]
+        b.setSync(true); b.togglePlay(); render(e, c, secs: 0.5)
+        load(c, 0, bpm: 75); render(e, c, secs: 1)
+        XCTAssertEqual(b.effBpm(), 140, accuracy: 0.05)
+        XCTAssertEqual(e.decks[1].pos / SR, 1.5, accuracy: 0.05, "the player itself ran at 1x the whole time")
+    }
     func testFLX4Messages() {
         let (c, e) = makeCore(); load(c, 0, bpm: 120)
         render(e, c, secs: 0.1)

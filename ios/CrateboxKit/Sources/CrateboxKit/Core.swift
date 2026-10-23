@@ -88,6 +88,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     @Published public private(set) var mt = true
     var seekSeq = 0
     var syncWith: DeckModel?
+    var syncTrack: TrackInfo?
     var taps = [Double]()
     /// the analysis audio, kept to redo the phrases after a grid edit
     public var mono: (x: [Float], fs: Double)?
@@ -197,10 +198,23 @@ public final class DeckModel: ObservableObject, Identifiable {
     }
 
     // ---- tempo ----
+    /// the deck to follow when synced. A playing deck only ever follows the playing deck it already follows:
+    /// it never picks up a new master mid-mix (a track loaded on another deck, a deck pressed into play), and
+    /// when its master stops or loads it keeps its tempo and leads (see syncTick).
     public func master() -> DeckModel? {
-        // the deck to follow when synced. Two decks: the other one, unless it synced after us (then we lead).
+        if sync && playing {
+            guard let w = syncWith, w.playing, w.track === syncTrack, followable(w) else { return nil }
+            return w
+        }
+        return pickMaster()
+    }
+    func followable(_ o: DeckModel) -> Bool {
+        o !== self && core.deckActive(o.i) && o.loaded && o.bpm > 0 && !(o.sync && sync && o.syncSince > syncSince)
+    }
+    func pickMaster() -> DeckModel? {
+        // Two decks: the other one, unless it synced after us (then we lead). A playing deck only takes a playing one.
         // Four decks: prefer one that isn't synced itself, then one that's playing, then the one playing longest.
-        let c = core.decks.filter { o in o !== self && core.deckActive(o.i) && o.loaded && o.bpm > 0 && !(o.sync && sync && o.syncSince > syncSince) }
+        let c = core.decks.filter { o in followable(o) && (o.playing || !playing) }
         if c.isEmpty { return nil }
         let score = { (o: DeckModel) in (o.sync ? 0 : 4) + (o.playing ? 2 : 0) }
         return c.sorted { a, b in
@@ -211,7 +225,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         }[0]
     }
     public func rate() -> Double {
-        if sync, master() != nil, bpm > 0 { return syncRate * (1 + syncTrim) }
+        if sync, bpm > 0 { return syncRate * (1 + syncTrim) }     // synced with no master: holds its tempo
         return 1 + pitch * range / 100
     }
     public func effBpm() -> Double { tempoNow() * rate() / (sync ? 1 + syncTrim : 1) }
@@ -257,6 +271,8 @@ public final class DeckModel: ObservableObject, Identifiable {
     public func beginLoad(_ t: TrackInfo) {
         if playing { previewing = false; setPlaying(false) }
         loading = true; track = t; ana = nil; mono = nil
+        // a new track: sync starts over (master and half/double time picked again), from the fader's tempo
+        syncWith = nil; syncTrack = nil; syncTrim = 0; syncRate = 1 + pitch * range / 100
         core.engine.post([.deck(i, .unload), .track(i, nil)])
     }
     public func failLoad(_ t: TrackInfo, _ err: String) {
@@ -308,6 +324,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     }
     public func setPlaying(_ on: Bool) {
         guard loaded else { return }
+        if on && !playing && sync { syncTick() }     // follow the master it would pick now, before it counts as playing
         if on, sync, let m = master(), m.playing { alignPhase() }
         if on && !playing { startedAt = core.wallMs(); core.playStarted() }
         playing = on
@@ -344,8 +361,9 @@ public final class DeckModel: ObservableObject, Identifiable {
         sync = on
         if on {
             syncSince = core.wallMs()
-            let m = master()
-            syncWith = m
+            let m = pickMaster()
+            syncWith = m; syncTrack = m?.track
+            syncRate = 1 + pitch * range / 100          // with nothing to follow: stay at the fader's tempo
             if let m {
                 // halftime / double time: of 1/2x, 1x and 2x the master's tempo, take the one nearest our own
                 let r = m.effBpm() / tempoNow()
@@ -370,9 +388,21 @@ public final class DeckModel: ObservableObject, Identifiable {
         seek(timeOfBeat(target))
     }
     func syncTick() {
-        guard sync, let m = master(), bpm > 0 else { return }
-        if let w = syncWith, w !== m { syncMult = DeckModel.pickMult(m.effBpm() / tempoNow()) }
-        syncWith = m
+        guard sync, bpm > 0 else { return }
+        guard let m = master() else {
+            // the master stopped, loaded a new track or went away: keep this tempo and lead from here on (the
+            // oldest sync, so a deck that syncs now follows us, not the other way round)
+            if syncWith != nil {
+                syncWith = nil; syncTrack = nil
+                if playing { syncSince = (core.decks.map(\.syncSince).min() ?? 0) - 1 }
+            }
+            if syncTrim != 0 { syncTrim = 0; sendRate() }
+            phaseErr = nil
+            return
+        }
+        // a different master, or a new track on it: pick half/normal/double time again
+        if m !== syncWith || m.track !== syncTrack { syncMult = DeckModel.pickMult(m.effBpm() / tempoNow()) }
+        syncWith = m; syncTrack = m.track
         let r = clamp(m.effBpm() * syncMult / tempoNow(), 0.5, 2)
         if abs(r - syncRate) > 1e-7 { syncRate = r; sendRate() }
         lockPhase(m)
@@ -396,7 +426,12 @@ public final class DeckModel: ObservableObject, Identifiable {
         sendRate()
         core.status("Deck \(i + 1) tempo range ±\(range == 100 ? "WIDE" : "\(Int(range))%")")
     }
-    public func setPitch(_ v: Double) { pitch = clamp(v, -1, 1); sendRate() }
+    public func setPitch(_ v: Double) {
+        let p = clamp(v, -1, 1)
+        // a synced deck that leads (nothing to follow) holds its own tempo: the fader moves it from there
+        if sync, bpm > 0, master() == nil { syncRate = clamp(syncRate + (p - pitch) * range / 100, 0.5, 2) }
+        pitch = p; sendRate()
+    }
 
     // ---- jog ----
     public func jogTouch(_ on: Bool, noCoast: Bool = false) {
