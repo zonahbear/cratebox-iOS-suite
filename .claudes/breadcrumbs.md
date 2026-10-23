@@ -61,3 +61,7 @@
   security-scope start fixed in addFolder.
 - CI: `-demo -eject [-stopped]` shots (stand-in "DJ USB"). Not tested on a real stick yet.
 - Next: check CI run, screenshots to Jonah, port to personal/heat (his OK before pushing it: it uploads to TestFlight).
+
+### 2026-10-23 06:55 Cratebox Mic: Bluetooth fallback didn't connect on build 14
+- Jonah: "still no bluetooth". Cause unknown (WC errors were swallowed). Build 15 change: phone starts Watch Connectivity at app launch (not on Listen, so a background launch by the watch still has a delegate), both sides show the link state (activated / reachable / app installed / last error), the watch's timeout message includes it.
+- Next: Jonah reads the watch's "BT …" line and the phone's "Watch link …" line with phone Wi-Fi off. If "phone NOT in reach" or errors persist with the phone app open, WC can't carry it during a CallKit call → Wi-Fi + travel router.

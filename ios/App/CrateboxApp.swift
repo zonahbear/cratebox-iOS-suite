@@ -3,6 +3,8 @@ import SwiftUI
 @main
 struct CrateboxApp: App {
     @StateObject private var app = AppModel()
+    // personal/heat: the watch mic's Bluetooth link has to be up before a message from the watch arrives
+    init() { _ = WatchMicReceiver.shared }
     var body: some Scene {
         WindowGroup {
             SuiteRoot()

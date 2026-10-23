@@ -20,6 +20,8 @@ final class WatchMicReceiver: ObservableObject {
     @Published private(set) var level: Float = 0
     /// which way the voice is arriving: "Wi-Fi" or "Bluetooth"
     @Published private(set) var path = ""
+    /// the Bluetooth (Watch Connectivity) link as the phone sees it
+    @Published private(set) var wcInfo = "Watch link: starting"
     /// phone-side controls (the watch can't override these)
     @Published var phoneMuted = false { didSet { ctl.pointee.phoneMuted = phoneMuted } }
     @Published var phoneLevel: Float = 1 { didSet { ctl.pointee.phoneLevel = phoneLevel } }
@@ -48,7 +50,14 @@ final class WatchMicReceiver: ObservableObject {
     private let wc = WatchMicWC()
     private let scratch: UnsafeMutablePointer<Float> = { let p = UnsafeMutablePointer<Float>.allocate(capacity: 4096); p.initialize(repeating: 0, count: 4096); return p }()
 
-    private init() { ctl.pointee.target = targetMs * 48 }
+    /// Watch Connectivity starts with the app, not with Listen: a message from the watch can launch the app in the
+    /// background, and it's dropped if nothing is the session's delegate by then (CrateboxApp touches .shared at launch).
+    private init() {
+        ctl.pointee.target = targetMs * 48
+        wc.onData = { [weak self] d, reply in self?.queue.async { self?.fromWatchConnectivity(d, reply) } }
+        wc.onChange = { [weak self] info in DispatchQueue.main.async { self?.wcInfo = info } }
+        wc.activate()
+    }
 
     func start() {
         guard listener == nil else { return }
@@ -72,8 +81,6 @@ final class WatchMicReceiver: ObservableObject {
             listener = l
             ctl.pointee.on = true
             listening = true
-            wc.onData = { [weak self] d, reply in self?.queue.async { self?.fromWatchConnectivity(d, reply) } }
-            wc.activate()
         } catch {
             status = "Couldn't listen: \(error.localizedDescription)"
         }
@@ -128,6 +135,8 @@ final class WatchMicReceiver: ObservableObject {
 
     /// on `queue`: a Watch Connectivity message (several packets). A ping's reply carries a pong and the stats.
     private func fromWatchConnectivity(_ d: Data, _ reply: ((Data) -> Void)?) {
+        // not listening: answer nothing (an empty reply), so the watch doesn't think the phone is taking the voice
+        guard ctl.pointee.on else { reply?(Data()); return }
         var answers = [Data]()
         for f in WatchMicFrames.split(d) {
             guard let p = WatchMicPacket.decode(f) else { continue }
@@ -205,14 +214,28 @@ final class WatchMicReceiver: ObservableObject {
 /// The phone's end of Watch Connectivity for the watch mic: hands every message from the watch to WatchMicReceiver.
 final class WatchMicWC: NSObject, WCSessionDelegate {
     var onData: ((Data, ((Data) -> Void)?) -> Void)?
+    var onChange: ((String) -> Void)?
+    private var error = ""
     func activate() {
-        guard WCSession.isSupported() else { return }
+        guard WCSession.isSupported() else { onChange?("Watch link: not supported"); return }
         WCSession.default.delegate = self
         WCSession.default.activate()
     }
-    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {}
-    func sessionDidBecomeInactive(_ session: WCSession) {}
+    private func report() {
+        let w = WCSession.default
+        let state = w.activationState == .activated ? "on" : w.activationState == .inactive ? "inactive" : "not active"
+        var s = "Watch link \(state) · paired \(w.isPaired ? "yes" : "NO") · watch app \(w.isWatchAppInstalled ? "yes" : "NO") · watch app open \(w.isReachable ? "yes" : "no")"
+        if !error.isEmpty { s += " · \(error)" }
+        onChange?(s)
+    }
+    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
+        if let error { self.error = error.localizedDescription }
+        report()
+    }
+    func sessionDidBecomeInactive(_ session: WCSession) { report() }
     func sessionDidDeactivate(_ session: WCSession) { session.activate() }
+    func sessionReachabilityDidChange(_ session: WCSession) { report() }
+    func sessionWatchStateDidChange(_ session: WCSession) { report() }
     func session(_ session: WCSession, didReceiveMessageData messageData: Data) { onData?(messageData, nil) }
     func session(_ session: WCSession, didReceiveMessageData messageData: Data, replyHandler: @escaping (Data) -> Void) { onData?(messageData, replyHandler) }
 }
