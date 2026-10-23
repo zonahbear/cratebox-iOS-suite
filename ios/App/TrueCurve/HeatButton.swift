@@ -107,7 +107,8 @@ struct PuffHold: View {
             HStack(spacing: 6) {
                 Text("Full warble at").font(.system(size: 12)).foregroundStyle(Theme.muted)
                 Picker("Full warble at", selection: $heat.puffFull) {
-                    ForEach([15.0, 25, 40, 60, 80], id: \.self) { Text("\(Int($0))°F drop").tag($0) }
+                    Text("Auto").tag(0.0)
+                    ForEach([4.0, 8, 15, 25, 40], id: \.self) { Text("\(Int($0))°F drop").tag($0) }
                 }.pickerStyle(.menu).disabled(heat.running)
                 Spacer(minLength: 0)
             }
@@ -127,6 +128,7 @@ struct PuffHold: View {
                         RoundedRectangle(cornerRadius: 3).fill(Theme.hot).frame(width: g.size.width * heat.puff)
                     }
                 }.frame(height: 8).accessibilityLabel("Hit strength \(Int(heat.puff * 100)) percent")
+                if !heat.puffInfo.isEmpty { Text(heat.puffInfo).font(.system(size: 11)).monospacedDigit().foregroundStyle(Theme.muted) }
                 if heat.isSim {
                     // press and hold: a pretend draw
                     Text(hitting ? "Hitting…" : "Hold to hit (simulator)").font(.system(size: 13, weight: .semibold))

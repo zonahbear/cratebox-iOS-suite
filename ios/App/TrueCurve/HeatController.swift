@@ -38,9 +38,12 @@ final class HeatController: NSObject, ObservableObject {
     var onPuff: ((Double) -> Void)?
     /// HOLD: one fixed temperature, no curve, so the drop on a draw can play PUFF; `puffFull` °F of drop = all of it
     @Published var holdF: Double { didSet { UserDefaults.standard.set(holdF, forKey: "cb.tc.holdF") } }
-    @Published var puffFull: Double { didSet { UserDefaults.standard.set(puffFull, forKey: "cb.tc.puffFull") } }
+    /// 0 = Auto (scales to your biggest dips)
+    @Published var puffFull: Double { didSet { UserDefaults.standard.set(puffFull, forKey: "cb.tc.puffFull2") } }
     /// the latest hit strength and drop below the settled temperature, for the panel's meter
     @Published private(set) var puff = 0.0
+    /// the panel's readout while holding: dip now, biggest dip lately, full-warble dip, readings a second
+    @Published private(set) var puffInfo = ""
     private var drop = 0.0
 
     private var live: Double?, target: Double?, t: Double?, end = 0.0, battery: Int?
@@ -54,9 +57,9 @@ final class HeatController: NSObject, ObservableObject {
     override init() {
         saved = (UserDefaults.standard.data(forKey: "cb.tc.curves")).flatMap { try? JSONDecoder().decode([String: TrueCurve.CurveDef].self, from: $0) } ?? [:]
         name = UserDefaults.standard.string(forKey: "cb.tc.last") ?? TrueCurve.defaultName
-        let hf = UserDefaults.standard.double(forKey: "cb.tc.holdF"), pf = UserDefaults.standard.double(forKey: "cb.tc.puffFull")
+        let hf = UserDefaults.standard.double(forKey: "cb.tc.holdF"), pf = UserDefaults.standard.double(forKey: "cb.tc.puffFull2")
         holdF = hf > 0 ? min(TrueCurve.maxF, max(TrueCurve.minF, hf)) : 500
-        puffFull = pf > 0 ? pf : 40
+        puffFull = pf
         super.init()
         if !curveNames.contains(name) { name = TrueCurve.defaultName }
     }
@@ -294,7 +297,7 @@ final class HeatController: NSObject, ObservableObject {
             phase = .hold
             say("Holding \(Int(f))°F. Pick PUFF in Beat FX and turn it on; hit it once the bowl is up to temperature.")
             let t0 = CACurrentMediaTime()
-            var tick = 0
+            var tick = 0, reads = 0, rateAt = t0
             while !abort {
                 let tn = CACurrentMediaTime(), tt = tn - t0
                 let y = await dev.readTemp()
@@ -305,6 +308,11 @@ final class HeatController: NSObject, ObservableObject {
                 tick += 1
                 if let y, y >= TrueCurve.cutoffF { throw HeatError.msg("overheat cutoff at \(y)°F") }
                 live = y
+                if y != nil { reads += 1 }
+                if tn - rateAt >= 2 {
+                    puffInfo = String(format: "dip %.1f°F · biggest %.1f · full at %.0f · %.1f reads/s", meter.drop, meter.peak, meter.scale, Double(reads) / (tn - rateAt))
+                    reads = 0; rateAt = tn
+                }
                 let a = meter.add(tt, y)
                 drop = meter.drop
                 if abs(a - puff) > 0.005 || (a == 0 && puff != 0) { puff = a; onPuff?(a) }
@@ -315,7 +323,7 @@ final class HeatController: NSObject, ObservableObject {
         }
 
         do { try await body() } catch { say("Stopped: \(error.localizedDescription)") }
-        puff = 0; drop = 0; onPuff?(0)
+        puff = 0; drop = 0; puffInfo = ""; onPuff?(0)
         if dev.connected {
             _ = await dev.stop()
             if let backup { await dev.restoreSlot(slot, backup) }
