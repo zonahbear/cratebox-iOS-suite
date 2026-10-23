@@ -81,6 +81,7 @@ struct CompactTopBar: View {
             Text(rec.recording ? String(format: "● REC %d:%02d", Int(rec.seconds) / 60, Int(rec.seconds) % 60) : app.statusText)
                 .font(.system(size: 11, weight: rec.recording ? .bold : .regular)).foregroundStyle(rec.recording ? Theme.hot : Theme.muted)
                 .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
+            HeatButton()
             MasterButton()
             Menu {
                 Toggle("Waveforms (WAVE)", isOn: Binding(get: { app.waveMode }, set: { v in withAnimation(.easeInOut(duration: 0.2)) { app.waveMode = v } }))
