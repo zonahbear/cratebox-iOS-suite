@@ -1,0 +1,137 @@
+# Signed App Store build of main, uploaded to TestFlight. ios.yml (unsigned IPA for SideStore, preview builds,
+# tests, screenshots) is untouched and keeps running beside this. Until the six secrets below exist this
+# workflow just says so and passes, so merging it early turns nothing red.
+#   IOS_DIST_P12_BASE64  IOS_DIST_P12_PASSWORD   Apple Distribution certificate + private key (.p12, base64)
+#   IOS_PROFILE_BASE64                           App Store provisioning profile for com.zonahbear.cratebox.suite
+#   ASC_KEY_ID  ASC_ISSUER_ID  ASC_KEY_P8        App Store Connect API key (the .p8 file's text, as is)
+# The team ID is read from the profile. Build number = run number.attempt, so re-runs never collide.
+name: TestFlight
+on:
+  push:
+    branches: [main, preview/truecurve-usb]   # this branch too: Jonah asked for its build on TestFlight
+    paths: ["ios/**", ".github/workflows/testflight.yml"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: { group: testflight, cancel-in-progress: false }
+jobs:
+  upload:
+    runs-on: macos-15
+    env:
+      P12: ${{ secrets.IOS_DIST_P12_BASE64 }}
+      P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}
+      PROFILE: ${{ secrets.IOS_PROFILE_BASE64 }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      BUILD: ${{ github.run_number }}.${{ github.run_attempt }}
+    steps:
+      - name: Secrets present?
+        id: check
+        run: |
+          # runner.temp isn't allowed in job-level env, so the keychain path is set here
+          echo "KC=$RUNNER_TEMP/signing.keychain-db" >> "$GITHUB_ENV"
+          missing=""
+          for v in P12 P12_PASSWORD PROFILE ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do [ -n "${!v}" ] || missing="$missing $v"; done
+          if [ -n "$missing" ]; then
+            echo "::notice::TestFlight skipped, secrets not set:$missing"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.check.outputs.ready == 'true'
+      - name: Xcode
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          xcodebuild -version | tee ci.log
+      - name: Certificate and profile into a throwaway keychain
+        id: sign
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          set -o pipefail
+          echo "$P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          echo "$PROFILE" | base64 --decode > "$RUNNER_TEMP/app.mobileprovision"
+          KCPASS=$(uuidgen)
+          security create-keychain -p "$KCPASS" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPASS" "$KC"
+          security import "$RUNNER_TEMP/dist.p12" -P "$P12_PASSWORD" -A -t cert -f pkcs12 -k "$KC" 2>&1 | tee -a ci.log
+          # the intermediate that issues Apple Distribution certs, in case the runner image lacks it
+          curl -fsSL -o "$RUNNER_TEMP/wwdr.cer" https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer && security import "$RUNNER_TEMP/wwdr.cer" -k "$KC" 2>&1 | tail -1 || true
+          security set-key-partition-list -S apple-tool:,apple: -k "$KCPASS" "$KC" > /dev/null
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          security find-identity -v -p codesigning "$KC" | tee -a ci.log
+          # signing smoke test, so a keychain problem shows here rather than deep inside the archive
+          echo hi > "$RUNNER_TEMP/smoke.txt" && codesign -f -s "Apple Distribution" --keychain "$KC" "$RUNNER_TEMP/smoke.txt" 2>&1 | sed 's/^/CODESIGN TEST /' | tee -a ci.log || true
+          security cms -D -i "$RUNNER_TEMP/app.mobileprovision" > "$RUNNER_TEMP/profile.plist"
+          UUID=$(/usr/libexec/PlistBuddy -c "Print :UUID" "$RUNNER_TEMP/profile.plist")
+          NAME=$(/usr/libexec/PlistBuddy -c "Print :Name" "$RUNNER_TEMP/profile.plist")
+          TEAM=$(/usr/libexec/PlistBuddy -c "Print :TeamIdentifier:0" "$RUNNER_TEMP/profile.plist")
+          APPID=$(/usr/libexec/PlistBuddy -c "Print :Entitlements:application-identifier" "$RUNNER_TEMP/profile.plist")
+          echo "PROFILE '$NAME' $UUID team $TEAM app $APPID expires $(/usr/libexec/PlistBuddy -c 'Print :ExpirationDate' "$RUNNER_TEMP/profile.plist")" | tee -a ci.log
+          [ "$APPID" = "$TEAM.com.zonahbear.cratebox.suite" ] || { echo "PROFILE is for $APPID, not com.zonahbear.cratebox.suite" | tee -a ci.log; exit 1; }
+          # Xcode 16 reads the second folder; older Xcodes the first
+          for d in "$HOME/Library/MobileDevice/Provisioning Profiles" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"; do
+            mkdir -p "$d" && cp "$RUNNER_TEMP/app.mobileprovision" "$d/$UUID.mobileprovision"
+          done
+          { echo "name=$NAME"; echo "team=$TEAM"; } >> "$GITHUB_OUTPUT"
+      - name: Archive (signed, Apple Distribution)
+        id: archive
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          set -o pipefail
+          brew install xcodegen >/dev/null 2>&1 || true
+          cd ios && xcodegen generate 2>&1 | tail -3 | tee -a ../ci.log
+          xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphoneos -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" -archivePath "$RUNNER_TEMP/Cratebox.xcarchive" archive \
+            CB_SIGN=YES CB_IDENTITY="Apple Distribution" CB_PROFILE_NAME="${{ steps.sign.outputs.name }}" \
+            CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM="${{ steps.sign.outputs.team }}" \
+            CURRENT_PROJECT_VERSION="$BUILD" OTHER_CODE_SIGN_FLAGS="--keychain $KC" > "$RUNNER_TEMP/xcb.log" 2>&1 \
+            || { grep -iE -B12 -A2 "error|failed" "$RUNNER_TEMP/xcb.log" | grep -v "^ *export \|^ *cd /" | tail -150 | tee -a ../ci.log; echo "** ARCHIVE FAILED **" | tee -a ../ci.log; exit 1; }
+          grep -E "warning: .*(sign|profile)|\*\* " "$RUNNER_TEMP/xcb.log" | tail -20 | tee -a ../ci.log
+      - name: Export the App Store IPA
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          set -o pipefail
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>teamID</key><string>${{ steps.sign.outputs.team }}</string>
+            <key>signingCertificate</key><string>Apple Distribution</string>
+            <key>provisioningProfiles</key><dict>
+              <key>com.zonahbear.cratebox.suite</key><string>${{ steps.sign.outputs.name }}</string>
+            </dict>
+            <key>uploadSymbols</key><true/>
+          </dict></plist>
+          EOF
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Cratebox.xcarchive" -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" 2>&1 | tail -20 | tee -a ci.log
+          ls -la "$RUNNER_TEMP"/export/*.ipa | tee -a ci.log
+      - name: Upload to TestFlight
+        if: steps.check.outputs.ready == 'true'
+        run: |
+          set -o pipefail
+          mkdir -p "$HOME/private_keys"
+          printf '%s\n' "$ASC_KEY_P8" > "$HOME/private_keys/AuthKey_$ASC_KEY_ID.p8"
+          IPA=$(ls "$RUNNER_TEMP"/export/*.ipa | head -1)
+          xcrun altool --upload-app -f "$IPA" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" --output-format normal 2>&1 | tee -a ci.log
+          echo "UPLOADED build $BUILD from ${GITHUB_SHA::7}" | tee -a ci.log
+          echo "Uploaded build $BUILD (${GITHUB_SHA::7}). App Store Connect processes it for 5-30 minutes before it shows in TestFlight." >> "$GITHUB_STEP_SUMMARY"
+      - name: Clean up signing material
+        if: always() && steps.check.outputs.ready == 'true'
+        run: |
+          security delete-keychain "$KC" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/dist.p12" "$RUNNER_TEMP/app.mobileprovision" "$RUNNER_TEMP/profile.plist" "$HOME/private_keys/AuthKey_"*.p8
+      - name: Log summary to the ci-logs-testflight branch
+        if: always() && steps.check.outputs.ready == 'true'
+        run: |
+          { echo "run ${{ github.run_id }} sha ${{ github.sha }} build $BUILD at $(date -u)"; grep -E "error:|ERROR|FAIL|BUILD|ARCHIVE|PROFILE|UPLOADED|identities|CODESIGN|\*\* " ci.log | head -200; echo "---- tail"; tail -60 ci.log; } > testflight.txt || true
+          git config user.name ci; git config user.email ci@users.noreply.github.com
+          git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
+          git add -f testflight.txt && git commit -qm "testflight ci ${{ github.run_id }}" && git push -qf origin HEAD:ci-logs-testflight

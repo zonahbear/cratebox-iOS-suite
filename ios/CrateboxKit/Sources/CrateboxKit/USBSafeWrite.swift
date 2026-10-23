@@ -190,17 +190,16 @@ public enum USBWriteKind: String, CaseIterable, Codable, Identifiable {
     public var status: Status {
         switch self {
         // writers exist and check themselves by reading back, but haven't been confirmed on a player
-        case .deviceLibraryPlaylists, .oneLibraryPlaylists: return .unproven
-        // no writer yet: edits are kept in Cratebox (and can go to Performance Mode / rekordbox XML)
-        case .cues, .beatgrid, .metadata: return .unsupported
+        case .deviceLibraryPlaylists, .oneLibraryPlaylists, .cues, .beatgrid, .metadata: return .unproven
         }
     }
     public var note: String {
         switch self {
         case .deviceLibraryPlaylists: return "Byte-for-byte the same as the web app's writer, read back after every save. Not yet confirmed on a CDJ/XDJ."
         case .oneLibraryPlaylists: return "Edits a decrypted copy in one transaction, checks it with SQLite and reads it back, then re-encrypts. Not yet confirmed on a OneLibrary player."
-        case .cues, .beatgrid: return "Needs a writer for rekordbox's ANLZ files. Your edits are kept in Cratebox and used in Performance Mode."
-        case .metadata: return "Needs a writer for the track rows of both libraries. Your edits are kept in Cratebox."
+        case .cues: return "Rewrites the cue lists in the track's analysis files (.DAT and .EXT) and OneLibrary's cue table, read back after every save. Not yet confirmed on a CDJ/XDJ: check hot cues A-H, memory cues, loops and their comments on each player."
+        case .beatgrid: return "Writes a constant-tempo grid to the analysis files and the BPM to both libraries. rekordbox's second grid (PQT2) can't be rebuilt, so it's removed. Not yet confirmed on a CDJ/XDJ: check the grid, beat sync and quantise."
+        case .metadata: return "Writes title, artist, album, genre, comment and rating to the Device Library and OneLibrary, read back after every save. Not yet confirmed on a CDJ/XDJ: check the track lists and browsing by artist, album and genre."
         }
     }
 }
