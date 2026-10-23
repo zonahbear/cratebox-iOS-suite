@@ -111,3 +111,6 @@
 - Simulator: SimHeater.airflow (draw), "Hold to hit" button. Tests: testPuffDropFollowsADraw, testPuffWarbleStaysFinite.
 - Not compiled here (no Swift on the CI box), not on a real Puffco. Real drop size/noise and BLE read rate unknown: tune
   dead/full after Jonah's first real hits. Never port PUFF to the shipping app.
+- 19:35 Jonah (build 27, real Puffco): "needs better temp dip on inhale". Change: dead 3 → 1.5°F, dip also counts fall
+  speed (0.5 s ahead past 2°F/s), "Full warble at" default Auto (`cb.tc.puffFull2` = 0: 85% of biggest recent dip,
+  ≥6°F, ~60 s memory) plus 4/8/15/25/40. Panel readout: dip / biggest / full at / reads/s, so Jonah can send real numbers.

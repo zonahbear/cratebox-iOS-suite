@@ -147,13 +147,18 @@ public enum TrueCurve {
     /// falling (a pull), follows a recovery down in ~1.5 s (you've stopped, so the warble lets go) and drifts to
     /// a steady reading in ~10 s. Nothing reads until the bowl first reaches the hold temperature (the preheat
     /// climb isn't a hit). Readings ~10 a second, ±0.6°F noise in the simulator.
+    /// A real inhale only dips the bowl a few °F (the heater fights back), so the dip also counts how fast it's
+    /// falling (half a second ahead, past 2°F/s), and with `full` = 0 (Auto) the full warble scales to your
+    /// biggest dip lately (85% of it, 6°F at least, forgetting over ~a minute).
     public struct PuffDrop {
-        /// drops under `dead` °F are noise; `full` °F of drop is the whole effect
-        public var dead = 3.0, full = 40.0
-        public private(set) var settled: Double? = nil, drop = 0.0, amount = 0.0, rate = 0.0
+        /// dips under `dead` °F are noise; `full` °F of dip is the whole effect (0 = Auto)
+        public var dead = 1.5, full = 0.0
+        public private(set) var settled: Double? = nil, drop = 0.0, amount = 0.0, rate = 0.0, peak = 0.0
         let hold: Double
         var last: Double? = nil, lastY = 0.0
-        public init(hold: Double, full: Double = 40) { self.hold = hold; self.full = max(full, dead + 1) }
+        public init(hold: Double, full: Double = 0) { self.hold = hold; self.full = full > 0 ? max(full, dead + 1) : 0 }
+        /// the dip that makes the full warble right now
+        public var scale: Double { full > 0 ? full : min(80, max(6, peak * 0.85)) }
         /// one reading (°F, nil = none) at time t (s); returns the amount, 0...1
         public mutating func add(_ t: Double, _ y: Double?) -> Double {
             guard let y else { return amount }
@@ -169,8 +174,9 @@ public enum TrueCurve {
             if y > b { b = min(y, hold + 10) }
             else if rate >= -1 { b += (y - b) * (1 - exp(-dt / (rate > 1 ? 1.5 : 10))) }
             settled = b
-            drop = max(0, b - y)
-            amount = clamp((drop - dead) / (full - dead), 0, 1)
+            drop = max(0, b - y) + max(0, -rate - 2) * 0.5
+            peak = max(peak * exp(-dt / 60), drop)
+            amount = clamp((drop - dead) / (scale - dead), 0, 1)
             return amount
         }
     }

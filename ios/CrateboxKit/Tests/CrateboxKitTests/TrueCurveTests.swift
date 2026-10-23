@@ -116,8 +116,25 @@ final class TrueCurveTests: XCTestCase {
             if t > 17 { after = min(after, a) }
         }
         XCTAssertEqual(rest, 0, "noise at rest isn't a hit")
-        XCTAssertGreaterThan(peak, 0.35)
+        XCTAssertGreaterThan(peak, 0.9)
         XCTAssertEqual(after, 0, "the warble lets go once the draw stops")
+    }
+
+    /// a gentle inhale only dips the bowl ~4°F; Auto still makes a real warble of it
+    func testPuffGentleInhaleStillWarbles() {
+        var h = TC.SimHeater(), m = TC.PuffDrop(hold: 500)
+        h.slots[0] = (500, 120); h.y = 495; h.start()
+        var t = 0.0, peak = 0.0, rest = 0.0
+        while t < 15 {
+            h.airflow = t >= 10 && t < 14 ? 0.15 : 0
+            for _ in 0..<10 { h.advance(0.01) }
+            t += 0.1
+            let a = m.add(t, h.y + Double.random(in: -0.6...0.6))
+            if t < 10 && t > 2 { rest = max(rest, a) }
+            if t >= 10 { peak = max(peak, a) }
+        }
+        XCTAssertEqual(rest, 0)
+        XCTAssertGreaterThan(peak, 0.4)
     }
 
     func testPuffWarbleStaysFinite() {
