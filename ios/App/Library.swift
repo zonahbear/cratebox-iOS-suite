@@ -48,6 +48,10 @@ final class Library: ObservableObject {
     var isPlaying: () -> Bool = { false }
     private var byId = [String: LibTrack]()
     private var open = [String: URL]()           // resolved, security-scoped folder URLs
+    /// folders on a drive that's ejected or unplugged: no access until it's back (true = it's been seen gone,
+    /// so it's opened again when it answers; false = ejected but maybe still plugged in, so it waits)
+    private(set) var offline = [String: Bool]()
+    private var current: LibTrack?               // the track being analysed
     private let dir: URL
     private var saveWork: DispatchWorkItem?
     private var queue = [LibTrack]()
@@ -67,6 +71,7 @@ final class Library: ObservableObject {
 
     // ---- folders ----
     func url(of folder: MusicFolder) -> URL? {
+        if offline[folder.id] != nil { return nil }
         if let u = open[folder.id] { return u }
         var stale = false
         guard let u = try? URL(resolvingBookmarkData: folder.bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
@@ -78,13 +83,14 @@ final class Library: ObservableObject {
     func addFolder(_ u: URL, device: Bool = false) -> MusicFolder? {
         _ = u.startAccessingSecurityScopedResource()
         // a rekordbox USB/SD picked as a music folder: open it as the device it is (playlists, grids, keys, cues)
-        if !device && Library.isRekordboxExport(u) { Devices.shared.open(u); return nil }
+        if !device && Library.isRekordboxExport(u) { Devices.shared.open(u); u.stopAccessingSecurityScopedResource(); return nil }
         guard let bm = try? u.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) else { status("Couldn't keep access to \(u.lastPathComponent)"); return nil }
         let id = (device ? "usb-" : "dir-") + u.lastPathComponent
         let f = MusicFolder(id: id, name: u.lastPathComponent, bookmark: bm, device: device)
         folders.removeAll { $0.id == id }
         folders.append(f)
-        open[id] = u
+        if let old = open[id], old != u { old.stopAccessingSecurityScopedResource() }
+        open[id] = u; offline[id] = nil
         saveFolders()
         if !device { scan(f) }
         return f
@@ -96,10 +102,27 @@ final class Library: ObservableObject {
         byId = Dictionary(uniqueKeysWithValues: tracks.map { ($0.id, $0) })
         saveFolders(); save()
     }
+    /// let go of a folder's drive (eject, or it was unplugged): its tracks stay listed, its queued analysis is
+    /// dropped and the security-scoped access ends, so nothing in Cratebox holds the drive open
+    func release(_ f: MusicFolder, unplugged: Bool) {
+        open[f.id]?.stopAccessingSecurityScopedResource(); open[f.id] = nil
+        offline[f.id] = unplugged
+        queue.removeAll { $0.rec.folder == f.id }
+    }
+    func seenGone(_ f: MusicFolder) { if offline[f.id] == false { offline[f.id] = true } }
+    /// the drive is back: open it again (and look for new files on a music folder)
+    func reconnect(_ f: MusicFolder) {
+        offline[f.id] = nil
+        if !f.device { scan(f) }
+    }
+    /// the drive's file is being read for analysis right now
+    func analysing(in folderId: String) -> Bool { current?.rec.folder == folderId }
     private func saveFolders() { if let d = try? JSONEncoder().encode(folders) { try? d.write(to: dir.appendingPathComponent("folders.json")) } }
 
     func scan(_ f: MusicFolder) {
         guard let root = url(of: f) else { status("\(f.name): open it again in Files (Cratebox lost access)"); return }
+        // a drive that isn't plugged in: keep its tracks (an empty scan would drop them) and wait for it
+        guard (try? root.checkResourceIsReachable()) == true else { release(f, unplugged: true); return }
         progress = "Scanning \(f.name)…"
         DispatchQueue.global(qos: .userInitiated).async {
             var found = [(String, Int64, Double)]()
@@ -194,7 +217,7 @@ final class Library: ObservableObject {
             Devices.shared.readAnalysis(t)
             if (t.info.bpm ?? 0) > 0 && t.info.firstBeat != nil { t.rec.ver = Library.ANALYSIS_VER; changed(t); DispatchQueue.main.async { self.runQueue() }; return }
         }
-        analysing = true
+        analysing = true; current = t
         progress = "Analysing \(queue.count + 1) track\(queue.isEmpty ? "" : "s")…"
         let url = fileURL(t), grid = t.rec.gridManual ? (t.rec.bpm ?? 0, t.rec.firstBeat ?? 0) : nil
         DispatchQueue.global(qos: .utility).async {
@@ -205,7 +228,7 @@ final class Library: ObservableObject {
                 res = (r, Double(pcm.count) / pcm.sampleRate)
             }
             DispatchQueue.main.async {
-                self.analysing = false
+                self.analysing = false; self.current = nil
                 if let (r, dur) = res {
                     t.info.bpm = r.bpm; t.info.firstBeat = r.firstBeat; t.info.phrases = r.phrases; t.info.duration = dur
                     if !t.info.keyFromRekordbox { t.info.key = r.key }

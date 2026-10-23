@@ -28,7 +28,8 @@ final class AppModel: ObservableObject, ControlTarget {
     let playlists = Playlists()
     /// the suite's other two modes (made on first use)
     lazy var bridge = DeckBridge()
-    lazy var usb = USBSession(app: self)
+    lazy var usb: USBSession = { let s = USBSession(app: self); usbMade = s; return s }()
+    private(set) var usbMade: USBSession?        // Cratebox USB, once it's been opened (DriveWatch looks without making it)
     private var lastSec = 0.0
     @Published var statusText = ""
     @Published var controllerName = ""
@@ -99,6 +100,8 @@ final class AppModel: ObservableObject, ControlTarget {
         for f in library.folders where !f.device && !(library.url(of: f).map(Library.isRekordboxExport) ?? false) { library.scan(f) }
         Devices.shared.app = self
         Devices.shared.restore()
+        DriveWatch.shared.app = self
+        DriveWatch.shared.start()
         restoreBrowse()
         if CommandLine.arguments.contains("-demo") { demo() }
     }

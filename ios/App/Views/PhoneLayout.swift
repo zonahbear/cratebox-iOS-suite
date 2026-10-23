@@ -50,7 +50,7 @@ struct PhoneScreen: View {
         HStack(spacing: 0) {
             EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
             VStack(spacing: 4) {
-                PhoneTopBar(settings: $settings).frame(height: 30)
+                PhoneTopBar(settings: $settings).frame(height: 30).zIndex(1)     // EJECT's 44 pt touch area overhangs it
                 if app.tab == 0 {
                     Group { if app.waveMode { WaveStack() } else { mix(l, r, m) } }.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
                 } else { LibraryPane() }
@@ -118,6 +118,7 @@ struct PhoneTopBar: View {
             if m.narrowBar { MasterButton() } else { MixerView(masterBar: true) }
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
             LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
+            EjectButton()
             Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
         }
     }

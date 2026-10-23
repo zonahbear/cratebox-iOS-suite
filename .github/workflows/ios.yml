@@ -69,7 +69,7 @@ jobs:
             # the compact layout: an SE at its Display Zoom size (568x320, which the simulator can't switch on),
             # left deck on PLAY and right on PADS; on other phones, the Settings switch forcing it
             if [ "${dev#iPhone SE}" != "$dev" ]; then
-              for v in "568x320:" "568x320:-four" "568x320:-pads"; do
+              for v in "568x320:" "568x320:-four" "568x320:-pads" "568x320:-eject"; do
                 xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
                 xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -screen "${v%%:*}" ${v#*:} > /dev/null || true
                 sleep 15
@@ -80,6 +80,15 @@ jobs:
               xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -pads -cb.compact YES > /dev/null || true
               sleep 15
               xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_compact.png" || true
+            fi
+            # EJECT (a stand-in "DJ USB" drive): pressed with deck 1 playing, then with every deck stopped
+            if [ "${dev%% *}" = iPhone ]; then
+              for v in "eject:-eject" "eject_stopped:-eject -stopped"; do
+                xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+                xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo ${v#*:} > /dev/null || true
+                sleep 18
+                xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_${v%%:*}.png" || true
+              done
             fi
             xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -four > /dev/null || true

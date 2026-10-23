@@ -24,7 +24,7 @@ struct CompactScreen: View {
         let c = CompactMetrics(deckW: ((w - mixW - 8) / 2).rounded(.down), mixW: mixW, face: face)
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
         return VStack(spacing: 4) {
-            CompactTopBar(settings: $settings).frame(height: 36)
+            CompactTopBar(settings: $settings).frame(height: 36).zIndex(1)     // EJECT's 44 pt touch area overhangs it
             if app.tab == 0 {
                 Group {
                     if app.waveMode { WaveStack() } else {
@@ -82,6 +82,7 @@ struct CompactTopBar: View {
                 .font(.system(size: 11, weight: rec.recording ? .bold : .regular)).foregroundStyle(rec.recording ? Theme.hot : Theme.muted)
                 .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
             MasterButton()
+            EjectButton()
             Menu {
                 Toggle("Waveforms (WAVE)", isOn: Binding(get: { app.waveMode }, set: { v in withAnimation(.easeInOut(duration: 0.2)) { app.waveMode = v } }))
                 Toggle("4 decks", isOn: Binding(get: { core.four }, set: { core.setFour($0); if !$0 { app.midi.resetSides() } }))

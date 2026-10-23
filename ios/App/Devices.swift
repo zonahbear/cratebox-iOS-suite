@@ -40,7 +40,11 @@ final class Devices: ObservableObject {
 
     func restore() {
         guard let lib = app?.library else { return }
-        for f in lib.folders where f.device { if let u = lib.url(of: f) { mount(u, folder: f) } }
+        // a stick that isn't plugged in waits for DriveWatch to see it come back
+        for f in lib.folders where f.device {
+            if let u = lib.url(of: f), FileManager.default.fileExists(atPath: u.appendingPathComponent("PIONEER/rekordbox/export.pdb").path) { mount(u, folder: f) }
+            else { lib.release(f, unplugged: true) }
+        }
         // sticks added as plain music folders (before the + USB fix): open them as rekordbox devices now
         for f in lib.folders where !f.device {
             if let u = lib.url(of: f), Library.isRekordboxExport(u) { lib.removeFolder(f); open(u) }
@@ -89,10 +93,11 @@ final class Devices: ObservableObject {
         objectWillChange.send()
     }
     /// Eject: finish any playlist save, make sure it's on the stick itself (not just in iOS's cache), then let
-    /// go of the drive. iOS has no eject of its own for USB drives; after this, unplugging is safe.
-    func eject(_ d: Device) {
+    /// go of the drive. iOS has no eject of its own for USB drives; after this, unplugging is safe. The stick
+    /// stays known (not its access): plugged in again, DriveWatch opens it again. `done` says whether it's out.
+    func eject(_ d: Device, quiet: Bool = false, done: ((Bool) -> Void)? = nil) {
         if app?.core.decks.contains(where: { $0.track.map { t in d.byRbId.values.contains { $0.info === t } } ?? false }) == true {
-            app?.status("A deck is playing from \(d.name): load something else (or stop and unload) first", 7); return
+            app?.status("A deck is playing from \(d.name): load something else (or stop and unload) first", 7); done?(false); return
         }
         if d.unsaved && !d.saving { d.saveWork?.cancel(); write(d) }
         if d.saving || d.unsaved {
@@ -100,8 +105,8 @@ final class Devices: ObservableObject {
             var tries = 0
             func again() {
                 tries += 1
-                if !d.saving && !d.unsaved { self.eject(d) }
-                else if tries > 40 || (!d.saving && d.unsaved) { self.app?.status("Couldn't finish saving to \(d.name). Not ejected: it's not safe to unplug yet.", 10) }
+                if !d.saving && !d.unsaved { self.eject(d, quiet: quiet, done: done) }
+                else if tries > 40 || (!d.saving && d.unsaved) { self.app?.status("Couldn't finish saving to \(d.name). Not ejected: it's not safe to unplug yet.", 10); done?(false) }
                 else { DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: again) }
             }
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.25, execute: again)
@@ -112,12 +117,17 @@ final class Devices: ObservableObject {
             if let h = try? FileHandle(forUpdating: u) { _ = fcntl(h.fileDescriptor, F_FULLFSYNC); try? h.synchronize(); try? h.close() }
         }
         let name = d.name
+        drop(d, unplugged: false)
+        if !quiet { app?.status("\(name) ejected: safe to unplug. (Plug it in again and it comes back.)", 8) }
+        done?(true)
+    }
+    /// take a stick off the list and let go of it: ejected, or pulled out without one (DriveWatch)
+    func drop(_ d: Device, unplugged: Bool) {
         list.removeAll { $0 === d }
         app?.library.setDeviceTracks(d.id, [])
-        if let f = app?.library.folders.first(where: { $0.id == d.id }) { app?.library.removeFolder(f) }
+        if let f = app?.library.folders.first(where: { $0.id == d.id }) { app?.library.release(f, unplugged: unplugged) }
         if case .device(let v) = app?.view, v == d.id { app?.view = .collection }
         if case .devicePlaylist(let v, _) = app?.view, v == d.id { app?.view = .collection }
-        app?.status("\(name) ejected: safe to unplug. (Add it again with + USB.)", 8)
     }
     func close(_ d: Device) {
         if app?.core.decks.contains(where: { $0.track.map { t in d.byRbId.values.contains { $0.info === t } } ?? false }) == true { app?.status("Load something else on the decks first"); return }
