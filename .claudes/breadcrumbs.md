@@ -51,3 +51,6 @@
   security-scope start fixed in addFolder.
 - CI: `-demo -eject [-stopped]` shots (stand-in "DJ USB"). Not tested on a real stick yet.
 - Next: check CI run, screenshots to Jonah, port to personal/heat (his OK before pushing it: it uploads to TestFlight).
+- 2026-10-23 07:00: shipped. TestFlight 0.1.0 (16.1) from preview/truecurve-usb (fast-forwarded to 272c625) and
+  Cratebox HEAT 0.1.0 (17.1) from personal/heat c2506ff (EJECT commits cherry-picked, ios.yml on .heat, merged PR #12).
+  PR #11 (auto-opened, base main) still open. Next: real-stick test (detect, yank, eject, replug).
