@@ -6,7 +6,7 @@ import Foundation
 
 public enum PDBError: Error, Equatable, CustomStringConvertible {
     case notPDB, brokenChain(UInt32), noTable(UInt32), noDataPages(UInt32), noFreePage(UInt32)
-    case badId(UInt32), missingParent, rowTooBig, readBack(String)
+    case badId(UInt32), missingParent, rowTooBig, noRoom(UInt32), readBack(String)
     public var description: String {
         switch self {
         case .notPDB: return "not an export.pdb"
@@ -17,6 +17,7 @@ public enum PDBError: Error, Equatable, CustomStringConvertible {
         case .badId(let i): return "bad playlist id \(i)"
         case .missingParent: return "playlist parent missing"
         case .rowTooBig: return "row too big"
+        case .noRoom(let t): return "export.pdb: no room on the page for this change (table \(t)); make it in rekordbox and export again"
         case .readBack(let s): return "export.pdb: \(s)"
         }
     }
