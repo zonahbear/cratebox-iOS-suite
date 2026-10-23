@@ -8,7 +8,9 @@ struct MixerView: View {
     var compact = false
     var phone = false
     var masterBar = false               // iPhone: just the master section, for the top bar
+    var short = false                   // a short iPad (mini): BEAT FX behind a button instead of in the column
     @State private var fxSheet = false
+    @Environment(\.phoneMetrics) var m
 
     var order: [Int] { core.four ? [2, 0, 1, 3] : [0, 1] }
 
@@ -20,7 +22,7 @@ struct MixerView: View {
     /// section (CUE/MST, MST, MASTER, FX) is in the bar along the top.
     var phoneBody: some View {
         let sh = core.four ? [app.midi.side[0], app.midi.side[1]] : [0, 1]
-        let k: CGFloat = 22
+        let k = m.knob
         let names: [(String, String)] = [("TRIM", "trim"), ("HI", "hi"), ("MID", "mid"), ("LOW", "low"), ("CFX", "cfx")]
         return VStack(spacing: 4) {
             // a row per control: channel 1's knob, the name, channel 2's knob
@@ -28,25 +30,25 @@ struct MixerView: View {
                 ForEach(names, id: \.1) { label, key in
                     HStack(spacing: 0) {
                         mixKnob(key, sh[0], k).frame(maxWidth: .infinity)
-                        Text(label).font(.system(size: 8, weight: .semibold)).foregroundStyle(Theme.muted).frame(width: 30)
+                        Text(label).font(.system(size: 8, weight: .semibold)).foregroundStyle(Theme.muted).frame(width: m.mixLabel)
                         mixKnob(key, sh[1], k).frame(maxWidth: .infinity)
                     }
                 }
             }
             HStack(spacing: 0) {
                 cueBtn(sh[0]).frame(maxWidth: .infinity)
-                Color.clear.frame(width: 30, height: 1)
+                Color.clear.frame(width: m.mixLabel, height: 1)
                 cueBtn(sh[1]).frame(maxWidth: .infinity)
             }
             HStack(spacing: 0) {
                 faderCol(sh[0]).frame(maxWidth: .infinity)
-                Color.clear.frame(width: 30, height: 1)
+                Color.clear.frame(width: m.mixLabel, height: 1)
                 faderCol(sh[1]).frame(maxWidth: .infinity)
             }
-            crossfader.frame(height: 18)
+            crossfader.frame(height: m.xfH)
         }
         .padding(4)
-        .frame(width: 140)
+        .frame(width: m.mixW)
         .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
     }
     func mixKnob(_ key: String, _ i: Int, _ k: CGFloat) -> some View {
@@ -55,14 +57,14 @@ struct MixerView: View {
     }
     func cueBtn(_ i: Int) -> some View {
         Button { core.togglePfl(i) } label: {
-            Text("CUE").font(.system(size: 10, weight: .heavy)).frame(width: 40, height: 22).foregroundStyle(core.mixer.pfl[i] ? Color.black : Theme.deck[i])
+            Text("CUE").font(.system(size: 10, weight: .heavy)).frame(width: 40, height: m.cueH).foregroundStyle(core.mixer.pfl[i] ? Color.black : Theme.deck[i])
                 .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.pfl[i] ? Theme.cue : Theme.raise))
         }.buttonStyle(.plain)
     }
     func faderCol(_ i: Int) -> some View {
         HStack(spacing: 2) {
-            MeterView(level: { let r = app.core.lastSnapshot.decks[i]; return Double(max(r.peakL, r.peakR)) }).frame(width: 5, height: 70)
-            VFader(value: core.mixer.fader[i], color: Theme.deck[i], height: 70) { core.setMixer("fader", i, $0) }
+            MeterView(level: { let r = app.core.lastSnapshot.decks[i]; return Double(max(r.peakL, r.peakR)) }).frame(width: 5, height: m.mixFader)
+            VFader(value: core.mixer.fader[i], color: Theme.deck[i], height: m.mixFader) { core.setMixer("fader", i, $0) }
         }
     }
     /// iPhone: the master section, for the bar along the top
@@ -105,7 +107,10 @@ struct MixerView: View {
                 MeterView(level: { let p = app.core.lastSnapshot.masterPeak; return Double(max(p.0, p.1)) }).frame(width: 8, height: 40)
             }
             crossfader
-            BeatFXView()
+            if short {
+                LitButton(label: "BEAT FX · \(fx.fx.rawValue.uppercased())", on: fx.on, color: Theme.hot, wide: true) { fxSheet = true }
+                    .sheet(isPresented: $fxSheet) { BeatFXView().padding().presentationDetents([.height(220)]) }
+            } else { BeatFXView() }
         }
         .padding(8)
         .frame(width: core.four ? 300 : 210)

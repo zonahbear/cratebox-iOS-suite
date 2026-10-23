@@ -25,8 +25,9 @@ struct ContentView: View {
                         phoneMix.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
                     } else { LibraryPane() }
                 } else {
-                    if app.waveMode { WaveStack().frame(maxHeight: .infinity) } else { mix(compact: g.size.height < 900) }
-                    LibraryPane().frame(minHeight: 180)
+                    // a short iPad (mini, ~724 pt): BEAT FX folds into a button and the library can get smaller
+                    if app.waveMode { WaveStack().frame(maxHeight: .infinity) } else { mix(compact: g.size.height < 900, short: g.size.height < 800) }
+                    LibraryPane().frame(minHeight: g.size.height < 800 ? 130 : 180)
                 }
             }
             .padding(6)
@@ -56,23 +57,35 @@ struct ContentView: View {
             }.fixedSize(horizontal: false, vertical: true)
         }
     }
-    @ViewBuilder func mix(compact: Bool) -> some View {
-        if core.four {
+    @ViewBuilder func mix(compact: Bool, short: Bool = false) -> some View {
+        if core.four && short {
+            // 4 decks on a short iPad (mini): two columns of decks don't fit, so like the iPhone it shows the two
+            // decks the controller is on (DECK 1 / 3, 2 / 4 switch on each) around their two channels
+            let l = app.midi.side[0], r = app.midi.side[1]
+            VStack(spacing: 6) {
+                VStack(spacing: 3) { ForEach(0..<4, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: 54) } }
+                HStack(alignment: .top, spacing: 6) {
+                    DeckView(deck: core.decks[l], phone: true).id(l)
+                    MixerView(phone: true)
+                    DeckView(deck: core.decks[r], phone: true).id(r)
+                }
+            }
+        } else if core.four {
             // 4 decks on an iPad: all four waveforms across the top, the decks' controls in two columns
             VStack(spacing: 6) {
                 VStack(spacing: 3) { ForEach(0..<4, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: compact ? 54 : 70) } }
                 HStack(alignment: .top, spacing: 6) {
                     VStack(spacing: 6) { DeckView(deck: core.decks[0], phone: true, chips: false); DeckView(deck: core.decks[2], phone: true, chips: false) }
-                    MixerView(compact: true)
+                    MixerView(compact: true, short: short)
                     VStack(spacing: 6) { DeckView(deck: core.decks[1], phone: true, chips: false); DeckView(deck: core.decks[3], phone: true, chips: false) }
                 }
             }
-        } else { mix2(compact: compact) }
+        } else { mix2(compact: compact, short: short) }
     }
-    func mix2(compact: Bool) -> some View {
+    func mix2(compact: Bool, short: Bool) -> some View {
         HStack(alignment: .top, spacing: 6) {
             VStack(spacing: 6) { DeckView(deck: core.decks[0], compact: compact || core.four); if core.four { DeckView(deck: core.decks[2], compact: true) } }
-            MixerView(compact: compact || core.four)
+            MixerView(compact: compact || core.four, short: short)
             VStack(spacing: 6) { DeckView(deck: core.decks[1], compact: compact || core.four); if core.four { DeckView(deck: core.decks[3], compact: true) } }
         }
     }
@@ -138,6 +151,7 @@ struct SettingsView: View {
     @AppStorage("cb.recFmt") var recFmt = "wav"
     @AppStorage("cb.phrases") var phrases = true
     @AppStorage("cb.wave") var waveStyle = "rgb"
+    @AppStorage("cb.compact") var compact = false
     @State private var warn = false
     @State private var learning = false
     @State private var hint = ""
@@ -180,6 +194,12 @@ struct SettingsView: View {
                 Section("Look") {
                     Toggle("Phrases (Intro / Build / Drop… on the waveforms)", isOn: $phrases)
                     Picker("Waveform", selection: $waveStyle) { Text("RGB (red lows, green mids, blue highs)").tag("rgb"); Text("3-band").tag("3band") }
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        let always = PhoneScreen.autoCompactNow()
+                        Toggle("Compact layout (bigger buttons, one deck face at a time)", isOn: always ? .constant(true) : $compact).disabled(always)
+                        Text(always ? "This screen always uses the compact layout: it's too small for the full one, or has no Dynamic Island beside the strips." : "Each deck shows PLAY or PADS, the EQ opens from the mixer, and WAVE, 4 DECKS, FX and REC move into the ⋯ menu.")
+                            .font(.caption).foregroundStyle(Theme.muted)
+                    }
                 }
                 Section("Recording") {
                     Picker("Format", selection: $recFmt) { Text("WAV (lossless, ~650 MB per hour)").tag("wav"); Text("AAC 256 kbps (~115 MB per hour)").tag("aac") }

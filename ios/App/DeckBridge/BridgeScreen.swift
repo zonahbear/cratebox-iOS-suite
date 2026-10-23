@@ -12,12 +12,12 @@ struct BridgeScreen: View {
     var body: some View {
         let ins = PhoneScreen.windowInsets()
         let phone = UIDevice.current.userInterfaceIdiom == .phone
-        let band = phone ? max(46, min(ins.left, ins.right)) : 58
+        let band = phone ? max(40, min(ins.left, ins.right)) : 58
         GeometryReader { g in
             HStack(spacing: 0) {
                 BridgeEdge(bridge: bridge, deck: bridge.sides[0], side: 0, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band)
                 VStack(spacing: 4) {
-                    BridgeTopBar(bridge: bridge, setup: $setup).frame(height: 30)
+                    BridgeTopBar(bridge: bridge, setup: $setup, narrow: g.size.width - 2 * band < 680).frame(height: 30)
                     GeometryReader { b in
                         let mixW: CGFloat = min(170, max(140, b.size.width * 0.19))
                         HStack(alignment: .top, spacing: 4) {
@@ -33,6 +33,7 @@ struct BridgeScreen: View {
                         Text("\(bridge.sides[1].deck + 1) · rekordbox").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted).padding(.horizontal, 10)
                     }.frame(height: max(ins.bottom, 12))
                 }
+                .frame(width: max(0, g.size.width - 2 * band))   // a fixed width: too little room clips the middle, never shoves the strips off
                 .clipped()
                 BridgeEdge(bridge: bridge, deck: bridge.sides[1], side: 1, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band)
             }
@@ -48,22 +49,24 @@ struct BridgeScreen: View {
 struct BridgeTopBar: View {
     @ObservedObject var bridge: DeckBridge
     @Binding var setup: Bool
+    var narrow = false                  // an SE: tighter picker and keys so the bar fits
     var body: some View {
-        HStack(spacing: 8) {
+        let key: CGFloat = narrow ? 30 : 34, load: CGFloat = narrow ? 50 : 62
+        HStack(spacing: narrow ? 6 : 8) {
             ModeSwitcher(compact: true)
             HStack(spacing: 4) {
                 Circle().fill(bridge.heardRecently ? Theme.ok : bridge.confirmed ? Theme.accent : bridge.linked ? Theme.warn : Theme.dim).frame(width: 7, height: 7)
                 Text(bridge.heardRecently ? "rekordbox linked" : bridge.confirmed ? "Linked" : bridge.linked ? "Sending" : "Not linked").font(.system(size: 11)).lineLimit(1)
-            }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise))
+            }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise)).frame(maxWidth: narrow ? 92 : 180)
             .onTapGesture { setup = true }
-            Picker("", selection: $bridge.pair) { Text("DECKS 1·2").tag(0); Text("DECKS 3·4").tag(1) }.pickerStyle(.segmented).frame(width: 190)
+            Picker("", selection: $bridge.pair) { Text(narrow ? "1·2" : "DECKS 1·2").tag(0); Text(narrow ? "3·4" : "DECKS 3·4").tag(1) }.pickerStyle(.segmented).frame(width: narrow ? 96 : 190)
             Spacer(minLength: 4)
             HStack(spacing: 4) {
-                BridgeKey(label: "▲", height: 26) { if $0 { bridge.browse(-1) } }.frame(width: 34)
-                BridgeKey(label: "▼", height: 26) { if $0 { bridge.browse(1) } }.frame(width: 34)
-                BridgeKey(label: "LOAD \(bridge.sides[0].deck + 1)", height: 26) { if $0 { bridge.load(side: 0) } }.frame(width: 62)
-                BridgeKey(label: "LOAD \(bridge.sides[1].deck + 1)", height: 26) { if $0 { bridge.load(side: 1) } }.frame(width: 62)
-                BridgeKey(label: "BACK", height: 26) { bridge.global(.back, on: $0) }.frame(width: 48)
+                BridgeKey(label: "▲", height: 26) { if $0 { bridge.browse(-1) } }.frame(width: key)
+                BridgeKey(label: "▼", height: 26) { if $0 { bridge.browse(1) } }.frame(width: key)
+                BridgeKey(label: "LOAD \(bridge.sides[0].deck + 1)", height: 26) { if $0 { bridge.load(side: 0) } }.frame(width: load)
+                BridgeKey(label: "LOAD \(bridge.sides[1].deck + 1)", height: 26) { if $0 { bridge.load(side: 1) } }.frame(width: load)
+                BridgeKey(label: "BACK", height: 26) { bridge.global(.back, on: $0) }.frame(width: narrow ? 44 : 48)
             }
             Button { setup = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
         }
@@ -134,7 +137,7 @@ struct BridgeDeck: View {
     static func jogSize(_ W: CGFloat, _ H: CGFloat) -> CGFloat {
         let byWidth: CGFloat = W - tempoW - capW - 20
         let byHeight: CGFloat = H - loopH - tabsH - 88 - 20
-        return max(100, min(byWidth, byHeight))
+        return max(72, min(byWidth, byHeight))
     }
     var body: some View {
         GeometryReader { g in
