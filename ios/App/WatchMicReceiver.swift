@@ -24,14 +24,27 @@ final class WatchMicReceiver: ObservableObject {
     @Published private(set) var wcInfo = "Watch link: starting"
     /// phone-side controls (the watch can't override these)
     @Published var phoneMuted = false { didSet { ctl.pointee.phoneMuted = phoneMuted } }
-    @Published var phoneLevel: Float = 1 { didSet { ctl.pointee.phoneLevel = phoneLevel } }
+    /// Settings: the mic's gain, set once for the room (dB)
+    @Published var gainDb = UserDefaults.standard.object(forKey: "cb.watchMicGainDb") as? Double ?? 0 {
+        didSet { UserDefaults.standard.set(gainDb, forKey: "cb.watchMicGainDb"); setLevel() }
+    }
+    /// the board: the MIC knob in the mixer (MIDI-learnable), 0...1, 1 = the Settings gain
+    @Published var volume = UserDefaults.standard.object(forKey: "cb.watchMicVol") as? Double ?? 1 {
+        didSet { UserDefaults.standard.set(volume, forKey: "cb.watchMicVol"); setLevel() }
+    }
+    /// feedback suppression (high-pass + automatic notches)
+    @Published var feedbackOn = UserDefaults.standard.object(forKey: "cb.watchMicFeedback") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(feedbackOn, forKey: "cb.watchMicFeedback"); let on = feedbackOn; queue.async { self.fbOn = on } }
+    }
+    /// the notches the feedback filter has placed (Hz)
+    @Published private(set) var notches: [Double] = []
     /// jitter buffer target: more = fewer dropouts, more delay
     @Published var targetMs = UserDefaults.standard.object(forKey: "cb.watchMicMs") as? Int ?? 60 {
         didSet { UserDefaults.standard.set(targetMs, forKey: "cb.watchMicMs"); ctl.pointee.target = targetMs * 48 }
     }
 
     /// what the audio thread reads; plain fields, written whole from the main or network queue
-    struct Control { var gain: Float = 1; var watchMuted = false; var phoneMuted = false; var phoneLevel: Float = 1; var target = 60 * 48; var on = false }
+    struct Control { var gain: Float = 1; var watchMuted = false; var phoneMuted = false; var level: Float = 1; var target = 60 * 48; var on = false }
     private let ctl: UnsafeMutablePointer<Control> = { let p = UnsafeMutablePointer<Control>.allocate(capacity: 1); p.initialize(to: Control()); return p }()
     /// the voice at 48 kHz, ready to mix
     private let ring = FloatRing(capacity: 48000 * 2)
@@ -48,12 +61,18 @@ final class WatchMicReceiver: ObservableObject {
     private var smooth: Float = 0
     private var underrunCount: UInt32 = 0
     private let wc = WatchMicWC()
+    // on `queue`
+    private let fb = MicFeedback(rate: WatchMic.rate)
+    private var fbOn = true
     private let scratch: UnsafeMutablePointer<Float> = { let p = UnsafeMutablePointer<Float>.allocate(capacity: 4096); p.initialize(repeating: 0, count: 4096); return p }()
 
     /// Watch Connectivity starts with the app, not with Listen: a message from the watch can launch the app in the
     /// background, and it's dropped if nothing is the session's delegate by then (CrateboxApp touches .shared at launch).
     private init() {
         ctl.pointee.target = targetMs * 48
+        fbOn = feedbackOn
+        setLevel()
+        fb.onChange = { [weak self] f in DispatchQueue.main.async { self?.notches = f } }
         wc.onData = { [weak self] d, reply in self?.queue.async { self?.fromWatchConnectivity(d, reply) } }
         wc.onChange = { [weak self] info in DispatchQueue.main.async { self?.wcInfo = info } }
         wc.activate()
@@ -86,7 +105,12 @@ final class WatchMicReceiver: ObservableObject {
         }
     }
 
+    /// the volume knob is a fader-like curve (squared), so the bottom half is usable
+    private func setLevel() { ctl.pointee.level = Float(pow(10, gainDb / 20) * volume * volume) }
+    func resetFeedback() { queue.async { self.fb.reset() } }
+
     func stop() {
+        resetFeedback()
         listener?.cancel(); listener = nil
         conn?.cancel(); conn = nil
         ctl.pointee.on = false
@@ -155,10 +179,12 @@ final class WatchMicReceiver: ObservableObject {
             if let last = lastSeq, seq > last + 1 { lostCount &+= seq - last - 1 }
             lastSeq = seq
             ctl.pointee.gain = max(0, min(2, gain)); ctl.pointee.watchMuted = muted
+            // feedback suppression at 24 kHz; the high-pass and notches always run, the detector only when it's on
+            var v = samples.map { Float($0) / 32767 }
+            fb.process(&v, detect: fbOn)
             // 24 kHz → 48 kHz: each sample becomes two, the first halfway from the previous one
-            var up = [Float](repeating: 0, count: samples.count * 2)
-            for (i, s) in samples.enumerated() {
-                let x = Float(s) / 32767
+            var up = [Float](repeating: 0, count: v.count * 2)
+            for (i, x) in v.enumerated() {
                 up[2 * i] = (prev + x) * 0.5; up[2 * i + 1] = x; prev = x
                 peak = max(peak, abs(x))
             }
@@ -188,7 +214,7 @@ final class WatchMicReceiver: ObservableObject {
     func mix(_ outs: [UnsafeMutablePointer<Float>], _ frames: Int, master: Int) {
         let c = ctl.pointee
         guard c.on, !outs.isEmpty else { return }
-        let want: Float = (c.watchMuted || c.phoneMuted) ? 0 : c.gain * c.phoneLevel
+        let want: Float = (c.watchMuted || c.phoneMuted) ? 0 : c.gain * c.level
         if priming {
             guard let n = ring.tryCount(), n >= c.target else { return }
             priming = false
@@ -201,7 +227,10 @@ final class WatchMicReceiver: ObservableObject {
             guard let got = ring.tryRead(scratch, k) else { return }
             for j in 0..<got {
                 smooth += (want - smooth) * 0.002          // ~10 ms ramp at 48 kHz
-                let v = scratch[j] * smooth
+                var v = scratch[j] * smooth
+                // soft knee above -2 dBFS so a hot gain rounds off instead of clipping hard
+                let a = abs(v)
+                if a > 0.8 { v = (v < 0 ? -1 : 1) * (0.8 + 0.2 * tanhf((a - 0.8) / 0.2)) }
                 outs[lc][done + j] += v
                 if rc >= 0 { outs[rc][done + j] += v }
             }

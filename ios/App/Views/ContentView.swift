@@ -253,7 +253,7 @@ struct LearnView: View {
     @EnvironmentObject var app: AppModel
     @State private var hint = "Pick a control, then move or press it on the controller."
     let decked = ["play", "cue", "sync", "jog", "tempo", "fader", "trim", "hi", "mid", "low", "cfx", "pfl", "loopIn", "loopOut", "reloop", "keylock", "quant", "load", "jogSide"]
-    let global = ["xfader", "headMix", "master", "masterCue", "browse", "browsePress", "fxOn", "fxSelect", "fxBeatDown", "fxBeatUp", "fxDepth"]
+    let global = ["xfader", "headMix", "master", "masterCue", "browse", "browsePress", "fxOn", "fxSelect", "fxBeatDown", "fxBeatUp", "fxDepth", "micVol"]
     var body: some View {
         Form {
             Section { Text(hint).font(.callout) }

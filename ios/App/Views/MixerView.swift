@@ -5,6 +5,7 @@ struct MixerView: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var core: Core
     @EnvironmentObject var fx: FxController
+    @ObservedObject private var mic = WatchMicReceiver.shared
     var compact = false
     var phone = false
     var masterBar = false               // iPhone: just the master section, for the top bar
@@ -90,6 +91,12 @@ struct MixerView: View {
                         .padding(.horizontal, 5).frame(height: 26).background(RoundedRectangle(cornerRadius: 4).stroke(Theme.line2))
                 }.buttonStyle(.plain)
             }
+            if mic.listening {
+                VStack(spacing: 0) {
+                    Knob(label: "", value: mic.volume, color: Theme.hot, size: 20, center: 1) { mic.volume = $0 }
+                    Text("MIC").font(.system(size: 6.5, weight: .bold)).foregroundStyle(mic.phoneMuted || mic.watchMuted ? Theme.muted : Theme.hot)
+                }
+            }
             MeterView(level: { let p = app.core.lastSnapshot.masterPeak; return Double(max(p.0, p.1)) }).frame(width: 5, height: 24)
         }
     }
@@ -104,6 +111,7 @@ struct MixerView: View {
                 Knob(label: "Cue/Mst", value: core.mixer.headMix, size: 28, center: 0) { core.mixer.headMix = $0 }
                 LitButton(label: "MST", on: core.mixer.masterCue, color: Theme.cue) { core.toggleMasterCue() }
                 Knob(label: "Master", value: core.mixer.master, size: 28, center: 0.8) { core.mixer.master = $0 }
+                if mic.listening { Knob(label: "Mic", value: mic.volume, color: Theme.hot, size: 28, center: 1) { mic.volume = $0 } }
                 MeterView(level: { let p = app.core.lastSnapshot.masterPeak; return Double(max(p.0, p.1)) }).frame(width: 8, height: 40)
             }
             crossfader

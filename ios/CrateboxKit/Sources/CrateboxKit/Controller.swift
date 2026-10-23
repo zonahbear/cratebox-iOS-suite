@@ -134,7 +134,7 @@ public protocol ControlTarget: AnyObject {
     func controllerStatus(_ s: String)
 }
 
-let ABS_ACTIONS: Set<String> = ["tempo", "fader", "trim", "hi", "mid", "low", "cfx", "xfader", "headMix", "master", "fxDepth"]
+let ABS_ACTIONS: Set<String> = ["tempo", "fader", "trim", "hi", "mid", "low", "cfx", "xfader", "headMix", "master", "fxDepth", "micVol"]
 let REL_ACTIONS: Set<String> = ["jogTop", "jogSide", "jogSearch", "browse", "zoom"]
 let LED_RE = try! NSRegularExpression(pattern: "^(play|cue|sync|pfl|loopIn|loopOut|reloop|keylock|quant|mode:|hot:|loop:|pfx:|pfx2:|fxOn|layer)")
 let PICKUP = ["tempo", "fader", "trim", "hi", "mid", "low", "cfx"]
@@ -142,7 +142,7 @@ public let LEARN_LABEL: [String: String] = ["play": "Play", "cue": "Cue", "sync"
     "tempo": "Tempo fader", "jog": "Jog wheel", "pfl": "Headphone cue", "masterCue": "Master cue", "fxOn": "Beat FX on/off", "fxSelect": "Beat FX select",
     "fxBeatDown": "Beat FX beat ◀", "fxBeatUp": "Beat FX beat ▶", "fxDepth": "Beat FX level/depth", "fader": "Channel fader", "trim": "Trim", "hi": "EQ high",
     "mid": "EQ mid", "low": "EQ low", "cfx": "Filter (CFX)", "xfader": "Crossfader", "headMix": "Cue/master mix", "master": "Master level",
-    "browse": "Browse knob", "browsePress": "Browse knob press", "load": "Load", "keylock": "Master tempo", "quant": "Quantize", "jogSide": "Jog side (nudge)", "layer": "Deck layer (1⇄3 / 2⇄4)"]
+    "browse": "Browse knob", "browsePress": "Browse knob press", "load": "Load", "keylock": "Master tempo", "quant": "Quantize", "jogSide": "Jog side (nudge)", "layer": "Deck layer (1⇄3 / 2⇄4)", "micVol": "Watch mic volume"]
 
 public final class MIDIEngine {
     public weak var target: ControlTarget?
