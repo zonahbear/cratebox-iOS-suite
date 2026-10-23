@@ -15,11 +15,16 @@ struct MicView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 8) {
-                if mic.live {
+                if mic.live && !mic.connected {
+                    ProgressView()
+                    Text(mic.status).font(.footnote).multilineTextAlignment(.center)
+                    stats
+                    Button("Cancel", role: .destructive) { mic.end() }
+                } else if mic.live {
                     Button { mic.muted.toggle() } label: {
-                        Text(mic.muted ? "MUTED" : "LIVE").font(.system(size: 30, weight: .heavy, design: .rounded)).frame(maxWidth: .infinity, minHeight: 64)
+                        Text(mic.lost ? "NO LINK" : mic.muted ? "MUTED" : "LIVE").font(.system(size: 30, weight: .heavy, design: .rounded)).frame(maxWidth: .infinity, minHeight: 64)
                     }
-                    .tint(mic.muted ? .gray : .red)
+                    .tint(mic.lost ? .orange : mic.muted ? .gray : .red)
                     .buttonStyle(.borderedProminent)
                     HStack {
                         Text("Level \(Int(crown * 100))%").font(.system(.footnote, design: .rounded)).monospacedDigit()

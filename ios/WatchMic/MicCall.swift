@@ -18,6 +18,10 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
     @Published private(set) var phoneDropouts = 0
     @Published private(set) var phoneLost = 0
     @Published private(set) var level: Float = 0
+    /// the phone has answered (a pong or stats came back); only then is the call reported as connected
+    @Published private(set) var connected = false
+    /// connected, but nothing back from the phone for 3 s
+    @Published private(set) var lost = false
     @Published private(set) var inputInfo = ""
     @Published var muted = false { didSet { if oldValue != muted { syncMute() } } }
     /// 0...2, the crown
@@ -40,6 +44,8 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
     private var seq: UInt32 = 0
     private var pingID: UInt32 = 0
     private var tick = 0
+    private var lastHeard = 0.0
+    private var giveUp: DispatchWorkItem?
     // resampler state (on `queue`)
     private var pending: [Float] = []
     private var pos = 0.0
@@ -97,7 +103,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
         }
         provider.reportOutgoingCall(with: action.callUUID, startedConnectingAt: Date())
         action.fulfill()
-        provider.reportOutgoingCall(with: action.callUUID, connectedAt: Date())
+        // "connected" is reported in heard(), once the phone actually answers
     }
 
     func provider(_ provider: CXProvider, perform action: CXEndCallAction) {
@@ -113,9 +119,16 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
     func provider(_ provider: CXProvider, didActivate audioSession: AVAudioSession) {
         DispatchQueue.main.async {
             self.live = true
-            self.status = "Live"
+            self.status = "Connecting to the phone…"
             self.startAudio()
             self.connect()
+            // the network only works during the call, so the call has to start first; give the phone 10 s to answer
+            let w = DispatchWorkItem { [weak self] in
+                guard let self, self.live, !self.connected else { return }
+                self.fail("No answer from Cratebox on the phone. Is Listen on, and are both on the same Wi-Fi?")
+            }
+            self.giveUp = w
+            DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: w)
         }
     }
 
@@ -123,7 +136,29 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
         DispatchQueue.main.async { self.stopAudio() }
     }
 
+    /// ends the call as failed (the watch shows it as a failed call, not a finished one)
+    private func fail(_ why: String) {
+        if let id = callID { provider.reportCall(with: id, endedAt: Date(), reason: .failed) }
+        teardown()
+        status = why
+    }
+
+    /// on `queue`: something came back from the phone
+    private func heard() {
+        lastHeard = ProcessInfo.processInfo.systemUptime
+        DispatchQueue.main.async {
+            if self.lost { self.lost = false }
+            guard self.live, !self.connected, let id = self.callID else { return }
+            self.connected = true
+            self.status = "Live"
+            self.giveUp?.cancel(); self.giveUp = nil
+            self.provider.reportOutgoingCall(with: id, connectedAt: Date())
+        }
+    }
+
     private func teardown() {
+        giveUp?.cancel(); giveUp = nil
+        connected = false; lost = false
         stopAudio()
         timer?.cancel(); timer = nil
         browser?.cancel(); browser = nil
@@ -195,13 +230,14 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
             if ready { conn?.send(content: WatchMicPacket.audio(seq: seq, gain: g, muted: m, samples: chunk).encode(), completion: .idempotent) }
         }
         tick += 1
-        if tick % 200 == 0, ready {                 // a ping a second
+        if tick % 200 == 0 || (!connected && tick % 40 == 0), ready {   // a ping a second, 5 a second until the phone answers
             pingID &+= 1
             conn?.send(content: WatchMicPacket.ping(id: pingID, sent: ProcessInfo.processInfo.systemUptime).encode(), completion: .idempotent)
         }
         if tick % 20 == 0 {                          // meter at 10 Hz
             let p = peak; peak = 0
-            DispatchQueue.main.async { self.level = p }
+            let gone = connected && ProcessInfo.processInfo.systemUptime - lastHeard > 3
+            DispatchQueue.main.async { self.level = p; if self.lost != gone { self.lost = gone } }
         }
     }
 
@@ -253,9 +289,11 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate {
             if let data, let p = WatchMicPacket.decode(data) {
                 switch p {
                 case let .pong(_, sent):
+                    self.heard()
                     let ms = Int((ProcessInfo.processInfo.systemUptime - sent) * 1000)
                     DispatchQueue.main.async { self.rttMs = ms }
                 case let .stats(buffered, under, lost):
+                    self.heard()
                     DispatchQueue.main.async { self.phoneBufferMs = Int(buffered); self.phoneDropouts = Int(under); self.phoneLost = Int(lost) }
                 default: break
                 }
