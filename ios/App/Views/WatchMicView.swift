@@ -14,6 +14,7 @@ struct WatchMicView: View {
                 if !mic.peer.isEmpty { LabeledContent("Watch", value: mic.peer) }
                 if !mic.path.isEmpty { LabeledContent("Arriving over", value: mic.path) }
                 LabeledContent("This phone", value: "\(mic.address) port \(WatchMic.port)")
+                Text(mic.wcInfo).font(.caption).foregroundStyle(Theme.muted)
             } footer: {
                 Text("On the watch, open Cratebox Mic and tap Go live. It finds this phone by itself on the same Wi-Fi; if it doesn't, type the address above into the watch. With no shared Wi-Fi it falls back to Bluetooth (slower).")
             }

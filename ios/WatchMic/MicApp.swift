@@ -44,6 +44,7 @@ struct MicView: View {
                     Text(mic.status).font(.footnote).foregroundStyle(.secondary).multilineTextAlignment(.center)
                     TextField("Phone address (blank = find it)", text: $mic.host).font(.footnote)
                     Text("Phone: Cratebox HEAT → Settings → Apple Watch as a mic → Listen.").font(.caption2).foregroundStyle(.secondary)
+                    Text(mic.wcInfo).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -63,6 +64,7 @@ struct MicView: View {
     private var stats: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text("Via \(mic.path)")
+            Text(mic.wcInfo)
             Text(mic.link)
             Text("Round trip " + (mic.rttMs.map { "\($0) ms" } ?? "—"))
             Text("Phone buffer " + (mic.phoneBufferMs.map { "\($0) ms" } ?? "—") + " · drops \(mic.phoneDropouts) · lost \(mic.phoneLost)")
