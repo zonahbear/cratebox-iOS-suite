@@ -10,7 +10,7 @@ on:
         type: boolean
         default: false
       devices:
-        description: "Simulators to screenshot, comma-separated (e.g. iPhone SE (3rd generation),iPhone 16,iPad mini (A17 Pro))"
+        description: "Simulators to screenshot, comma-separated (e.g. iPhone SE (3rd generation),iPhone 16,iPad mini (A17 Pro)), or none"
         default: "iPhone 16 Pro Max,iPad Pro 13-inch (M4)"
 permissions:
   contents: write
@@ -39,7 +39,7 @@ jobs:
           cd ios/CrateboxKit && CRATEBOX_MUSIC="$RUNNER_TEMP/music" swift test -c release -Xswiftc -enable-testing 2>&1 | tee -a ../../ci.log
       - name: Launch in the simulators (screenshots)
         continue-on-error: true
-        timeout-minutes: 30
+        timeout-minutes: 45
         env: { DEVICES: "${{ inputs.devices || 'iPhone 16 Pro Max,iPad Pro 13-inch (M4)' }}" }
         run: |
           cd ios
@@ -48,6 +48,8 @@ jobs:
           xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/dds" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|BUILD" | tee -a ../ci.log
           APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Release-iphonesimulator/*.app | head -1)
+          echo "APP=$APP" >> "$GITHUB_ENV"
+          [ "$DEVICES" = none ] && exit 0      # measurement run only
           mkdir -p "$RUNNER_TEMP/shots"
           IFS=, read -ra DEVS <<< "$DEVICES"
           for dev in "${DEVS[@]}"; do
@@ -112,7 +114,6 @@ jobs:
             xcrun simctl shutdown "$UDID" || true
           done
           ls "$RUNNER_TEMP/shots" | tee -a ../ci.log
-          echo "APP=$APP" >> "$GITHUB_ENV"
       - name: Measure every iPhone and iPad simulator (screen size, scale, landscape safe area)
         if: inputs.measure
         continue-on-error: true
