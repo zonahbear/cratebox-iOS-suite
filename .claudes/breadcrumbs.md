@@ -101,3 +101,13 @@
   practice); Wi-Fi sessions really used UDP, so the link-mismatch theory was wrong. Watch stats are hidden under the
   call screen, so a new `.report(rttMs, lateDrops)` packet (type 5) goes with each ping and the phone shows
   "Round trip (watch)" / "Late drops (watch)" under Link. Wi-Fi lag cause still open (need Buffered now + output route).
+
+## 2026-10-23 19:30 PUFF: Puffco as an instrument (personal/heat only)
+- HEAT panel → "HOLD for PUFF": slot 4 at one temperature (default 500°F, `cb.tc.holdF`), 120 s, no curve steering,
+  same backup/restore + 600°F cutoff. Reads the bowl ~10/s; `TrueCurve.PuffDrop` (CrateboxKit) turns the dip below
+  the settled temperature into 0...1 (dead 3°F, full `cb.tc.puffFull` = 40°F; settled freezes while falling, lets go
+  in ~1.5 s on recovery). Beat FX "PUFF" (FxKind.puff, only listed while a Puffco/sim is connected, `fx.puffReady`):
+  tape warble = 4.5 ms ± 3.5 ms sine-swept delay, rate 2→7 Hz, LEVEL caps it; amount via `EngineCommand.fxMod`.
+- Simulator: SimHeater.airflow (draw), "Hold to hit" button. Tests: testPuffDropFollowsADraw, testPuffWarbleStaysFinite.
+- Not compiled here (no Swift on the CI box), not on a real Puffco. Real drop size/noise and BLE read rate unknown: tune
+  dead/full after Jonah's first real hits. Never port PUFF to the shipping app.

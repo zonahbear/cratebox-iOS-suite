@@ -286,6 +286,8 @@ final class SimPuffco: HeatDevice {
     private(set) var connected = false
     var onDisconnect: (@MainActor () -> Void)?
     private var h = TrueCurve.SimHeater()
+    /// a pretend draw for PUFF (0...1)
+    var airflow: Double { get { h.airflow } set { h.airflow = min(1, max(0, newValue)) } }
     private var ticker: Task<Void, Never>?
 
     func connect() async throws {

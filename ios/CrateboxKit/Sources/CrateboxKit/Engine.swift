@@ -16,6 +16,8 @@ public enum EngineCommand {
     case mixer(MixerState)
     case fx(unit: Int, slot: FxSlotName, fx: FxKind?, beats: Double?, depth: Double?, on: Bool?)   // unit 0-3 = decks, 4 = master
     case clock(unit: Int, FxClock)
+    /// PUFF (Cratebox HEAT): how hard the Puffco is being hit, 0...1, for the BEAT FX slot of that unit
+    case fxMod(unit: Int, mod: Double)
     case output(OutputMode)
     /// set or clear the recording tap on the audio thread itself (so it never changes mid-block)
     case recordTap(((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?)
@@ -93,6 +95,7 @@ public final class Engine {
             let unit = u < 4 ? strips[u].fx : masterFx
             (slot == .beat ? unit.beat : unit.pad).set(fx: fx, beats: beats, depth: depth, on: on)
         case .clock(let u, let c): (u < 4 ? strips[u].fx : masterFx).clock = c
+        case .fxMod(let u, let m): (u < 4 ? strips[u].fx : masterFx).beat.set(mod: m)
         case .output(let o): output = o
         case .recordTap(let f): recordTap = f
         case .testCue: beepLeft = Int(1.05 * sampleRate); beepPhase = 0; beepMaster = false

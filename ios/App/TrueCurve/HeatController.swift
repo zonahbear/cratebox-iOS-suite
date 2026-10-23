@@ -12,10 +12,10 @@ import CrateboxKit
 @MainActor
 final class HeatController: NSObject, ObservableObject {
     static let shared = HeatController()
-    enum Phase { case idle, prep, preheat, running }
+    enum Phase { case idle, prep, preheat, running, hold }
     struct Found: Identifiable { let id: UUID; let name: String; let p: CBPeripheral }
 
-    @Published private(set) var dev: HeatDevice?
+    @Published private(set) var dev: HeatDevice? { didSet { if (dev == nil) != (oldValue == nil) { onConnected?(dev != nil) } } }
     @Published private(set) var phase = Phase.idle
     /// the HEAT button's text and the panel's device line, only republished when they change
     @Published private(set) var label = "HEAT"
@@ -30,8 +30,18 @@ final class HeatController: NSObject, ObservableObject {
     @Published private(set) var scanning = false
     var running: Bool { phase != .idle }
     var connected: Bool { dev != nil }
+    var isSim: Bool { dev is SimPuffco }
     var panelOpen = false
     var onStatus: ((String) -> Void)?
+    /// PUFF (Beat FX): a Puffco came or went (PUFF is only on offer with one), and each hit strength (0...1)
+    var onConnected: ((Bool) -> Void)?
+    var onPuff: ((Double) -> Void)?
+    /// HOLD: one fixed temperature, no curve, so the drop on a draw can play PUFF; `puffFull` °F of drop = all of it
+    @Published var holdF: Double { didSet { UserDefaults.standard.set(holdF, forKey: "cb.tc.holdF") } }
+    @Published var puffFull: Double { didSet { UserDefaults.standard.set(puffFull, forKey: "cb.tc.puffFull") } }
+    /// the latest hit strength and drop below the settled temperature, for the panel's meter
+    @Published private(set) var puff = 0.0
+    private var drop = 0.0
 
     private var live: Double?, target: Double?, t: Double?, end = 0.0, battery: Int?
     private var abort = false
@@ -44,6 +54,9 @@ final class HeatController: NSObject, ObservableObject {
     override init() {
         saved = (UserDefaults.standard.data(forKey: "cb.tc.curves")).flatMap { try? JSONDecoder().decode([String: TrueCurve.CurveDef].self, from: $0) } ?? [:]
         name = UserDefaults.standard.string(forKey: "cb.tc.last") ?? TrueCurve.defaultName
+        let hf = UserDefaults.standard.double(forKey: "cb.tc.holdF"), pf = UserDefaults.standard.double(forKey: "cb.tc.puffFull")
+        holdF = hf > 0 ? min(TrueCurve.maxF, max(TrueCurve.minF, hf)) : 500
+        puffFull = pf > 0 ? pf : 40
         super.init()
         if !curveNames.contains(name) { name = TrueCurve.defaultName }
     }
@@ -66,6 +79,7 @@ final class HeatController: NSObject, ObservableObject {
         case .prep: l = "HEAT…"
         case .preheat: l = "HEAT \(f0(live))° ↑\(f0(target))"
         case .running: l = "HEAT \(f0(live))° \(Int(t ?? 0))/\(Int(end.rounded()))s"
+        case .hold: l = "HOLD \(f0(live))°" + (drop >= 1 ? " ↓\(Int(drop.rounded()))" : "")
         }
         if l != label { label = l }
         let bat = battery.map { " · \($0)%" } ?? ""
@@ -244,6 +258,74 @@ final class HeatController: NSObject, ObservableObject {
         phase = .idle; t = nil; target = nil
         render()
         onStatus?(completed ? "Heat curve \"\(name)\" done" : "Heat curve \"\(name)\" stopped")
+    }
+
+    // ---- HOLD: one temperature, played with PUFF ----
+
+    /// Hold (then back to the decks with Beat FX on PUFF) or Stop
+    func toggleHold() {
+        if running { abort = true; say("Stopping…") }
+        else if dev != nil { phase = .prep; render(); let f = holdF; Task { await hold(f) } }
+    }
+
+    /// the simulator's stand-in for a draw (the panel's "Hit" button, held)
+    func simHit(_ a: Double) { (dev as? SimPuffco)?.airflow = a }
+
+    /// Same setup and safety as a curve (slot 4 backed up and put back, 600°F cutoff, a lost link leaves the
+    /// device to finish its cycle), but the target is written once and never steered: the device's own regulator
+    /// holds it, and the dip on a draw is what PUFF plays. One device heat cycle (the slot time, 120 s).
+    private func hold(_ holdF: Double) async {
+        guard let dev else { phase = .idle; render(); return }
+        let slot = TrueCurve.slot, f = min(TrueCurve.maxF, max(TrueCurve.minF, holdF.rounded()))
+        var backup: SlotBackup?, origSlot: UInt8?, ended = false
+        abort = false; phase = .prep; t = nil; target = f; puff = 0; drop = 0
+        say("Setting up HOLD at \(Int(f))°F…")
+        func heating(_ s: Int?) -> Bool { s.map { TrueCurve.heating.contains($0) } ?? false }
+        var meter = TrueCurve.PuffDrop(hold: f, full: puffFull)
+
+        func body() async throws {
+            if heating(await dev.readState()) { _ = await dev.stop(); try? await Task.sleep(for: .milliseconds(1500)) }
+            origSlot = await dev.readActiveSlot()
+            backup = await dev.backupSlot(slot)
+            guard await dev.writeProfileTemp(slot, f) else { throw HeatError.msg("the device refused the temperature") }
+            _ = await dev.writeProfileTime(slot, 120)
+            _ = await dev.setActiveSlot(slot)
+            guard await dev.start() else { throw HeatError.msg("the device didn't accept the start command") }
+            phase = .hold
+            say("Holding \(Int(f))°F. Pick PUFF in Beat FX and turn it on; hit it once the bowl is up to temperature.")
+            let t0 = CACurrentMediaTime()
+            var tick = 0
+            while !abort {
+                let tn = CACurrentMediaTime(), tt = tn - t0
+                let y = await dev.readTemp()
+                if tick % 5 == 0 {
+                    let st = await dev.readState()
+                    if tt > 6 && !heating(st) { ended = true; break }
+                }
+                tick += 1
+                if let y, y >= TrueCurve.cutoffF { throw HeatError.msg("overheat cutoff at \(y)°F") }
+                live = y
+                let a = meter.add(tt, y)
+                drop = meter.drop
+                if abs(a - puff) > 0.005 || (a == 0 && puff != 0) { puff = a; onPuff?(a) }
+                render()
+                // as fast as the link answers, at most ~10 a second
+                try? await Task.sleep(for: .milliseconds(Int(max(0, 0.1 - (CACurrentMediaTime() - tn)) * 1000)))
+            }
+        }
+
+        do { try await body() } catch { say("Stopped: \(error.localizedDescription)") }
+        puff = 0; drop = 0; onPuff?(0)
+        if dev.connected {
+            _ = await dev.stop()
+            if let backup { await dev.restoreSlot(slot, backup) }
+            if let origSlot { _ = await dev.setActiveSlot(origSlot) }
+        }
+        if ended { say("The device ended its heat cycle. Hold again for another round.") }
+        else if abort && self.dev != nil { say("Stopped.") }
+        phase = .idle; target = nil
+        render()
+        onStatus?(ended ? "HOLD: heat cycle over" : "HOLD stopped")
     }
 
     /// paste the JSON from TrueCurve's "Copy curves for Cratebox"

@@ -8,6 +8,8 @@ import Foundation
 public enum FxKind: String, CaseIterable {
     case none = "", echo = "ECHO", delay = "DELAY", pingPong = "PING PONG", reverb = "REVERB", flanger = "FLANGER"
     case filter = "FILTER", trans = "TRANS", roll = "ROLL", hpf = "HPF", lpf = "LPF"
+    /// Cratebox HEAT only: tape warble played by a Puffco (HeatController's HOLD sets `mod` from the temperature drop)
+    case puff = "PUFF"
 }
 
 public struct FxClock { public var t0 = 0.0, beat0 = 0.0, bps = 0.0, spb = 0.5
@@ -40,6 +42,9 @@ public final class FxSlot {
     public internal(set) var on = false
     public internal(set) var beats = 0.5
     public internal(set) var depth = 0.6
+    /// PUFF: how hard the Puffco is being hit right now, 0...1 (set from outside, smoothed here)
+    public internal(set) var mod = 0.0
+    var modS = 0.0, lfo = 0.0
     var g = 0.0, inG = 0.0                // smoothed: effect amount / feed into delays and reverb
     public internal(set) var active = false   // on, or still ringing out
     var dL: FloatRing?, dR: FloatRing?, w = 0
@@ -57,7 +62,8 @@ public final class FxSlot {
         cf = [0, 0, 0, 0, 0]
     }
     /// The JS slot "set" message: nil leaves a setting as it is.
-    public func set(fx newFx: FxKind? = nil, beats b: Double? = nil, depth d: Double? = nil, on o: Bool? = nil) {
+    public func set(fx newFx: FxKind? = nil, beats b: Double? = nil, depth d: Double? = nil, on o: Bool? = nil, mod m: Double? = nil) {
+        if let m { mod = min(1, max(0, m)) }
         if let newFx, newFx != fx { fx = newFx; roll = nil; cfReady = false }
         if let b { beats = b }
         if let d { depth = d }
@@ -170,6 +176,19 @@ public final class FxUnit {
                     dl0[w] = Float(xl + dl * 0.6); dr0[w] = Float(xr + dr * 0.6)
                     w += 1; if w == dn { w = 0 }
                     el = (xl + dl * depth) / (1 + 0.6 * depth); er = (xr + dr * depth) / (1 + 0.6 * depth)
+                } else if fx == .puff {
+                    // tape warble: a sine-swept 1-8 ms delay (pitch wobble, no dry mix); the hit sets both how far
+                    // and how fast it sweeps (2 Hz light pull ... 7 Hz hard rip), LEVEL/DEPTH caps it
+                    s.modS += (s.mod - s.modS) * (1 / (0.05 * sr))       // ~50 ms: BLE readings arrive in steps
+                    let a = s.modS * depth
+                    s.lfo += (2 + 5 * a) / sr; if s.lfo >= 1 { s.lfo -= 1 }
+                    let dd = (0.0045 + 0.0035 * a * sin(2 * Double.pi * s.lfo)) * sr
+                    var rp = Double(w) - dd; if rp < 0 { rp += Double(dn) }
+                    let i0 = Int(rp), f = rp - Double(i0), i1 = i0 + 1 == dn ? 0 : i0 + 1
+                    dl0[w] = Float(xl); dr0[w] = Float(xr)
+                    el = Double(dl0[i0]) + (Double(dl0[i1]) - Double(dl0[i0])) * f
+                    er = Double(dr0[i0]) + (Double(dr0[i1]) - Double(dr0[i0])) * f
+                    w += 1; if w == dn { w = 0 }
                 } else if fx == .filter || fx == .hpf || fx == .lpf {
                     if (i & 31) == 0 || !s.cfReady {
                         let c: (Double, Double, Double, Double, Double)

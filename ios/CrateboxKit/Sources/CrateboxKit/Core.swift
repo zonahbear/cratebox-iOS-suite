@@ -607,6 +607,7 @@ public let FX_LIST: [(FxKind, FxSpec)] = [
     (.roll, FxSpec(beats: [1.0 / 16, 1.0 / 8, 1.0 / 4, 1.0 / 2, 1, 2, 4], beat: 0.5, depth: 1)),
     (.hpf, FxSpec(beats: nil, beat: 1, depth: 0.6)),
     (.lpf, FxSpec(beats: nil, beat: 1, depth: 0.6)),
+    (.puff, FxSpec(beats: nil, beat: 1, depth: 0.7)),
 ]
 public let PAD_FX: [PadMode: [(FxKind, Double, Double)]] = [
     .padfx: [(.echo, 0.5, 0.6), (.echo, 1, 0.6), (.reverb, 1, 0.7), (.roll, 0.25, 1), (.roll, 0.5, 1), (.trans, 0.25, 1), (.hpf, 1, 0.7), (.lpf, 1, 0.7)],
@@ -623,13 +624,17 @@ public final class FxController: ObservableObject {
     @Published public private(set) var on = false
     @Published public private(set) var ch = 0
     @Published public private(set) var pad: [(p: Int, bank: PadMode)?] = [nil, nil, nil, nil]
+    /// Cratebox HEAT: a Puffco is connected, so PUFF is on offer (the app sets it; never true in the shipping app)
+    @Published public var puffReady = false
+    /// the effects on offer right now (PUFF only with a Puffco)
+    public var kinds: [FxKind] { FX_LIST.map { $0.0 }.filter { $0 != .puff || puffReady } }
     var lastActive = [Int: Double]()
     var lastClock = 0.0
     init(core: Core) {
         self.core = core
         for (k, s) in FX_LIST { beats[k] = s.beat }
         let p = core.prefs
-        if let f = FxKind(rawValue: p.string("cb.bfx.fx", "ECHO")), f != .none { fx = f }
+        if let f = FxKind(rawValue: p.string("cb.bfx.fx", "ECHO")), f != .none, f != .puff { fx = f }
         depth = p.double("cb.bfx.depth", depth)
         ch = Int(p.double("cb.bfx.ch", 0))
         for (k, _) in FX_LIST { let v = p.double("cb.bfx.beat.\(k.rawValue)", -1); if v > 0 { beats[k] = v } }
@@ -668,7 +673,7 @@ public final class FxController: ObservableObject {
         core.engine.post(.fx(unit: ch, slot: .beat, fx: fx, beats: beat, depth: depth, on: on))
     }
     public func select(_ step: Int) {
-        let names = FX_LIST.map { $0.0 }, k = names.firstIndex(of: fx) ?? 0
+        let names = kinds, k = names.firstIndex(of: fx) ?? 0
         let was = on
         fx = names[(k + step + names.count) % names.count]
         send(); save()
@@ -690,6 +695,8 @@ public final class FxController: ObservableObject {
         send(); save()
     }
     public func setOn(_ v: Bool) { on = v; send() }
+    /// PUFF: the hit strength from the Puffco (0...1), straight to the BEAT FX insert
+    public func setPuff(_ v: Double) { core.engine.post(.fxMod(unit: ch, mod: v)) }
     public func setDepth(_ v: Double) { depth = clamp(v, 0, 1); send(); save() }
     // PAD FX: hold a pad = that effect on this deck; let go = off (the last pad pressed wins)
     public func padDown(_ i: Int, _ bank: PadMode, _ p: Int) {
