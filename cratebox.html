@@ -2528,18 +2528,29 @@ class Deck {
   get bpm() { return this.ana ? this.ana.bpm : 0; }
   get spb() { return this.bpm ? 60 / this.bpm : 0.5; }
   other() { return decks[this.i ^ 1]; }
+  // the deck to follow when synced. A playing deck only ever follows the playing deck it already follows:
+  // it never picks up a new master mid-mix (a track loaded on another deck, a deck pressed into play), and
+  // when its master stops or loads it keeps its tempo and leads (see syncTick).
   master() {
-    // the deck to follow when synced. Two decks: the other one, unless it synced after us (then we lead).
+    if (this.sync && this.playing) {
+      const w = this.syncWith;
+      return w && w.playing && w.track === this.syncTrack && this.followable(w) ? w : null;
+    }
+    return this.pickMaster();
+  }
+  followable(o) { return o !== this && deckActive(o.i) && o.loaded && !!o.bpm && !(o.sync && this.sync && o.syncSince > this.syncSince); }
+  pickMaster() {
+    // Two decks: the other one, unless it synced after us (then we lead). A playing deck only takes a playing one.
     // Four decks: of the other shown decks with a tempo (leaving out ones that synced after us), prefer
     // one that isn't synced itself, then one that's playing, then the one that's been playing longest.
-    const c = decks.filter((o) => o !== this && deckActive(o.i) && o.loaded && o.bpm && !(o.sync && this.sync && o.syncSince > this.syncSince));
+    const c = decks.filter((o) => this.followable(o) && (o.playing || !this.playing));
     if (!c.length) return null;
     const score = (o) => (o.sync ? 0 : 4) + (o.playing ? 2 : 0);
     c.sort((a, b) => score(b) - score(a) || (a.startedAt || Infinity) - (b.startedAt || Infinity) || a.i - b.i);
     return c[0];
   }
   rate() {
-    if (this.sync && this.master() && this.bpm) return this.syncRate * (1 + this.syncTrim);
+    if (this.sync && this.bpm) return this.syncRate * (1 + this.syncTrim);     // synced with no master: holds its tempo
     return 1 + this.pitch * this.range / 100;
   }
   effBpm() { return this.bpm * this.rate() / (this.sync ? 1 + this.syncTrim : 1); }   // without the beat-lock trim
@@ -2581,6 +2592,8 @@ class Deck {
     status(`Loading ${track.title} into deck ${this.i + 1}...`, 0);
     this.post({ t: "unload" });            // free the previous track before decoding the next one
     this.ana = null; this.mono = null;
+    // a new track: sync starts over (master and half/double time picked again), from the fader's tempo
+    this.syncWith = null; this.syncTrack = null; this.syncTrim = 0; this.syncRate = 1 + this.pitch * this.range / 100;
     try {
       deckLoads++;
       // rekordbox USB/SD tracks: take rekordbox's own grid, phrases and cues off the drive
@@ -2661,6 +2674,7 @@ class Deck {
   }
   setPlaying(on) {
     if (!this.loaded) return;
+    if (on && !this.playing && this.sync) this.syncTick();     // follow the master it would pick now, before it counts as playing
     if (on && this.sync && this.master() && this.master().playing) this.alignPhase();
     if (on && !this.playing) { this.startedAt = performance.now(); stopBackgroundAnalysis(); }
     this.playing = on;
@@ -2709,8 +2723,9 @@ class Deck {
     this.sync = on;
     if (on) {
       this.syncSince = performance.now();
-      const m = this.master();
-      this.syncWith = m;
+      const m = this.pickMaster();
+      this.syncWith = m; this.syncTrack = m ? m.track : null;
+      this.syncRate = 1 + this.pitch * this.range / 100;     // with nothing to follow: stay at the fader's tempo
       if (!m) { status("Load a track on the other deck to sync to"); }
       else {
         // halftime / double time: of 1/2x, 1x and 2x the master's tempo, take the one nearest our own
@@ -2739,15 +2754,25 @@ class Deck {
     this.seek(this.timeOfBeat(target) + (this.now() - this.timeOfBeat(myB)) * 0);
   }
   syncTick() {
-    if (!this.sync) return;
+    if (!this.sync || !this.bpm) return;
     const m = this.master();
-    if (!m || !this.bpm) return;
-    // the master changed (4 decks): pick half/normal/double time again against the new one
-    if (this.syncWith && this.syncWith !== m) {
+    if (!m) {
+      // the master stopped, loaded a new track or went away: keep this tempo and lead from here on (the
+      // oldest sync, so a deck that syncs now follows us, not the other way round)
+      if (this.syncWith) {
+        this.syncWith = null; this.syncTrack = null;
+        if (this.playing) this.syncSince = Math.min(...decks.map((o) => o.syncSince)) - 1;
+      }
+      if (this.syncTrim) { this.syncTrim = 0; this.sendRate(); }
+      this.phaseErr = null;
+      return;
+    }
+    // a different master, or a new track on it: pick half/normal/double time again
+    if (this.syncWith !== m || m.track !== this.syncTrack) {
       const r0 = m.effBpm() / this.bpm;
       this.syncMult = [0.5, 1, 2].reduce((best, k) => Math.abs(Math.log(r0 * k)) < Math.abs(Math.log(r0 * best)) ? k : best, 1);
     }
-    this.syncWith = m;
+    this.syncWith = m; this.syncTrack = m.track;
     const r = clamp(m.effBpm() * this.syncMult / this.bpm, 0.5, 2);
     if (Math.abs(r - this.syncRate) > 1e-7) { this.syncRate = r; this.sendRate(); }
     this.lockPhase(m);
@@ -2774,7 +2799,12 @@ class Deck {
     status(`Deck ${this.i + 1} tempo range ±${this.range === 100 ? "WIDE" : this.range + "%"}`);
     refreshDeckUI(this.i);
   }
-  setPitch(v) { this.pitch = clamp(v, -1, 1); this.sendRate(); }
+  setPitch(v) {
+    v = clamp(v, -1, 1);
+    // a synced deck that leads (nothing to follow) holds its own tempo: the fader moves it from there
+    if (this.sync && this.bpm && !this.master()) this.syncRate = clamp(this.syncRate + (v - this.pitch) * this.range / 100, 0.5, 2);
+    this.pitch = v; this.sendRate();
+  }
 
   // ---- jog ----
   jogTouch(on, noCoast) {
