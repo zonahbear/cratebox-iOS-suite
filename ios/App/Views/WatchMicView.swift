@@ -12,9 +12,10 @@ struct WatchMicView: View {
                 Toggle("Listen for Cratebox Mic", isOn: $on).onChange(of: on) { _, v in v ? mic.start() : mic.stop() }
                 LabeledContent("Status", value: mic.status)
                 if !mic.peer.isEmpty { LabeledContent("Watch", value: mic.peer) }
+                if !mic.path.isEmpty { LabeledContent("Arriving over", value: mic.path) }
                 LabeledContent("This phone", value: "\(mic.address) port \(WatchMic.port)")
             } footer: {
-                Text("On the watch, open Cratebox Mic and tap Go live. It finds this phone by itself on the same Wi-Fi; if it doesn't, type the address above into the watch.")
+                Text("On the watch, open Cratebox Mic and tap Go live. It finds this phone by itself on the same Wi-Fi; if it doesn't, type the address above into the watch. With no shared Wi-Fi it falls back to Bluetooth (slower).")
             }
             if mic.listening {
                 Section("Live") {

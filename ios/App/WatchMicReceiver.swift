@@ -1,9 +1,11 @@
 // Watch mic (personal/heat only, an experiment): listens for the Cratebox Mic watch app's voice over UDP and adds
 // it to the master. A jitter buffer smooths the network; the phone's own Mute and Level always win over the watch.
 // The voice goes straight onto the master outputs after the limiter, so it isn't in recordings and isn't limited.
+// Without shared Wi-Fi the watch falls back to Watch Connectivity (over Bluetooth): same packets, several per message.
 import Foundation
 import Network
 import os
+import WatchConnectivity
 
 final class WatchMicReceiver: ObservableObject {
     static let shared = WatchMicReceiver()
@@ -16,6 +18,8 @@ final class WatchMicReceiver: ObservableObject {
     @Published private(set) var lost = 0
     @Published private(set) var watchMuted = false
     @Published private(set) var level: Float = 0
+    /// which way the voice is arriving: "Wi-Fi" or "Bluetooth"
+    @Published private(set) var path = ""
     /// phone-side controls (the watch can't override these)
     @Published var phoneMuted = false { didSet { ctl.pointee.phoneMuted = phoneMuted } }
     @Published var phoneLevel: Float = 1 { didSet { ctl.pointee.phoneLevel = phoneLevel } }
@@ -41,6 +45,7 @@ final class WatchMicReceiver: ObservableObject {
     private var priming = true
     private var smooth: Float = 0
     private var underrunCount: UInt32 = 0
+    private let wc = WatchMicWC()
     private let scratch: UnsafeMutablePointer<Float> = { let p = UnsafeMutablePointer<Float>.allocate(capacity: 4096); p.initialize(repeating: 0, count: 4096); return p }()
 
     private init() { ctl.pointee.target = targetMs * 48 }
@@ -67,6 +72,8 @@ final class WatchMicReceiver: ObservableObject {
             listener = l
             ctl.pointee.on = true
             listening = true
+            wc.onData = { [weak self] d, reply in self?.queue.async { self?.fromWatchConnectivity(d, reply) } }
+            wc.activate()
         } catch {
             status = "Couldn't listen: \(error.localizedDescription)"
         }
@@ -112,12 +119,28 @@ final class WatchMicReceiver: ObservableObject {
     private func receive(_ c: NWConnection) {
         c.receiveMessage { [weak self] data, _, _, error in
             guard let self else { return }
-            if let data, let p = WatchMicPacket.decode(data) { self.handle(p, on: c) }
+            if let data, let p = WatchMicPacket.decode(data) {
+                self.handle(p, via: "Wi-Fi") { c.send(content: $0, completion: .idempotent) }
+            }
             if error == nil, self.conn === c { self.receive(c) }
         }
     }
 
-    private func handle(_ p: WatchMicPacket, on c: NWConnection) {
+    /// on `queue`: a Watch Connectivity message (several packets). A ping's reply carries a pong and the stats.
+    private func fromWatchConnectivity(_ d: Data, _ reply: ((Data) -> Void)?) {
+        var answers = [Data]()
+        for f in WatchMicFrames.split(d) {
+            guard let p = WatchMicPacket.decode(f) else { continue }
+            handle(p, via: "Bluetooth") { answers.append($0) }
+        }
+        if let reply {
+            answers.append(WatchMicPacket.stats(bufferedMs: Float(ring.count) / 48, underruns: underrunCount, lost: lostCount).encode())
+            reply(WatchMicFrames.join(answers))
+        }
+    }
+
+    private func handle(_ p: WatchMicPacket, via: String, send: (Data) -> Void) {
+        if path != via { DispatchQueue.main.async { self.path = via; self.status = "Watch connected (\(via))" } }
         switch p {
         case let .audio(seq, gain, muted, samples):
             if let last = lastSeq, seq > last + 1 { lostCount &+= seq - last - 1 }
@@ -138,14 +161,14 @@ final class WatchMicReceiver: ObservableObject {
             if packets % 10 == 0 {
                 let ms = Float(ring.count) / 48, under = underrunCount, lostNow = lostCount, pk = peak
                 peak = 0
-                c.send(content: WatchMicPacket.stats(bufferedMs: ms, underruns: under, lost: lostNow).encode(), completion: .idempotent)
+                send(WatchMicPacket.stats(bufferedMs: ms, underruns: under, lost: lostNow).encode())
                 DispatchQueue.main.async {
                     self.bufferedMs = Int(ms); self.underruns = Int(under); self.lost = Int(lostNow)
                     self.watchMuted = muted; self.level = pk
                 }
             }
         case let .ping(id, sent):
-            c.send(content: WatchMicPacket.pong(id: id, sent: sent).encode(), completion: .idempotent)
+            send(WatchMicPacket.pong(id: id, sent: sent).encode())
         default: break
         }
     }
@@ -177,4 +200,19 @@ final class WatchMicReceiver: ObservableObject {
             if got < k { priming = true; underrunCount &+= 1; return }
         }
     }
+}
+
+/// The phone's end of Watch Connectivity for the watch mic: hands every message from the watch to WatchMicReceiver.
+final class WatchMicWC: NSObject, WCSessionDelegate {
+    var onData: ((Data, ((Data) -> Void)?) -> Void)?
+    func activate() {
+        guard WCSession.isSupported() else { return }
+        WCSession.default.delegate = self
+        WCSession.default.activate()
+    }
+    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {}
+    func sessionDidBecomeInactive(_ session: WCSession) {}
+    func sessionDidDeactivate(_ session: WCSession) { session.activate() }
+    func session(_ session: WCSession, didReceiveMessageData messageData: Data) { onData?(messageData, nil) }
+    func session(_ session: WCSession, didReceiveMessageData messageData: Data, replyHandler: @escaping (Data) -> Void) { onData?(messageData, replyHandler) }
 }
