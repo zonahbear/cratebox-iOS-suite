@@ -11,6 +11,20 @@ struct PhoneScreen: View {
     @EnvironmentObject var core: Core
     @Binding var settings: Bool
     @State private var islandLeft = PhoneScreen.islandOnLeft()
+    @AppStorage("cb.compact") private var compactPref = false
+
+    /// the compact layout is the only one on a phone without an island (SE: the strips only cost width) or a
+    /// screen too small for the full one (Display Zoom); Settings → Look can turn it on anywhere else
+    static func autoCompact(size: CGSize, insets ins: UIEdgeInsets) -> Bool {
+        let band = max(40, min(ins.left, ins.right))
+        return max(ins.left, ins.right) < 30 || size.width - 2 * band < 640 || size.height - ins.top < 360
+    }
+    /// the same check for the current window (Settings), or the -screen frame in CI
+    static func autoCompactNow() -> Bool {
+        let w = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }.first { $0.isKeyWindow }
+        let s = ScreenOverride.size ?? w?.bounds.size ?? .zero
+        return autoCompact(size: CGSize(width: max(s.width, s.height), height: min(s.width, s.height)), insets: windowInsets())
+    }
 
     static func islandOnLeft() -> Bool {
         // interface orientation "landscape right" = the top of the phone (the island) on the left
@@ -30,6 +44,9 @@ struct PhoneScreen: View {
         // the whole screen: a reader that itself ignores the safe area gets the full size
         return GeometryReader { g in
         let m = PhoneMetrics.make(width: g.size.width - 2 * band, height: g.size.height - ins.top)
+        if compactPref || PhoneScreen.autoCompact(size: g.size, insets: ins) {
+            CompactScreen(settings: $settings, size: g.size, insets: ins)
+        } else {
         HStack(spacing: 0) {
             EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
             VStack(spacing: 4) {
@@ -44,12 +61,14 @@ struct PhoneScreen: View {
                     StripInfo(deck: core.decks[r])
                 }.frame(height: max(ins.bottom, 12))
             }
-            .clipped()          // nothing in the middle may spill over the edge strips
+            .frame(width: max(0, g.size.width - 2 * band))
+            .clipped()          // a fixed width: nothing in the middle may spill over or push away the edge strips
             EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
         }
         .padding(.top, ins.top)
         .frame(width: g.size.width, height: g.size.height)
         .environment(\.phoneMetrics, m)
+        }
         }
         .background(Theme.bg)
         .ignoresSafeArea()

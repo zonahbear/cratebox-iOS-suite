@@ -150,6 +150,7 @@ struct SettingsView: View {
     @AppStorage("cb.recFmt") var recFmt = "wav"
     @AppStorage("cb.phrases") var phrases = true
     @AppStorage("cb.wave") var waveStyle = "rgb"
+    @AppStorage("cb.compact") var compact = false
     @State private var warn = false
     @State private var learning = false
     @State private var hint = ""
@@ -191,6 +192,12 @@ struct SettingsView: View {
                 Section("Look") {
                     Toggle("Phrases (Intro / Build / Drop… on the waveforms)", isOn: $phrases)
                     Picker("Waveform", selection: $waveStyle) { Text("RGB (red lows, green mids, blue highs)").tag("rgb"); Text("3-band").tag("3band") }
+                    if UIDevice.current.userInterfaceIdiom == .phone {
+                        let always = PhoneScreen.autoCompactNow()
+                        Toggle("Compact layout (bigger buttons, one deck face at a time)", isOn: always ? .constant(true) : $compact).disabled(always)
+                        Text(always ? "This screen always uses the compact layout: it's too small for the full one, or has no Dynamic Island beside the strips." : "Each deck shows PLAY or PADS, the EQ opens from the mixer, and WAVE, 4 DECKS, FX and REC move into the ⋯ menu.")
+                            .font(.caption).foregroundStyle(Theme.muted)
+                    }
                 }
                 Section("Recording") {
                     Picker("Format", selection: $recFmt) { Text("WAV (lossless, ~650 MB per hour)").tag("wav"); Text("AAC 256 kbps (~115 MB per hour)").tag("aac") }

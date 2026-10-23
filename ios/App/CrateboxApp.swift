@@ -6,6 +6,7 @@ struct CrateboxApp: App {
     var body: some Scene {
         WindowGroup {
             SuiteRoot()
+                .modifier(ScreenFrame())
                 .environmentObject(app)
                 .environmentObject(app.core)
                 .environmentObject(app.core.fx)
@@ -16,7 +17,7 @@ struct CrateboxApp: App {
                 .preferredColorScheme(.dark)
                 .statusBarHidden(true)
                 .persistentSystemOverlays(.hidden)
-                .onAppear { app.start(); UIApplication.shared.isIdleTimerDisabled = true }
+                .onAppear { app.start(); UIApplication.shared.isIdleTimerDisabled = true; ScreenOverride.writeMetrics() }
         }
     }
 }
