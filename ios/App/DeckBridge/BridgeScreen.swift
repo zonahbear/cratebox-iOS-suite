@@ -33,6 +33,7 @@ struct BridgeScreen: View {
                         Text("\(bridge.sides[1].deck + 1) · rekordbox").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted).padding(.horizontal, 10)
                     }.frame(height: max(ins.bottom, 12))
                 }
+                .frame(width: max(0, g.size.width - 2 * band))   // a fixed width: too little room clips the middle, never shoves the strips off
                 .clipped()
                 BridgeEdge(bridge: bridge, deck: bridge.sides[1], side: 1, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band)
             }
