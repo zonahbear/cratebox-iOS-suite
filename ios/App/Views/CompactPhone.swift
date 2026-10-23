@@ -82,7 +82,7 @@ struct CompactTopBar: View {
                 .font(.system(size: 11, weight: rec.recording ? .bold : .regular)).foregroundStyle(rec.recording ? Theme.hot : Theme.muted)
                 .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
             MasterButton()
-            EjectButton()
+            DriveEjectButton()
             Menu {
                 Toggle("Waveforms (WAVE)", isOn: Binding(get: { app.waveMode }, set: { v in withAnimation(.easeInOut(duration: 0.2)) { app.waveMode = v } }))
                 Toggle("4 decks", isOn: Binding(get: { core.four }, set: { core.setFour($0); if !$0 { app.midi.resetSides() } }))

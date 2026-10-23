@@ -4,7 +4,7 @@ import SwiftUI
 /// With none, it's + USB, which adds a stick in Files (iOS tells apps nothing about drives until one is picked).
 /// 44 × 44 pt to touch (Apple's minimum) but drawn 30 pt tall like the bar's other buttons, and it takes up only
 /// 30 pt of the bar's height, so the bars keep their sizes.
-struct EjectButton: View {
+struct DriveEjectButton: View {
     @EnvironmentObject var app: AppModel
     @ObservedObject var watch = DriveWatch.shared
     @State private var picking = false
