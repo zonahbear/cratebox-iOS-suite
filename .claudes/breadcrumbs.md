@@ -89,3 +89,11 @@
 ### 2026-10-23 18:40 Cratebox Mic: Bluetooth audio works (build 22); latency worse on both links
 - Fix: phone drops standing delay (lowest buffer level before each packet over 1 s, beyond target + 10 ms, is trimmed) on top of the target+150 ms cap; watch never sends stale audio (ring capped to max(30 ms, 2× mic IO buffer), `out` capped likewise), "late drops" shown on the BT line.
 - Unverified which side caused it; asked Jonah for watch Round trip / Phone buffer / Mic buffer and phone Buffered now.
+
+## 2026-10-23 19:00 Watch mic: Bluetooth delay grew without limit
+- Jonah (build 23): in Bluetooth mode the watch's Round trip climbs to 10,000 ms. Cause: WCSession.sendMessageData queues
+  every send and never drops, so when the link is slower than 25 messages/s the delay grows forever.
+- Fix (MicCall.swift `sendWC`): every message is answered by the phone; at most 2 unanswered at once (2 s timeout);
+  packets gather meanwhile (bigger messages), capped at 10 (100 ms), oldest dropped ("late drops"). Pings ride along.
+- Wi-Fi lag report: code path unchanged since build 20; suspected link mismatch (both apps default Bluetooth). Asked
+  Jonah to set Link = Wi-Fi on both and read the watch's "Via". Next idea if confirmed: phone accepts both links always.

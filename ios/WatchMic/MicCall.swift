@@ -59,6 +59,14 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
     private var wcBatch: [Data] = []
     private var wcError = ""
     private var wcSent = 0, wcReplies = 0, wcErrors = 0
+    /// Watch Connectivity messages sent but not yet answered (on `queue`). Apple queues sends it can't deliver yet and
+    /// never drops them, so without a cap the delay grows for as long as the link is slower than the mic (seconds).
+    private var wcInFlight: [Double] = []   // when each was sent
+    /// bumped each time the mic starts, so answers to an earlier session's messages don't count
+    private var wcGen = 0
+    static let wcMaxInFlight = 2
+    /// the most packets waiting for a free send (100 ms); past that the oldest go
+    static let wcMaxBatch = 10
     /// times the watch threw away audio it was too late to send (on `queue`)
     private var backlogDrops = 0
     /// the most mic audio allowed to wait on the watch (frames at the mic's rate), set when the mic starts
@@ -292,7 +300,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
         engine.connect(input, to: node, format: fmt)
         sink = node
         do { try engine.start(); MicLog.add("mic on: \(inputInfo)") } catch { MicLog.add("engine start failed: \(error)"); status = "Mic: \(error.localizedDescription)" }
-        queue.async { self.pending.removeAll(); self.out.removeAll(); self.pos = 0; self.last = 0 }
+        queue.async { self.pending.removeAll(); self.out.removeAll(); self.pos = 0; self.last = 0; self.wcBatch.removeAll(); self.wcInFlight.removeAll(); self.wcGen &+= 1 }
         let t = DispatchSource.makeTimerSource(queue: queue)
         t.schedule(deadline: .now(), repeating: .milliseconds(5), leeway: .milliseconds(1))
         t.setEventHandler { [weak self] in self?.pump() }
@@ -344,23 +352,25 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
             let pkt = WatchMicPacket.audio(seq: seq, gain: g, muted: m, samples: chunk).encode()
             if udp { conn?.send(content: pkt, completion: .idempotent) } else if wc { wcBatch.append(pkt) }
         }
-        if !udp, wcBatch.count >= 4 {
-            if wc { wcSent += 1; WCSession.default.sendMessageData(WatchMicFrames.join(wcBatch), replyHandler: nil, errorHandler: { [weak self] e in self?.wcFailed(e) }) }
-            wcBatch.removeAll(keepingCapacity: true)
-        }
-        if udp { wcBatch.removeAll(keepingCapacity: true) }
+        if udp || !wc { wcBatch.removeAll(keepingCapacity: true) }
+        // too much waiting for a free send: drop the oldest, never let it queue up
+        if wcBatch.count > MicCall.wcMaxBatch { wcBatch.removeFirst(wcBatch.count - MicCall.wcMaxBatch); backlogDrops += 1 }
         tick += 1
+        var ping: Data?
         if tick % 200 == 0 || (!connected && tick % 40 == 0) {   // a ping a second, 5 a second until the phone answers
             pingID &+= 1
-            let ping = WatchMicPacket.ping(id: pingID, sent: now).encode()
-            if ready { conn?.send(content: ping, completion: .idempotent) }
-            if !udp, wc {
-                wcSent += 1
-                WCSession.default.sendMessageData(WatchMicFrames.join([ping]), replyHandler: { [weak self] d in
-                    guard let self else { return }
-                    self.queue.async { self.wcReplies += 1; for f in WatchMicFrames.split(d) { if let p = WatchMicPacket.decode(f) { self.incoming(p) } } }
-                }, errorHandler: { [weak self] e in self?.wcFailed(e) })
-            }
+            let p = WatchMicPacket.ping(id: pingID, sent: now).encode()
+            if ready { conn?.send(content: p, completion: .idempotent) }
+            ping = p
+        }
+        // an answer that never comes (no reply and no error) mustn't hold a slot forever
+        wcInFlight.removeAll { now - $0 > 2 }
+        // Bluetooth: at most 2 messages on the way. While they are, packets gather here (bigger messages, fewer of
+        // them), so the link carries what it can and the delay stays put instead of growing.
+        if !udp, wc, wcInFlight.count < MicCall.wcMaxInFlight, wcBatch.count >= 4 || (ping != nil && wcInFlight.isEmpty) {
+            if let ping { wcBatch.append(ping) }
+            sendWC(wcBatch)
+            wcBatch.removeAll(keepingCapacity: true)
         }
         if tick % 20 == 0 {                          // meter at 10 Hz
             let p = peak; peak = 0
@@ -369,6 +379,25 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
             DispatchQueue.main.async { self.level = p; if self.lost != gone { self.lost = gone }; if self.path != way { self.path = way } }
             refreshWC()
         }
+    }
+
+    /// on `queue`: one Watch Connectivity message, answered by the phone (that answer frees the slot, and carries the
+    /// pong and the phone's stats)
+    private func sendWC(_ frames: [Data]) {
+        wcSent += 1; wcInFlight.append(ProcessInfo.processInfo.systemUptime)
+        let gen = wcGen
+        WCSession.default.sendMessageData(WatchMicFrames.join(frames), replyHandler: { [weak self] d in
+            guard let self else { return }
+            self.queue.async {
+                guard gen == self.wcGen else { return }
+                if !self.wcInFlight.isEmpty { self.wcInFlight.removeFirst() }; self.wcReplies += 1
+                for f in WatchMicFrames.split(d) { if let p = WatchMicPacket.decode(f) { self.incoming(p) } }
+            }
+        }, errorHandler: { [weak self] e in
+            guard let self else { return }
+            self.queue.async { if gen == self.wcGen, !self.wcInFlight.isEmpty { self.wcInFlight.removeFirst() } }
+            self.wcFailed(e)
+        })
     }
 
     // MARK: network (only works while the call is up)
