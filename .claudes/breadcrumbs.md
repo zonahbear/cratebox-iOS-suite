@@ -25,3 +25,15 @@
 - CI-only launch args: `-screen 568x320` (ScreenFrame modifier in CrateboxApp), `-metrics YES` (Documents/metrics.txt),
   `-pads` (right deck on PADS face), `-cb.compact YES`. ios.yml input `measure` = measure all sims + save ios-resolution.com.
 - Next: review run 39882922135 shots/metrics (ci-logs-preview), fix, show Jonah. No TestFlight without his OK.
+
+## 2026-10-23 03:15: device sizes measured; docs/device-sizes.md is the law
+
+- [`docs/device-sizes.md`](../docs/device-sizes.md): measured sizes, scales and safe areas for 15 simulators (ios.yml run
+  39886977167), all matching ios-resolution.com, plus that site's full table (144 rows, including Display Zoom sizes).
+  Jonah's rule: it's the only source for sizes, shipping and personal/heat builds. Also in CLAUDE.md and team memory.
+- Compact layout screenshots (run 39882922135): SE at 568 × 320 fits in 2-deck, 4-deck and PADS. iPhone 16 with the switch is fine.
+- The measurement step ran out of its 60 min limit after 15 of 21 sims (the rest were mostly iPads). Raise it or split runs next time.
+- personal/heat port: local branch `heat-compact` (8c6935d) = layout commits + HEAT button in the compact top bar,
+  ios.yml on the .heat bundle id. Not pushed: pushing personal/heat uploads to TestFlight, which needs Jonah's OK. Watch-mic PR #7
+  also targets personal/heat; whichever lands second merges the other (overlaps in ContentView Settings + project.yml).
+- Not verified: island phones with Display Zoom on (e.g. 16 Pro Max zoomed to 812 × 375 portrait-equivalent); not screenshotted.
