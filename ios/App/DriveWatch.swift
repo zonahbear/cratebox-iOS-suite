@@ -136,7 +136,7 @@ final class DriveWatch: ObservableObject {
             app.status("\(drive.name) ejected: safe to unplug", 8)
             self.notice = Notice(title: "Safe to remove \(drive.name)",
                                  message: (n > 0 ? "\(n == 1 ? "Its track was" : "Its tracks were") unloaded from the deck\(n == 1 ? "" : "s"). " : "")
-                                    + "Cratebox has saved everything and let go of \(drive.name), so you can unplug it now (iOS has no separate unmount for USB drives, in Files or anywhere else). Plug it in again and it comes back by itself.")
+                                    + "Cratebox has saved everything and let go of \(drive.name), so you can unplug it now. Plug it in again and it comes back by itself.")
         }
         if let dev {
             Devices.shared.eject(dev, quiet: true) { ok in
