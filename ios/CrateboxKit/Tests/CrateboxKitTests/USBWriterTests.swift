@@ -31,6 +31,24 @@ final class USBWriterTests: XCTestCase {
             }
         }
     }
+    /// a hot cue rekordbox 7.2.19 wrote (hot cue A at 27.436 s on a FLAC track, red): its PCPT (.DAT) and PCP2
+    /// (.EXT) entries, re-encoded from what we read, come out byte for byte
+    func testRekordboxsOwnCueEntriesRoundTrip() throws {
+        let pcpt: [UInt8] = Array("PCPT".utf8) + hex("0000001c 00000038 00000001 00000000 00010000 ffffffff 010003e8 00006b2c ffffffff 00000000 00000000 00000000 00000000")
+        let pcp2: [UInt8] = Array("PCP2".utf8) + hex("00000010 00000058 00000001 010003e8 00006b2c ffffffff 00010000 00000000 00000000 00000000 2bff0017 00000000 00127000 00000000 00000000 00000000 0027f775 00000000 00000000 00001000 00000000")
+        let ext = RekordboxANLZ.tag("PCO2", header: hex("00000001 00010000"), body: pcp2)
+        let file = RekordboxANLZ.join(Array("PMAI".utf8) + hex("0000001c 00000000 00000001 00010000 00010000 00000000"), [ext])
+        let c = try XCTUnwrap(RekordboxANLZ.cuePoints(file).first)
+        XCTAssertEqual(c.hot, 1); XCTAssertEqual(c.ms, 27436); XCTAssertNil(c.loopMs); XCTAssertEqual(c.comment, "")
+        XCTAssertEqual(c.color, ANLZHotCueColor(code: 0x2b, r: 0xff, g: 0x00, b: 0x17)); XCTAssertNotNil(c.tail)
+        XCTAssertEqual(RekordboxANLZ.pcp2(c), pcp2)
+        XCTAssertEqual(RekordboxANLZ.pcpt(c, prev: nil, next: nil), pcpt)
+        XCTAssertEqual(Array(RekordboxANLZ.pcob(hot: true, [c])[12..<24]), hex("00000001 00000001 ffffffff"))
+    }
+    func hex(_ s: String) -> [UInt8] {
+        let h = Array(s.filter { !$0.isWhitespace })
+        return stride(from: 0, to: h.count, by: 2).map { UInt8(String(h[$0...$0 + 1]), radix: 16)! }
+    }
     func testWritesCuesAndReadsThemBack() throws {
         let dat = try stickFile(USBWriterTests.demo1 + ".DAT"), ext = try stickFile(USBWriterTests.demo1 + ".EXT")
         let d2 = try RekordboxANLZ.writeCues(dat, cues), e2 = try RekordboxANLZ.writeCues(ext, cues)
@@ -42,6 +60,8 @@ final class USBWriterTests: XCTestCase {
         let e = RekordboxANLZ.parse(e2)
         XCTAssertEqual(e.hot.map { $0.hot }, [1, 2, 4, 8])
         XCTAssertEqual(RekordboxANLZ.cuePoints(e2), cues.filter { $0.hot > 0 } + cues.filter { $0.hot == 0 })
+        // the .EXT keeps its PCOB lists empty, as rekordbox does (its cues are in PCO2)
+        XCTAssertTrue(try tagBytes(e2, "PCOB").allSatisfy { $0.count == 24 })
         let c = RekordboxANLZ.cues(e)
         XCTAssertEqual(c.cue, 0.025)
         XCTAssertEqual(c.hot, [15, 30, nil, 45, nil, nil, nil, 60])
@@ -51,9 +71,15 @@ final class USBWriterTests: XCTestCase {
             for (p, q) in zip(try RekordboxANLZ.split(x).tags, try RekordboxANLZ.split(y).tags) where p.name != "PCOB" && p.name != "PCO2" { XCTAssertEqual(p.bytes, q.bytes, p.name) }
             XCTAssertEqual(Int(y[8]) << 24 | Int(y[9]) << 16 | Int(y[10]) << 8 | Int(y[11]), y.count)
         }
-        // the entries as crate-digger lays them out
+        // the entries as rekordbox 7.2 lays them out (a hot cue it wrote: PCOB's last header word -1, PCPT
+        // status 0, PCP2 88 bytes with no comment)
         let hotPCOB = try tagBytes(d2, "PCOB")[0]
-        XCTAssertEqual(Array(hotPCOB[12..<24]), [0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 2])
+        XCTAssertEqual(Array(hotPCOB[12..<24]), [0, 0, 0, 1, 0, 0, 0, 2, 255, 255, 255, 255])
+        XCTAssertEqual(Array(hotPCOB[36..<48]), [0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0])
+        let hotPCO2 = try tagBytes(e2, "PCO2")[0]
+        let second = 20 + Int(hotPCO2[28]) << 24 + Int(hotPCO2[29]) << 16 + Int(hotPCO2[30]) << 8 + Int(hotPCO2[31])
+        XCTAssertEqual(Array(hotPCO2[(second + 8)..<(second + 12)]), [0, 0, 0, 88], "hot cue B: no comment")
+        XCTAssertEqual(Array(hotPCO2[(second + 28)..<(second + 44)]), [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
         XCTAssertEqual(Array(hotPCOB[24..<28]), Array("PCPT".utf8))
         XCTAssertEqual(hotPCOB.count, 24 + 2 * 0x38)
         // writing the same again changes nothing; writing none puts the file back
@@ -144,17 +170,17 @@ final class USBWriterTests: XCTestCase {
         let src = try fixture("export.pdb")
         let before = PDB.parse(src)
         let edits: [UInt32: PDBTrackEdit] = [
-            1: PDBTrackEdit(title: "Demo Track 1 (Cratebox Edit)", artist: "Loopmasters", album: "Demo Album", genre: "House", comment: "peak time", rating: 5),
-            3: PDBTrackEdit(title: "Hörn – ünïcödé 🎧", artist: "Foley Dept", genre: "House"),
+            1: PDBTrackEdit(title: "Demo Track 1 (Cratebox Edit)", artist: "Loopmasters", comment: "peak time", rating: 5),
+            3: PDBTrackEdit(title: "Hörn – ünïcödé 🎧", artist: "Foley Dept"),
             6: PDBTrackEdit(comment: String(repeating: "long comment ", count: 20)),
         ]
         let out = try PDB.writeTracks(src, edits)
         XCTAssertEqual(PDB.problems(out), [])
         let after = PDB.parse(out)
         let t1 = after.tracks.first { $0.id == 1 }!, t3 = after.tracks.first { $0.id == 3 }!, t6 = after.tracks.first { $0.id == 6 }!
-        XCTAssertEqual(t1.title, "Demo Track 1 (Cratebox Edit)"); XCTAssertEqual(t1.artist, "Loopmasters"); XCTAssertEqual(t1.album, "Demo Album")
-        XCTAssertEqual(t1.genre, "House"); XCTAssertEqual(t1.comment, "peak time"); XCTAssertEqual(t1.rating, 5)
-        XCTAssertEqual(t3.title, "Hörn – ünïcödé 🎧"); XCTAssertEqual(t3.artist, "Foley Dept"); XCTAssertEqual(t3.genre, "House")
+        XCTAssertEqual(t1.title, "Demo Track 1 (Cratebox Edit)"); XCTAssertEqual(t1.artist, "Loopmasters")
+        XCTAssertEqual(t1.comment, "peak time"); XCTAssertEqual(t1.rating, 5)
+        XCTAssertEqual(t3.title, "Hörn – ünïcödé 🎧"); XCTAssertEqual(t3.artist, "Foley Dept")
         XCTAssertEqual(t6.comment, String(repeating: "long comment ", count: 20))
         // everything else as it was: paths, analysis paths, other tracks, playlists, formats
         for t in before.tracks {
@@ -165,26 +191,41 @@ final class USBWriterTests: XCTestCase {
         }
         XCTAssertEqual(after.playlists, before.playlists)
         XCTAssertEqual(PDB.trackFormats(out), PDB.trackFormats(src))
-        // the same artist name reuses its row; "House" got one genre row for both tracks
+        // the same artist name reuses its row; a new one gets a row
         XCTAssertEqual(PDB.rowBytes(Bytes(b: out), .artists).count, PDB.rowBytes(Bytes(b: src), .artists).count + 1)
-        XCTAssertEqual(PDB.rowBytes(Bytes(b: out), .genres).count, PDB.rowBytes(Bytes(b: src), .genres).count + 1)
-        // track rows keep rekordbox's numbering, and the playlist writer still works on the result
-        let rows = PDB.rowBytes(Bytes(b: out), .tracks)
-        XCTAssertEqual(rows.map { Int(Bytes(b: $0.bytes).u16(2)) }, (0..<rows.count).map { $0 * 0x20 })
+        // no track row moved to another page or slot (rekordbox's index pages point at pages), and every
+        // page but the ones with an edited row is byte for byte as it was
+        XCTAssertEqual(slots(out), slots(src))
+        XCTAssertEqual(out.count, src.count)
+        let edited = Set(PDB.rowBytes(Bytes(b: src), .tracks).filter { edits[Bytes(b: $0.bytes).u32(72)] != nil }.map { $0.at / 4096 })
+            .union(PDB.rowBytes(Bytes(b: out), .artists).suffix(1).map { $0.at / 4096 })
+        for p in 1..<(src.count / 4096) where !edited.contains(p) { XCTAssertEqual(out[(p * 4096)..<((p + 1) * 4096)], src[(p * 4096)..<((p + 1) * 4096)], "page \(p)") }
+        // the playlist writer still works on the result
         var nodes = after.playlists; nodes[0].name = "Renamed"
         XCTAssertEqual(PDB.parse(try PDB.writePlaylists(out, nodes)).tracks, after.tracks)
         // and back again
         let undo = try PDB.writeTracks(out, [1: PDBTrackEdit(title: "Demo Track 1", artist: "Loopmasters", album: "", genre: "", comment: "Tracks by www.loopmasters.com", rating: 0)])
         XCTAssertEqual(PDB.parse(undo).tracks.first { $0.id == 1 }, before.tracks.first { $0.id == 1 })
     }
-    func testManyBigEditsNeedANewPage() throws {
+    /// track id → (page, slot) of its row
+    func slots(_ b: [UInt8]) -> [UInt32: [Int]] {
+        let d = Bytes(b: b)
+        return Dictionary(uniqueKeysWithValues: PDB.rowBytes(d, .tracks).map { r in (Bytes(b: r.bytes).u32(72), PDB.slot(d, at: r.at).map { [$0.page, $0.slot] } ?? []) })
+    }
+    func testBigEditsStayOnTheirPageOrAreRefused() throws {
         let src = try fixture("export.pdb")
+        // a few long comments fit in the pages' free space, packed tighter within the page if need be
         let long = String(repeating: "x", count: 600)
-        let edits = Dictionary(uniqueKeysWithValues: PDB.parse(src).tracks.map { ($0.id, PDBTrackEdit(comment: long + "\($0.id)")) })
-        let out = try PDB.writeTracks(src, edits)
-        XCTAssertGreaterThan(out.count, src.count, "the track table grew a page")
-        XCTAssertEqual(PDB.problems(out), [])
-        XCTAssertTrue(PDB.parse(out).tracks.allSatisfy { $0.comment == long + "\($0.id)" })
+        let some = Dictionary(uniqueKeysWithValues: PDB.parse(src).tracks.prefix(2).map { ($0.id, PDBTrackEdit(comment: long + "\($0.id)")) })
+        let out = try PDB.writeTracks(src, some)
+        XCTAssertEqual(PDB.problems(out), []); XCTAssertEqual(out.count, src.count); XCTAssertEqual(slots(out), slots(src))
+        XCTAssertTrue(PDB.parse(out).tracks.filter { some[$0.id] != nil }.allSatisfy { $0.comment == long + "\($0.id)" })
+        // ...but more than a page holds is refused rather than moving rows to other pages
+        let all = Dictionary(uniqueKeysWithValues: PDB.parse(src).tracks.map { ($0.id, PDBTrackEdit(comment: long + "\($0.id)")) })
+        XCTAssertThrowsError(try PDB.writeTracks(src, all)) { XCTAssertEqual($0 as? PDBError, .noRoom(0)) }
+        // and so is a new album or genre in a table with no data pages yet
+        XCTAssertThrowsError(try PDB.writeTracks(src, [1: PDBTrackEdit(genre: "House")]))
+        XCTAssertThrowsError(try PDB.writeTracks(src, [1: PDBTrackEdit(album: "Demo Album")]))
     }
     func testRefusesTrackEditsItCantWrite() throws {
         let src = try fixture("export.pdb")
@@ -260,7 +301,7 @@ final class USBWriterTests: XCTestCase {
         let t = lib.tracks.first { $0.title == "Demo Track 1" }!
         var hot = [USBCue?](repeating: nil, count: 8)
         hot[0] = USBCue(time: 15, comment: "Drop"); hot[3] = USBCue(time: 45, loopEnd: 46.875)
-        let changes = [t.key: USBTrackChanges(cue: 0.112, hot: hot, bpm: 127.5, firstBeat: 0.112, title: "Demo Track 1 (Edit)", genre: "House", rating: 3)]
+        let changes = [t.key: USBTrackChanges(cue: 0.112, hot: hot, bpm: 127.5, firstBeat: 0.112, title: "Demo Track 1 (Edit)", artist: "Loopmasters", rating: 3)]
         let gate = USBWriteGate(proven: [.cues, .beatgrid, .metadata])
         let plan = try USBTrackWriter.plan(lib, root: root, changes: changes, gate: gate, pdbBytes: pdb, olBytes: ol)
         XCTAssertEqual(Set(plan.files.map { $0.rel }), Set<String>([USBWriterTests.demo1 + ".DAT", USBWriterTests.demo1 + ".EXT", "PIONEER/rekordbox/export.pdb", "PIONEER/rekordbox/exportLibrary.db"]))
@@ -273,7 +314,7 @@ final class USBWriterTests: XCTestCase {
         // read the stick again, the way Cratebox USB opens it
         let (lib2, _, _) = try openLibrary(root)
         let t2 = lib2.track(t.key)!
-        XCTAssertEqual(t2.title, "Demo Track 1 (Edit)"); XCTAssertEqual(t2.genre, "House"); XCTAssertEqual(t2.rating, 3); XCTAssertEqual(t2.bpm, 127.5)
+        XCTAssertEqual(t2.title, "Demo Track 1 (Edit)"); XCTAssertEqual(t2.artist, "Loopmasters"); XCTAssertEqual(t2.rating, 3); XCTAssertEqual(t2.bpm, 127.5)
         XCTAssertTrue(lib2.inSync, "\(lib2.differences)")
         XCTAssertEqual(lib2.one?.tracks.first { $0.id == t.olId }?.title, "Demo Track 1 (Edit)")
         let dat = RekordboxANLZ.parse(try [UInt8](Data(contentsOf: root.appendingPathComponent(USBWriterTests.demo1 + ".DAT"))))

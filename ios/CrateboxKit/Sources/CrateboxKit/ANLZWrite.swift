@@ -1,14 +1,21 @@
-// Writing rekordbox analysis files (ANLZ .DAT / .EXT): hot cues, memory cues and loops (PCOB in both files,
+// Writing rekordbox analysis files (ANLZ .DAT / .EXT): hot cues, memory cues and loops (PCOB in the .DAT,
 // PCO2 in the .EXT), and the beat grid (PQTZ). Layouts follow Deep Symmetry's crate-digger
-// (rekordbox_anlz.ksy) and pyrekordbox's anlz structs (MIT); RekordboxANLZ.parse is the reader.
+// (rekordbox_anlz.ksy) and pyrekordbox's anlz structs (MIT), corrected against a cue rekordbox 7.2 wrote
+// (a hot cue on a FLAC track, from a real export); RekordboxANLZ.parse is the reader.
 //
 // The writer only replaces tags rekordbox already put in the file, leaves every other tag byte for byte as
-// it was, and reads its own output back before returning it. What hasn't been confirmed on a player (and is
-// why these writes stay locked behind USBWriteGate until they are):
-//  - PCPT `status` (crate-digger: 1 = enabled; pyrekordbox: 4 = enabled; rekordcrate: 0, 4 = active loop) and `order_first` / `order_last` (read here as
-//    the previous / next entry in time order). Players are known to read hot_cue, type, time and loop_time.
-//  - PCPT / PCP2 `type`: 1 = point, 2 = loop (crate-digger, pyrekordbox); rekordcrate says 0 = point.
-//  - PCP2's 20 bytes after the colour (rekordcrate's five unknown words) are written as zeros.
+// it was, and reads its own output back before returning it. As rekordbox writes them:
+//  - PCOB: the last header word is -1 also when the list isn't empty; PCPT status 0.
+//  - the .EXT's PCOB lists stay empty (rekordbox keeps its cues in the .EXT's PCO2 only).
+//  - PCP2: the byte after the colour id is 1; no comment = comment length 0; after the colour come 40
+//    bytes rekordbox fills with seek positions (for FLAC: the decoding start frame, its file offset and the
+//    block's sample count). Those are kept for a cue that didn't move and written as zeros otherwise.
+// Not confirmed on a player yet (why these writes stay locked behind USBWriteGate):
+//  - PCPT `order_first` / `order_last` (read here as the previous / next entry in time order), and PCPT's
+//    status for memory cues (only a hot cue has been seen).
+//  - PCPT / PCP2 `type`: 1 = point, 2 = loop (crate-digger, pyrekordbox, and rekordbox's own); rekordcrate
+//    says 0 = point.
+//  - zeroed seek positions for a cue that moved or is new.
 //  - PCOB carries hot cues A-C only (the older players' three); PCO2 carries A-H.
 //  - PQT2 (the .EXT's second beat grid) can't be rebuilt (its entries aren't decoded anywhere), so a grid
 //    write drops it rather than leave a grid that disagrees with PQTZ.
@@ -23,6 +30,9 @@ public struct ANLZCuePoint: Equatable, Codable {
     /// PCP2's colour bytes: memory cues use colorId (the colours table), hot cues colorCode + RGB. nil = none.
     public var colorId: UInt8?
     public var color: ANLZHotCueColor?
+    /// PCP2 bytes rekordbox wrote that aren't decoded (the 7 after the colour id, the 40 after the colour),
+    /// carried over for a cue that stays where it was. nil = rekordbox's defaults.
+    public var pad: [UInt8]?, tail: [UInt8]?
     public init(hot: Int, ms: UInt32, loopMs: UInt32? = nil, comment: String = "", colorId: UInt8? = nil, color: ANLZHotCueColor? = nil) {
         self.hot = hot; self.ms = ms; self.loopMs = loopMs; self.comment = comment; self.colorId = colorId; self.color = color
     }
@@ -80,7 +90,7 @@ extension RekordboxANLZ {
     // ---- cues ----
     static func pcpt(_ c: ANLZCuePoint, prev: Int?, next: Int?) -> [UInt8] {
         var e = fourcc("PCPT") + be32(0x1c) + be32(0x38)
-        e += be32(UInt32(c.hot)) + be32(1) + be32(0x10000)
+        e += be32(UInt32(c.hot)) + be32(0) + be32(0x10000)
         e += be16(prev.map { UInt16($0) } ?? 0xffff) + be16(next.map { UInt16($0) } ?? 0xffff)
         e += [c.loopMs == nil ? 1 : 2, 0] + be16(1000)
         e += be32(c.ms) + be32(c.loopMs ?? 0xffffffff)
@@ -90,23 +100,23 @@ extension RekordboxANLZ {
     static func pcp2(_ c: ANLZCuePoint) -> [UInt8] {
         var comment = [UInt8]()
         for u in c.comment.utf16 { comment += be16(u) }
-        comment += [0, 0]                                       // NUL-terminated, also when empty (rekordcrate)
+        if !comment.isEmpty { comment += [0, 0] }               // NUL-terminated; no comment is length 0, as rekordbox writes it
         var e = [UInt8]()
         e += be32(UInt32(c.hot))
         e += [c.loopMs == nil ? 1 : 2, 0] + be16(1000)
         e += be32(c.ms) + be32(c.loopMs ?? 0xffffffff)
-        e += [c.colorId ?? 0] + [UInt8](repeating: 0, count: 7)
+        e += [c.colorId ?? 0] + (c.pad?.count == 7 ? c.pad! : [1, 0, 0, 0, 0, 0, 0])
         e += be16(0) + be16(0)                                  // loop length in beats: not quantised
         e += be32(UInt32(comment.count)) + comment
         let col = c.color ?? ANLZHotCueColor(code: 0, r: 0, g: 0, b: 0)
         e += [col.code, col.r, col.g, col.b]
-        e += [UInt8](repeating: 0, count: 20)                   // the five unknown words rekordcrate reads after the colour
+        e += c.tail?.count == 40 ? c.tail! : [UInt8](repeating: 0, count: 40)   // rekordbox's seek positions
         return fourcc("PCP2") + be32(0x10) + be32(UInt32(12 + e.count)) + e
     }
-    /// PCOB: type, 2 unknown bytes, count, memory_count (-1 when empty, as rekordbox writes it), entries
+    /// PCOB: type, 2 unknown bytes, count, memory_count (-1, as rekordbox writes it, also with cues), entries
     static func pcob(hot: Bool, _ cues: [ANLZCuePoint]) -> [UInt8] {
         let body = cues.enumerated().flatMap { i, c in pcpt(c, prev: i > 0 ? i - 1 : nil, next: i + 1 < cues.count ? i + 1 : nil) }
-        return tag("PCOB", header: be32(hot ? 1 : 0) + be16(0) + be16(UInt16(cues.count)) + be32(cues.isEmpty ? 0xffffffff : UInt32(cues.count)), body: body)
+        return tag("PCOB", header: be32(hot ? 1 : 0) + be16(0) + be16(UInt16(cues.count)) + be32(0xffffffff), body: body)
     }
     static func pco2(hot: Bool, _ cues: [ANLZCuePoint]) -> [UInt8] {
         tag("PCO2", header: be32(hot ? 1 : 0) + be16(UInt16(cues.count)) + be16(0), body: cues.flatMap(pcp2))
@@ -138,10 +148,13 @@ extension RekordboxANLZ {
                         while u.last == 0 { u.removeLast() }
                         c.comment = String(decoding: u, as: UTF16.self)
                     }
+                    let pad = Array(t[(e + 29)..<(e + 36)])
+                    if pad != [1, 0, 0, 0, 0, 0, 0] { c.pad = pad }    // kept only when it isn't the default
                     if len - lc >= 48 && e + 48 + lc <= t.count {
                         let k = e + 44 + lc
                         let col = ANLZHotCueColor(code: t[k], r: t[k + 1], g: t[k + 2], b: t[k + 3])
                         if col != ANLZHotCueColor(code: 0, r: 0, g: 0, b: 0) { c.color = col }
+                        if len - lc - 48 == 40 && e + len <= t.count && t[(e + 48 + lc)..<(e + len)].contains(where: { $0 != 0 }) { c.tail = Array(t[(e + 48 + lc)..<(e + len)]) }
                     }
                     o2.append(c)
                     e += max(44, len)
@@ -153,7 +166,7 @@ extension RekordboxANLZ {
 
     /// Replaces the cue lists in one analysis file (.DAT or .EXT) with `cues` (hot cues A-H and memory cues /
     /// loops, any order). Both PCOB lists must already be in the file; the PCO2 lists are replaced when the
-    /// file has them (the .EXT). Everything else is left as it was.
+    /// file has them (the .EXT), whose PCOB lists are left empty. Everything else is left as it was.
     public static func writeCues(_ file: [UInt8], _ cues: [ANLZCuePoint]) throws -> [UInt8] {
         var hotSeen = Set<Int>()
         for c in cues {
@@ -174,7 +187,7 @@ extension RekordboxANLZ {
         let hasExtended = !pco2s.isEmpty                       // a .DAT only carries A-C; D-H go in the .EXT
         var out = [[UInt8]]()
         for (name, t) in tags {
-            if name == "PCOB" { out.append(listType(t) == 1 ? pcob(hot: true, legacyHot) : pcob(hot: false, memory)) }
+            if name == "PCOB" { out.append(hasExtended ? pcob(hot: listType(t) == 1, []) : listType(t) == 1 ? pcob(hot: true, legacyHot) : pcob(hot: false, memory)) }
             else if name == "PCO2" { out.append(listType(t) == 1 ? pco2(hot: true, hot) : pco2(hot: false, memory)) }
             else { out.append(t) }
         }
