@@ -37,3 +37,17 @@
   ios.yml on the .heat bundle id. Not pushed: pushing personal/heat uploads to TestFlight, which needs Jonah's OK. Watch-mic PR #7
   also targets personal/heat; whichever lands second merges the other (overlaps in ContentView Settings + project.yml).
 - Not verified: island phones with Display Zoom on (e.g. 16 Pro Max zoomed to 812 × 375 portrait-equivalent); not screenshotted.
+
+## 2026-10-23 06:20: Performance Mode EJECT (branch claude/project-thread-3e42ho, from preview/truecurve-usb)
+
+- iOS has no unmount for apps (DADiskUnmount is macOS / Catalyst only) and no plug-in notice. iPhone Files has no
+  USB eject either (Apple's guide: just unplug; not re-verified, support.apple.com unreachable from CI box).
+- `App/DriveWatch.swift`: every 2 s checks known drive folders (device sticks, music folders on another volume,
+  Cratebox USB's open stick) with checkResourceIsReachable; unplugged → released; ejected → waits for a replug.
+  EJECT: refuses while any deck (or the USB preview) plays, waits for loads/analysis/saves, `DeckModel.unload()`
+  (new, CrateboxKit), Devices.eject (flush, now keeps the bookmark), ends security-scoped access, alert.
+- `Views/EjectButton.swift`: EJECT / + USB in PhoneTopBar, CompactTopBar, iPad topBar; 44 × 44 touch, 30 pt drawn.
+- Library: offline state, release/reconnect, scan of an unplugged folder no longer wipes its tracks, a leaked
+  security-scope start fixed in addFolder.
+- CI: `-demo -eject [-stopped]` shots (stand-in "DJ USB"). Not tested on a real stick yet.
+- Next: check CI run, screenshots to Jonah, port to personal/heat (his OK before pushing it: it uploads to TestFlight).
