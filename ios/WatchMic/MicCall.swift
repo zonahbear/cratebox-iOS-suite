@@ -59,6 +59,10 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
     private var wcBatch: [Data] = []
     private var wcError = ""
     private var wcSent = 0, wcReplies = 0, wcErrors = 0
+    /// times the watch threw away audio it was too late to send (on `queue`)
+    private var backlogDrops = 0
+    /// the most mic audio allowed to wait on the watch (frames at the mic's rate), set when the mic starts
+    private var keepFrames = 1440
     /// the link chosen when going live, read on `queue`
     private var liveMode = "auto"
     /// Bluetooth mode: the audio session was activated by us, not by CallKit
@@ -100,6 +104,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
     /// on `queue`
     private func refreshWC() {
         var e = wcError
+        if backlogDrops > 0 { e = "late drops \(backlogDrops)" + (e.isEmpty ? "" : " · " + e) }
         if wcSent + wcErrors > 0 { e = "sent \(wcSent) · replies \(wcReplies) · errors \(wcErrors)" + (e.isEmpty ? "" : " · " + e) }
         DispatchQueue.main.async { let s = self.wcSummary(e); if self.wcInfo != s { self.wcInfo = s } }
     }
@@ -129,7 +134,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
     func goLive() {
         guard callID == nil, !live else { return }
         let m = mode
-        queue.async { self.liveMode = m; self.wcSent = 0; self.wcReplies = 0; self.wcErrors = 0; self.wcError = "" }
+        queue.async { self.liveMode = m; self.backlogDrops = 0; self.wcSent = 0; self.wcReplies = 0; self.wcErrors = 0; self.wcError = "" }
         MicLog.add("go live, link \(m), WC reachable \(WCSession.default.isReachable)")
         if m == "bt" { goLiveBluetooth(); return }
         let id = UUID()
@@ -272,6 +277,9 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
         let fmt = input.outputFormat(forBus: 0)
         guard fmt.sampleRate > 0, fmt.channelCount > 0 else { MicLog.add("no mic input"); status = "No mic input"; return }
         inRate = fmt.sampleRate
+        let io = AVAudioSession.sharedInstance().ioBufferDuration
+        let keep = Int(fmt.sampleRate * max(0.03, io * 2))
+        queue.async { self.keepFrames = keep }
         inputInfo = "\(Int(fmt.sampleRate)) Hz, \(fmt.channelCount) ch, buffer \(Int(AVAudioSession.sharedInstance().ioBufferDuration * 1000)) ms"
         ring.clear()
         let ring = self.ring
@@ -300,6 +308,9 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
 
     /// on `queue`: mic → 24 kHz 16-bit → packets
     private func pump() {
+        // never send old audio: if the timer fell behind (screen off, busy watch), keep only the newest bit
+        // (30 ms, or two of the mic's own buffers if those are bigger, so a normal delivery is never cut)
+        if let have = ring.tryCount(), have > keepFrames { ring.trim(to: keepFrames); backlogDrops += 1 }
         let n = ring.read(drain, 48000)
         if n > 0 {
             let step = inRate / WatchMic.rate
@@ -319,6 +330,9 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
             let used = min(Int(pos), pending.count - 1)
             if used > 0 { pending.removeFirst(used); pos -= Double(used) }
         }
+        // same for samples waiting to be packed: at most 3 packets (30 ms)
+        let maxOut = keepFrames * Int(WatchMic.rate) / max(1, Int(inRate)) + WatchMic.packetSamples * 3
+        if out.count > maxOut { out.removeFirst(out.count - maxOut); backlogDrops += 1 }
         let g = Float(gain), m = muted, now = ProcessInfo.processInfo.systemUptime
         // Wi-Fi while the phone answers over it; otherwise Watch Connectivity (Bluetooth) if the phone is reachable
         let udp = liveMode != "bt" && ready && now - udpHeard < 2

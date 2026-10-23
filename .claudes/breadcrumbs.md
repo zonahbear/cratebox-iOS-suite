@@ -85,3 +85,7 @@
 ### 2026-10-23 09:45 Cratebox Mic: auto duck
 - Build for PR #16 was refused because the repo had been made private (no free macOS minutes); Jonah made it public again 08:48.
 - Auto duck (Settings → Apple Watch as a mic → Auto duck): `cb.duckOn` (off), `cb.duckDb` (-12), `cb.micGate` (mic only while talking, on), `cb.voiceDb` (-35 dBFS after gain), `cb.duckHold` (0.6 s). Detector on the network queue per 10 ms packet: level > threshold AND > adaptive floor + 10 dB, 3 packets running → bumps `voiceStamp`; audio thread holds for holdFrames and ducks master channels only (15 ms attack, ~0.5 s release) before adding the voice. Mixer MIC label shows TALK.
+
+### 2026-10-23 18:40 Cratebox Mic: Bluetooth audio works (build 22); latency worse on both links
+- Fix: phone drops standing delay (lowest buffer level before each packet over 1 s, beyond target + 10 ms, is trimmed) on top of the target+150 ms cap; watch never sends stale audio (ring capped to max(30 ms, 2× mic IO buffer), `out` capped likewise), "late drops" shown on the BT line.
+- Unverified which side caused it; asked Jonah for watch Round trip / Phone buffer / Mic buffer and phone Buffered now.

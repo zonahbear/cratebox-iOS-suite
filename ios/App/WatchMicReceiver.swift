@@ -81,6 +81,8 @@ final class WatchMicReceiver: ObservableObject {
     private var lostCount: UInt32 = 0
     private var prev: Float = 0
     private var packets = 0
+    private var lowest = Int.max, lowWindow = 0
+    private var trims: UInt32 = 0
     private var peak: Float = 0
     // audio-thread state
     private var priming = true
@@ -246,10 +248,20 @@ final class WatchMicReceiver: ObservableObject {
                 up[2 * i] = (prev + x) * 0.5; up[2 * i + 1] = x; prev = x
                 peak = max(peak, abs(x))
             }
+            let before = ring.count
             up.withUnsafeBufferPointer { ring.write($0.baseAddress!, $0.count) }
-            // never let the delay creep up: past target + 150 ms, drop back to the target
+            // never let the delay creep up. A burst (Bluetooth sends 4 packets at once, and sometimes stalls then
+            // catches up) leaves extra audio queued that never drains on its own, so: the lowest the buffer got
+            // just before a packet, over each second, is delay we don't need beyond the target: drop it.
+            // And past target + 150 ms, drop back to the target straight away.
             let target = ctl.pointee.target
-            if ring.count > target + 150 * 48 { ring.trim(to: target) }
+            lowest = min(lowest, before)
+            lowWindow += 1
+            if lowWindow >= 100 {
+                if lowest > target + 10 * 48 { ring.trim(to: max(target, ring.count - (lowest - target))); trims &+= 1 }
+                lowest = Int.max; lowWindow = 0
+            }
+            if ring.count > target + 150 * 48 { ring.trim(to: target); trims &+= 1 }
             packets += 1
             if packets % 10 == 0 {
                 let ms = Float(ring.count) / 48, under = underrunCount, lostNow = lostCount, pk = peak
