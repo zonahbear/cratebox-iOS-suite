@@ -114,3 +114,16 @@
 - 19:35 Jonah (build 27, real Puffco): "needs better temp dip on inhale". Change: dead 3 → 1.5°F, dip also counts fall
   speed (0.5 s ahead past 2°F/s), "Full warble at" default Auto (`cb.tc.puffFull2` = 0: 85% of biggest recent dip,
   ≥6°F, ~60 s memory) plus 4/8/15/25/40. Panel readout: dip / biggest / full at / reads/s, so Jonah can send real numbers.
+## 2026-10-23 19:40: SYNC retimed a playing deck when the other deck loaded (branch claude/project-thread-wtndnj)
+
+- Jonah's repros: 140 playing with SYNC, load a 75 on the other deck → 75; 72.5 playing synced, load a 72.5 → 36.25.
+- Cause (Core.swift DeckModel, same in cratebox.html Deck): master() preferred an unsynced deck over a playing one, so
+  the playing synced deck followed the freshly loaded, stopped deck; syncTick re-picked half/double time only when
+  the master *object* changed, so a new track on the same deck kept the old multiplier (½ from a 145 → 36.25).
+- Fix: a playing synced deck only follows the playing deck it already follows (syncWith + syncTrack). When that
+  master stops or loads, it holds its tempo and leads (syncSince set oldest). rate() uses syncRate whenever synced,
+  setSync with no master starts from the fader's rate, the fader moves a leader relatively, beginLoad resets sync state.
+- Tests: CoreTests testLoadingTheOtherDeckNeverRetimesAPlayingSyncedDeck / testSyncedDeckWithNoMasterHoldsWhenATrackLoads
+  (not run: no Swift here; ios.yml is the compiler). Web: Cratebox tests/test_sync.py 14/14 with the new checks.
+- Not changed: SYNC off still jumps to the tempo fader's position (old behaviour).
+- personal/heat still needs the same commit (Core.swift applies cleanly there; push to it uploads TestFlight).
