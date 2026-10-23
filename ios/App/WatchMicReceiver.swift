@@ -2,6 +2,7 @@
 // it to the master. A jitter buffer smooths the network; the phone's own Mute and Level always win over the watch.
 // The voice goes straight onto the master outputs after the limiter, so it isn't in recordings and isn't limited.
 // Without shared Wi-Fi the watch falls back to Watch Connectivity (over Bluetooth): same packets, several per message.
+import Accelerate
 import Foundation
 import Network
 import os
@@ -38,6 +39,16 @@ final class WatchMicReceiver: ObservableObject {
     }
     /// the notches the feedback filter has placed (Hz)
     @Published private(set) var notches: [Double] = []
+    /// auto duck: while you talk, the tracks on the master drop by `duckDb`; the mic can also open only then
+    @Published var duckOn = UserDefaults.standard.bool(forKey: "cb.duckOn") { didSet { UserDefaults.standard.set(duckOn, forKey: "cb.duckOn"); setDuck() } }
+    @Published var duckDb = UserDefaults.standard.object(forKey: "cb.duckDb") as? Double ?? -12 { didSet { UserDefaults.standard.set(duckDb, forKey: "cb.duckDb"); setDuck() } }
+    @Published var gateOn = UserDefaults.standard.object(forKey: "cb.micGate") as? Bool ?? true { didSet { UserDefaults.standard.set(gateOn, forKey: "cb.micGate"); setDuck() } }
+    /// how loud (dBFS, after the mic gain) counts as talking
+    @Published var voiceDb = UserDefaults.standard.object(forKey: "cb.voiceDb") as? Double ?? -35 { didSet { UserDefaults.standard.set(voiceDb, forKey: "cb.voiceDb"); let v = Float(voiceDb); queue.async { self.voiceThreshold = v } } }
+    /// how long the duck holds after you stop talking (s)
+    @Published var holdS = UserDefaults.standard.object(forKey: "cb.duckHold") as? Double ?? 0.6 { didSet { UserDefaults.standard.set(holdS, forKey: "cb.duckHold"); setDuck() } }
+    /// true while the voice detector hears you (for the screen)
+    @Published private(set) var talking = false
     /// which link to take the watch's voice from: "bt" (Watch Connectivity), "wifi" (UDP) or "auto" (both)
     @Published var mode = UserDefaults.standard.string(forKey: "cb.watchMicMode") ?? "bt" {
         didSet {
@@ -56,7 +67,10 @@ final class WatchMicReceiver: ObservableObject {
     }
 
     /// what the audio thread reads; plain fields, written whole from the main or network queue
-    struct Control { var gain: Float = 1; var watchMuted = false; var phoneMuted = false; var level: Float = 1; var target = 60 * 48; var on = false }
+    struct Control { var gain: Float = 1; var watchMuted = false; var phoneMuted = false; var level: Float = 1; var target = 60 * 48; var on = false
+        var duckOn = false; var duckGain: Float = 0.25; var gateOn = true; var holdFrames = 28800
+        /// bumped by the network queue every time it hears voice; the audio thread holds the duck for holdFrames after
+        var voiceStamp: UInt32 = 0 }
     private let ctl: UnsafeMutablePointer<Control> = { let p = UnsafeMutablePointer<Control>.allocate(capacity: 1); p.initialize(to: Control()); return p }()
     /// the voice at 48 kHz, ready to mix
     private let ring = FloatRing(capacity: 48000 * 2)
@@ -71,6 +85,14 @@ final class WatchMicReceiver: ObservableObject {
     // audio-thread state
     private var priming = true
     private var smooth: Float = 0
+    private var duckSmooth: Float = 1
+    private var lastStamp: UInt32 = 0
+    private var holdLeft = 0
+    // voice detector (on `queue`)
+    private var voiceThreshold: Float = -35
+    private var floorDb: Float = -60
+    private var voiceRun = 0
+    private var sinceVoice = 1000
     private var underrunCount: UInt32 = 0
     private let wc = WatchMicWC()
     // on `queue`
@@ -86,6 +108,8 @@ final class WatchMicReceiver: ObservableObject {
         ctl.pointee.target = targetMs * 48
         fbOn = feedbackOn
         linkMode = mode
+        voiceThreshold = Float(voiceDb)
+        setDuck()
         setLevel()
         fb.onChange = { [weak self] f in DispatchQueue.main.async { self?.notches = f } }
         wc.onData = { [weak self] d, reply in self?.queue.async { self?.fromWatchConnectivity(d, reply) } }
@@ -134,6 +158,10 @@ final class WatchMicReceiver: ObservableObject {
 
     /// the volume knob is a fader-like curve (squared), so the bottom half is usable
     private func setLevel() { ctl.pointee.level = Float(pow(10, gainDb / 20) * volume * volume) }
+    private func setDuck() {
+        ctl.pointee.duckOn = duckOn; ctl.pointee.gateOn = gateOn
+        ctl.pointee.duckGain = Float(pow(10, duckDb / 20)); ctl.pointee.holdFrames = Int(holdS * 48000)
+    }
     func resetFeedback() { queue.async { self.fb.reset() } }
 
     func stop() {
@@ -211,6 +239,7 @@ final class WatchMicReceiver: ObservableObject {
             // feedback suppression at 24 kHz; the high-pass and notches always run, the detector only when it's on
             var v = samples.map { Float($0) / 32767 }
             fb.process(&v, detect: fbOn)
+            detectVoice(v, gain: max(0, min(2, gain)), muted: muted)
             // 24 kHz → 48 kHz: each sample becomes two, the first halfway from the previous one
             var up = [Float](repeating: 0, count: v.count * 2)
             for (i, x) in v.enumerated() {
@@ -237,19 +266,50 @@ final class WatchMicReceiver: ObservableObject {
         }
     }
 
+    /// on `queue`, one packet (10 ms): is that you talking? Louder than the threshold AND 10 dB over the room's
+    /// floor (which follows the quietest level, so steady music bleeding into the mic doesn't count), for 30 ms.
+    private func detectVoice(_ v: [Float], gain: Float, muted: Bool) {
+        var ms: Float = 0
+        vDSP_measqv(v, 1, &ms, vDSP_Length(v.count))
+        let db = 10 * log10(max(ms, 1e-12)) + 20 * log10(max(gain, 1e-6)) + Float(gainDb)
+        if db < floorDb { floorDb = max(-90, db) } else { floorDb = min(floorDb + 0.02, db) }   // up ~2 dB/s, down at once
+        let voice = !muted && db > max(voiceThreshold, floorDb + 10)
+        voiceRun = voice ? voiceRun + 1 : 0
+        if voiceRun >= 3 { ctl.pointee.voiceStamp &+= 1; sinceVoice = 0 } else { sinceVoice += 1 }
+        let now = sinceVoice * 10 < Int(holdS * 1000)
+        if now != talkingQ { talkingQ = now; DispatchQueue.main.async { self.talking = now } }
+    }
+    private var talkingQ = false
+
     // MARK: audio thread
 
     /// Adds the voice to the master channels. master: 0 = channels 1/2, 2 = channels 3/4, -1 = channel 1 only (split).
     func mix(_ outs: [UnsafeMutablePointer<Float>], _ frames: Int, master: Int) {
         let c = ctl.pointee
-        guard c.on, !outs.isEmpty else { return }
-        let want: Float = (c.watchMuted || c.phoneMuted) ? 0 : c.gain * c.level
+        guard !outs.isEmpty else { return }
+        let lc = master == 2 && outs.count >= 4 ? 2 : 0
+        let rc = master == -1 ? -1 : (master == 2 && outs.count >= 4 ? 3 : (outs.count > 1 ? 1 : -1))
+        // voice heard lately? (counts down here, so it lets go even if the watch stops sending)
+        if c.voiceStamp != lastStamp { lastStamp = c.voiceStamp; holdLeft = c.holdFrames }
+        let voice = c.on && holdLeft > 0
+        holdLeft = max(0, holdLeft - frames)
+        // auto duck: the tracks on the master only (the voice is added after), ~15 ms down, ~0.5 s back up
+        let duckTo: Float = voice && c.duckOn ? c.duckGain : 1
+        if duckTo < 1 || duckSmooth < 0.9999 {
+            let rate: Float = duckTo < duckSmooth ? 0.0014 : 0.00004
+            for j in 0..<frames {
+                duckSmooth += (duckTo - duckSmooth) * rate
+                outs[lc][j] *= duckSmooth
+                if rc >= 0 { outs[rc][j] *= duckSmooth }
+            }
+        }
+        guard c.on else { return }
+        let open = !(c.duckOn && c.gateOn) || voice
+        let want: Float = (c.watchMuted || c.phoneMuted || !open) ? 0 : c.gain * c.level
         if priming {
             guard let n = ring.tryCount(), n >= c.target else { return }
             priming = false
         }
-        let lc = master == 2 && outs.count >= 4 ? 2 : 0
-        let rc = master == -1 ? -1 : (master == 2 && outs.count >= 4 ? 3 : (outs.count > 1 ? 1 : -1))
         var done = 0
         while done < frames {
             let k = min(4096, frames - done)

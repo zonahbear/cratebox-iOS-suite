@@ -94,7 +94,7 @@ struct MixerView: View {
             if mic.listening {
                 VStack(spacing: 0) {
                     Knob(label: "", value: mic.volume, color: Theme.hot, size: 20, center: 1) { mic.volume = $0 }
-                    Text("MIC").font(.system(size: 6.5, weight: .bold)).foregroundStyle(mic.phoneMuted || mic.watchMuted ? Theme.muted : Theme.hot)
+                    Text(mic.duckOn && mic.talking ? "TALK" : "MIC").font(.system(size: 6.5, weight: .bold)).foregroundStyle(mic.phoneMuted || mic.watchMuted ? Theme.muted : mic.duckOn && mic.talking ? Theme.cue : Theme.hot)
                 }
             }
             MeterView(level: { let p = app.core.lastSnapshot.masterPeak; return Double(max(p.0, p.1)) }).frame(width: 5, height: 24)

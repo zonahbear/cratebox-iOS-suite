@@ -81,3 +81,7 @@
 - Watch: Link button cycles bt/wifi/auto (`mic.mode`, default bt). Bluetooth = no CallKit: own .playAndRecord session + `audio` background mode, WC only. MicLog.swift writes a crash-surviving log (+ uncaught ObjC exceptions); "Last session log" on the watch, "Send log to phone" (transferUserInfo).
 - Phone: Link picker (`cb.watchMicMode`, default bt; bt = no NWListener), "Bluetooth messages from the watch" counter, Watch log section with Copy.
 - Crash cause still unknown (no log yet). Next: Jonah reproduces, sends log.
+
+### 2026-10-23 09:45 Cratebox Mic: auto duck
+- Build for PR #16 was refused because the repo had been made private (no free macOS minutes); Jonah made it public again 08:48.
+- Auto duck (Settings → Apple Watch as a mic → Auto duck): `cb.duckOn` (off), `cb.duckDb` (-12), `cb.micGate` (mic only while talking, on), `cb.voiceDb` (-35 dBFS after gain), `cb.duckHold` (0.6 s). Detector on the network queue per 10 ms packet: level > threshold AND > adaptive floor + 10 dB, 3 packets running → bumps `voiceStamp`; audio thread holds for holdFrames and ducks master channels only (15 ms attack, ~0.5 s release) before adding the voice. Mixer MIC label shows TALK.
