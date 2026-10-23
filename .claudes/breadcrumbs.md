@@ -37,3 +37,6 @@
   ios.yml on the .heat bundle id. Not pushed: pushing personal/heat uploads to TestFlight, which needs Jonah's OK. Watch-mic PR #7
   also targets personal/heat; whichever lands second merges the other (overlaps in ContentView Settings + project.yml).
 - Not verified: island phones with Display Zoom on (e.g. 16 Pro Max zoomed to 812 × 375 portrait-equivalent); not screenshotted.
+- 2026-10-23 03:30: shipping TestFlight 0.1.0 (9.1) uploaded from preview/truecurve-usb @ 0cb0371 (compact layout).
+  personal/heat fast-forwarded to 15594a8 (compact + HEAT), but its TestFlight run 39895048610 skipped: the HEAT secrets
+  (IOS_PROFILE_HEAT_BASE64 etc., see ios/HEAT-APP.md on personal/heat) aren't set, so the HEAT build hasn't compiled in CI yet.
