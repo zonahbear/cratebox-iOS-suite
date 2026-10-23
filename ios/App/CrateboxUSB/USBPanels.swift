@@ -395,13 +395,16 @@ struct USBStagedView: View {
                             Text([e.hasCues ? "cues" : nil, e.hasGrid ? "grid" : nil, e.hasMeta ? "info" : nil].compactMap { $0 }.joined(separator: " · ")).font(.caption).foregroundStyle(Theme.muted)
                         }
                     }
+                    Button { usb.writeTrackEdits() } label: { Label(usb.writing ? "Writing…" : "Write edits to the stick", systemImage: usb.trackEditBlocker == nil ? "square.and.arrow.down" : "lock") }
+                        .disabled(usb.trackEditBlocker != nil || usb.writing || usb.editedTracks.isEmpty)
                     Button("Use in Performance Mode") { usb.applyToPerformance() }.disabled(usb.editedTracks.isEmpty)
                     HStack {
                         TextField("Stick's path on the computer (e.g. E:/ or /Volumes/DJ USB)", text: $base).font(.system(size: 12))
                         Button("Export rekordbox XML") { UserDefaults.standard.set(base, forKey: "cb.usb.xmlBase"); shared = usb.exportXML(base: base) }
                     }
                 } header: { Text("Cues, grid and track info") } footer: {
-                    Text("rekordbox's analysis files have no proven writer yet, so these don't go onto the stick. Performance Mode uses them when it plays this stick; the XML carries them to rekordbox (Preferences → View → rekordbox xml) to apply and export again.")
+                    Text(usb.trackEditBlocker ?? "Cues and grid go into the tracks' analysis files, track info into every library on the stick: backed up first, staged, checked, swapped in, and put back if any file fails.")
+                    + Text(" Performance Mode uses these edits when it plays this stick; the XML carries them to rekordbox (Preferences → View → rekordbox xml) to apply and export again.")
                 }
                 Section("Fix list") {
                     if usb.fixList.isEmpty { Text("Empty").foregroundStyle(Theme.muted) }

@@ -6,7 +6,7 @@ import Foundation
 
 public enum PDBError: Error, Equatable, CustomStringConvertible {
     case notPDB, brokenChain(UInt32), noTable(UInt32), noDataPages(UInt32), noFreePage(UInt32)
-    case badId(UInt32), missingParent, rowTooBig, readBack(String)
+    case badId(UInt32), missingParent, rowTooBig, noRoom(UInt32), readBack(String)
     public var description: String {
         switch self {
         case .notPDB: return "not an export.pdb"
@@ -17,6 +17,7 @@ public enum PDBError: Error, Equatable, CustomStringConvertible {
         case .badId(let i): return "bad playlist id \(i)"
         case .missingParent: return "playlist parent missing"
         case .rowTooBig: return "row too big"
+        case .noRoom(let t): return "export.pdb: no room on the page for this change (table \(t)); make it in rekordbox and export again"
         case .readBack(let s): return "export.pdb: \(s)"
         }
     }
@@ -193,7 +194,6 @@ public enum PDB {
         let src = Bytes(b: input)
         let PS = Int(src.u32(4)), NT = Int(src.u32(8))
         if PS < 512 || PS > 65536 || NT < 9 || NT > 64 { throw PDBError.notPDB }
-        let HEAP = 0x28
         var ids = Set<UInt32>()
         for n in nodes {
             if n.id == 0 || ids.contains(n.id) { throw PDBError.badId(n.id) }
@@ -211,71 +211,8 @@ public enum PDB {
             for (i, tid) in n.tracks.enumerated() { entryRows.append(le32(UInt32(i + 1)) + le32(tid) + le32(n.id)) }
         }
         var out = input
-        func r32(_ o: Int) -> UInt32 { UInt32(out[o]) | UInt32(out[o + 1]) << 8 | UInt32(out[o + 2]) << 16 | UInt32(out[o + 3]) << 24 }
-        func w32(_ o: Int, _ v: UInt32) { out[o] = UInt8(v & 0xff); out[o + 1] = UInt8((v >> 8) & 0xff); out[o + 2] = UInt8((v >> 16) & 0xff); out[o + 3] = UInt8(v >> 24) }
-        func r16(_ o: Int) -> UInt16 { UInt16(out[o]) | UInt16(out[o + 1]) << 8 }
-        func w16(_ o: Int, _ v: UInt16) { out[o] = UInt8(v & 0xff); out[o + 1] = UInt8(v >> 8) }
-        func grow(_ pages: Int) { if pages * PS > out.count { out += [UInt8](repeating: 0, count: pages * PS - out.count) } }
-        func seq() -> UInt32 { let s = r32(20); w32(20, s &+ 1); return s }
-        func pack(_ type: UInt32, _ rows: [[UInt8]]) throws {
-            var tp = -1
-            for t in 0..<NT where r32(28 + t * 16) == type { tp = 28 + t * 16 }
-            if tp < 0 { throw PDBError.noTable(type) }
-            var pages = [Int](), seen = Set<Int>()
-            var page = Int(r32(tp + 8))
-            let last = Int(r32(tp + 12))
-            while true {
-                if seen.contains(page) || (page + 1) * PS > out.count || r32(page * PS + 8) != type { throw PDBError.brokenChain(type) }
-                seen.insert(page)
-                if out[page * PS + 27] & 0x40 == 0 { pages.append(page) }
-                if page == last { break }
-                page = Int(r32(page * PS + 12))
-            }
-            if pages.isEmpty { throw PDBError.noDataPages(type) }
-            func idxSize(_ m: Int) -> Int { (m / 16) * 36 + (m % 16 != 0 ? 4 + 2 * (m % 16) : 0) }
-            func fits(_ used: Int, _ n: Int, _ len: Int) -> Bool { HEAP + used + ((len + 3) & ~3) + idxSize(n + 1) <= PS }
-            var plan: [[[UInt8]]] = [[]]
-            var used = 0
-            for r in rows {
-                if r.count + HEAP + 6 > PS { throw PDBError.rowTooBig }
-                if !fits(used, plan[plan.count - 1].count, r.count) { plan.append([]); used = 0 }
-                plan[plan.count - 1].append(r); used += (r.count + 3) & ~3
-            }
-            while plan.count > pages.count {
-                let cand = Int(r32(tp + 4)), nextU = r32(12)
-                if seen.contains(cand) || cand <= 0 || UInt32(cand) >= nextU { throw PDBError.noFreePage(type) }
-                grow(cand + 1)
-                let prev = pages[pages.count - 1]
-                w32(prev * PS + 12, UInt32(cand))
-                for i in (cand * PS)..<((cand + 1) * PS) { out[i] = 0 }
-                w32(cand * PS + 4, UInt32(cand)); w32(cand * PS + 8, type); w32(cand * PS + 12, nextU)
-                w32(tp + 4, nextU); w32(tp + 12, UInt32(cand)); w32(12, nextU + 1)
-                pages.append(cand); seen.insert(cand)
-            }
-            for (k, pg) in pages.enumerated() {
-                let o = pg * PS
-                let list = k < plan.count ? plan[k] : []
-                let n = list.count
-                for i in (o + 0x10)..<(o + PS) { out[i] = 0 }
-                w32(o + 0x10, seq())
-                let packed = n | (n << 13)
-                out[o + 0x18] = UInt8(packed & 0xff); out[o + 0x19] = UInt8((packed >> 8) & 0xff); out[o + 0x1a] = UInt8((packed >> 16) & 0xff)
-                out[o + 0x1b] = 0x24
-                var at = 0
-                for (i, r) in list.enumerated() {
-                    for (j, byte) in r.enumerated() { out[o + HEAP + at + j] = byte }
-                    let g = i / 16, j = i % 16, base = o + PS - g * 36
-                    w16(base - 6 - 2 * j, UInt16(at))
-                    let bit = r16(base - 4) | UInt16(1 << j)
-                    w16(base - 4, bit); w16(base - 2, bit)
-                    at += (r.count + 3) & ~3
-                }
-                w16(o + 0x1c, UInt16(PS - HEAP - at - idxSize(n))); w16(o + 0x1e, UInt16(at))
-                w16(o + 0x20, n > 0 ? UInt16(n) : 0x1fff); w16(o + 0x22, n > 0 ? 0 : 0x1fff)
-            }
-        }
-        try pack(PDBPage.playlistTree.rawValue, treeRows)
-        try pack(PDBPage.playlistEntries.rawValue, entryRows)
+        try pack(&out, PDBPage.playlistTree.rawValue, treeRows)
+        try pack(&out, PDBPage.playlistEntries.rawValue, entryRows)
         // read it back: the playlists must come out as asked and the tracks as they were
         let before = parse(input), after = parse(out)
         let got = Dictionary(after.playlists.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -286,5 +223,81 @@ public enum PDB {
         if after.playlists.count != nodes.count { throw PDBError.readBack("playlist count didn't read back") }
         if after.tracks != before.tracks { throw PDBError.readBack("tracks changed") }
         return out
+    }
+
+    /// Rewrites every data page of one table with `rows` (in order), allocating pages from the table's
+    /// empty-page candidate when they don't fit. keepFlags: keep each page's flags byte (else 0x24, as the
+    /// web app's playlist writer does); indexShift: set each row's index_shift (bytes 2-3) to 0x20 × its slot,
+    /// as rekordbox numbers track, artist and album rows.
+    static func pack(_ out: inout [UInt8], _ type: UInt32, _ rows: [[UInt8]], keepFlags: Bool = false, indexShift: Bool = false) throws {
+        let PS = Int(Bytes(b: out).u32(4)), NT = Int(Bytes(b: out).u32(8))
+        let HEAP = 0x28
+        func r32(_ o: Int) -> UInt32 { UInt32(out[o]) | UInt32(out[o + 1]) << 8 | UInt32(out[o + 2]) << 16 | UInt32(out[o + 3]) << 24 }
+        func w32(_ o: Int, _ v: UInt32) { out[o] = UInt8(v & 0xff); out[o + 1] = UInt8((v >> 8) & 0xff); out[o + 2] = UInt8((v >> 16) & 0xff); out[o + 3] = UInt8(v >> 24) }
+        func r16(_ o: Int) -> UInt16 { UInt16(out[o]) | UInt16(out[o + 1]) << 8 }
+        func w16(_ o: Int, _ v: UInt16) { out[o] = UInt8(v & 0xff); out[o + 1] = UInt8(v >> 8) }
+        func grow(_ pages: Int) { if pages * PS > out.count { out += [UInt8](repeating: 0, count: pages * PS - out.count) } }
+        func seq() -> UInt32 { let s = r32(20); w32(20, s &+ 1); return s }
+        var tp = -1
+        for t in 0..<NT where r32(28 + t * 16) == type { tp = 28 + t * 16 }
+        if tp < 0 { throw PDBError.noTable(type) }
+        var pages = [Int](), seen = Set<Int>()
+        var page = Int(r32(tp + 8))
+        let last = Int(r32(tp + 12))
+        while true {
+            if seen.contains(page) || (page + 1) * PS > out.count || r32(page * PS + 8) != type { throw PDBError.brokenChain(type) }
+            seen.insert(page)
+            if out[page * PS + 27] & 0x40 == 0 { pages.append(page) }
+            if page == last { break }
+            page = Int(r32(page * PS + 12))
+        }
+        // an empty table (only its header page) gets its first data page from the empty-page candidate below
+        // (the track info writer's tables; the playlist writer keeps the web app's behaviour and refuses)
+        if pages.isEmpty && !keepFlags { throw PDBError.noDataPages(type) }
+        if pages.isEmpty && rows.isEmpty { return }
+        let chainLast = page
+        let flagsOf = Dictionary(uniqueKeysWithValues: pages.map { ($0, out[$0 * PS + 27]) })
+        func idxSize(_ m: Int) -> Int { (m / 16) * 36 + (m % 16 != 0 ? 4 + 2 * (m % 16) : 0) }
+        func fits(_ used: Int, _ n: Int, _ len: Int) -> Bool { HEAP + used + ((len + 3) & ~3) + idxSize(n + 1) <= PS }
+        var plan: [[[UInt8]]] = [[]]
+        var used = 0
+        for r in rows {
+            if r.count + HEAP + 6 > PS { throw PDBError.rowTooBig }
+            if !fits(used, plan[plan.count - 1].count, r.count) { plan.append([]); used = 0 }
+            plan[plan.count - 1].append(r); used += (r.count + 3) & ~3
+        }
+        while plan.count > pages.count {
+            let cand = Int(r32(tp + 4)), nextU = r32(12)
+            if seen.contains(cand) || cand <= 0 || UInt32(cand) >= nextU { throw PDBError.noFreePage(type) }
+            grow(cand + 1)
+            let prev = pages.last ?? chainLast
+            w32(prev * PS + 12, UInt32(cand))
+            for i in (cand * PS)..<((cand + 1) * PS) { out[i] = 0 }
+            w32(cand * PS + 4, UInt32(cand)); w32(cand * PS + 8, type); w32(cand * PS + 12, nextU)
+            w32(tp + 4, nextU); w32(tp + 12, UInt32(cand)); w32(12, nextU + 1)
+            pages.append(cand); seen.insert(cand)
+        }
+        for (k, pg) in pages.enumerated() {
+            let o = pg * PS
+            let list = k < plan.count ? plan[k] : []
+            let n = list.count
+            for i in (o + 0x10)..<(o + PS) { out[i] = 0 }
+            w32(o + 0x10, seq())
+            let packed = n | (n << 13)
+            out[o + 0x18] = UInt8(packed & 0xff); out[o + 0x19] = UInt8((packed >> 8) & 0xff); out[o + 0x1a] = UInt8((packed >> 16) & 0xff)
+            out[o + 0x1b] = keepFlags ? flagsOf[pg] ?? flagsOf.values.first ?? 0x24 : 0x24
+            var at = 0
+            for (i, r) in list.enumerated() {
+                for (j, byte) in r.enumerated() { out[o + HEAP + at + j] = byte }
+                if indexShift { w16(o + HEAP + at + 2, UInt16(i * 0x20)) }
+                let g = i / 16, j = i % 16, base = o + PS - g * 36
+                w16(base - 6 - 2 * j, UInt16(at))
+                let bit = r16(base - 4) | UInt16(1 << j)
+                w16(base - 4, bit); w16(base - 2, bit)
+                at += (r.count + 3) & ~3
+            }
+            w16(o + 0x1c, UInt16(PS - HEAP - at - idxSize(n))); w16(o + 0x1e, UInt16(at))
+            w16(o + 0x20, n > 0 ? UInt16(n) : 0x1fff); w16(o + 0x22, n > 0 ? 0 : 0x1fff)
+        }
     }
 }

@@ -98,8 +98,9 @@ unlock that write).
 | --- | --- |
 | Playlists → Device Library | Writer tested byte for byte against the web app's; not yet confirmed on a player |
 | Playlists → OneLibrary | Writer tested (SQLite integrity check, read-back, re-encrypt); not yet confirmed on a player |
-| Cues, loops, beat grid → analysis files | No writer yet |
-| Track info → the libraries | No writer yet |
+| Cues, loops → analysis files + OneLibrary | Writer tested (read back by Cratebox's reader and pyrekordbox; rekordcrate reads the layout but expects a different value for a plain cue's type); not yet confirmed on a player |
+| Beat grid → analysis files + BPM in both libraries | Writer tested (constant tempo; rekordbox's PQT2 grid is removed, it can't be rebuilt); not yet confirmed on a player |
+| Track info → the libraries | Writer tested (export.pdb track rows, OneLibrary content, read back); not yet confirmed on a player |
 
 Until then, edits are kept as **Staged changes**: Performance Mode uses your cues and grids when it plays the
 stick, and you can export them as rekordbox XML. On a stick with both libraries, playlists are written to both or
@@ -127,6 +128,7 @@ The parts that decide how Cratebox sounds are ports of the web app's own code, c
 | Track analysis (BPM, grid, key, phrases, waveform) | identical results on the test tracks |
 | export.pdb read and playlist writer | byte for byte against the web app's |
 | OneLibrary decryption | against a real rekordbox database and SQLCipher's own output |
+| Cue, grid and track info writers (ANLZ, export.pdb, OneLibrary) and writing them to a stick, all or nothing | unit tests on a copy of a real rekordbox stick |
 | OneLibrary playlist writer, preflight scans, staged writes and recovery, Deck Bridge messages and mapping file | unit tests on a copy of a real rekordbox stick |
 
 ## Layout
