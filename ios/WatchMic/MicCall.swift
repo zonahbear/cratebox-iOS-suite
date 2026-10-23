@@ -26,6 +26,8 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
     @Published private(set) var lost = false
     /// "Wi-Fi" or "Bluetooth": which way the voice is going
     @Published private(set) var path = ""
+    /// the Bluetooth (Watch Connectivity) link as the watch sees it, plus its last error: shown so a failed test says why
+    @Published private(set) var wcInfo = ""
     @Published private(set) var inputInfo = ""
     @Published var muted = false { didSet { if oldValue != muted { syncMute() } } }
     /// 0...2, the crown
@@ -51,6 +53,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
     private var lastHeard = 0.0
     private var udpHeard = 0.0
     private var wcBatch: [Data] = []
+    private var wcError = ""
     private var giveUp: DispatchWorkItem?
     // resampler state (on `queue`)
     private var pending: [Float] = []
@@ -72,7 +75,29 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
         if WCSession.isSupported() { WCSession.default.delegate = self; WCSession.default.activate() }
     }
 
-    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {}
+    func session(_ session: WCSession, activationDidCompleteWith state: WCSessionActivationState, error: Error?) {
+        queue.async { if let error { self.wcError = "activate: \(error.localizedDescription)" }; self.refreshWC() }
+    }
+    func sessionReachabilityDidChange(_ session: WCSession) { queue.async { self.refreshWC() } }
+
+    /// on `queue`
+    private func refreshWC() {
+        let e = wcError
+        DispatchQueue.main.async { let s = self.wcSummary(e); if self.wcInfo != s { self.wcInfo = s } }
+    }
+    private func wcSummary(_ e: String) -> String {
+        guard WCSession.isSupported() else { return "BT: not supported" }
+        let w = WCSession.default
+        let state = w.activationState == .activated ? "on" : w.activationState == .inactive ? "inactive" : "not active"
+        var s = "BT \(state) · phone \(w.isReachable ? "in reach" : "NOT in reach") · app \(w.isCompanionAppInstalled ? "ok" : "MISSING")"
+        if !e.isEmpty { s += " · \(e)" }
+        return s
+    }
+    /// any thread: remembers why a Watch Connectivity send failed
+    private func wcFailed(_ e: Error) {
+        let ns = e as NSError
+        queue.async { self.wcError = "err \(ns.code): \(ns.localizedDescription)" }
+    }
 
     func askForMic() { AVAudioApplication.requestRecordPermission { ok in if !ok { DispatchQueue.main.async { self.status = "Mic not allowed: Settings → Privacy → Microphone" } } } }
 
@@ -134,7 +159,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
             // the network only works during the call, so the call has to start first; give the phone 10 s to answer
             let w = DispatchWorkItem { [weak self] in
                 guard let self, self.live, !self.connected else { return }
-                self.fail("No answer from Cratebox on the phone. Is Listen on in Cratebox HEAT, and is the phone nearby?")
+                self.fail("No answer from Cratebox on the phone. Is Listen on in Cratebox HEAT, and is the phone nearby? (\(self.wcInfo))")
             }
             self.giveUp = w
             DispatchQueue.main.asyncAfter(deadline: .now() + 10, execute: w)
@@ -243,7 +268,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
             if udp { conn?.send(content: pkt, completion: .idempotent) } else if wc { wcBatch.append(pkt) }
         }
         if !udp, wcBatch.count >= 4 {
-            if wc { WCSession.default.sendMessageData(WatchMicFrames.join(wcBatch), replyHandler: nil, errorHandler: nil) }
+            if wc { WCSession.default.sendMessageData(WatchMicFrames.join(wcBatch), replyHandler: nil, errorHandler: { [weak self] e in self?.wcFailed(e) }) }
             wcBatch.removeAll(keepingCapacity: true)
         }
         if udp { wcBatch.removeAll(keepingCapacity: true) }
@@ -256,7 +281,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
                 WCSession.default.sendMessageData(WatchMicFrames.join([ping]), replyHandler: { [weak self] d in
                     guard let self else { return }
                     self.queue.async { for f in WatchMicFrames.split(d) { if let p = WatchMicPacket.decode(f) { self.incoming(p) } } }
-                }, errorHandler: nil)
+                }, errorHandler: { [weak self] e in self?.wcFailed(e) })
             }
         }
         if tick % 20 == 0 {                          // meter at 10 Hz
@@ -264,6 +289,7 @@ final class MicCall: NSObject, ObservableObject, CXProviderDelegate, WCSessionDe
             let gone = connected && now - lastHeard > 3
             let way = udp ? "Wi-Fi" : wc ? "Bluetooth" : "no link"
             DispatchQueue.main.async { self.level = p; if self.lost != gone { self.lost = gone }; if self.path != way { self.path = way } }
+            refreshWC()
         }
     }
 

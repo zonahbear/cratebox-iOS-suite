@@ -25,3 +25,7 @@
 - Next: Jonah runs the test plan in HEAT-APP.md; decide go/no-go on real latency and the no-Wi-Fi result.
 - Watch only, never in the shipping app (com.zonahbear.cratebox.suite). ios.yml simulator runs now also build the
   watch target and need a watchOS simulator runtime.
+
+### 2026-10-23 06:55 Cratebox Mic: Bluetooth fallback didn't connect on build 14
+- Jonah: "still no bluetooth". Cause unknown (WC errors were swallowed). Build 15 change: phone starts Watch Connectivity at app launch (not on Listen, so a background launch by the watch still has a delegate), both sides show the link state (activated / reachable / app installed / last error), the watch's timeout message includes it.
+- Next: Jonah reads the watch's "BT …" line and the phone's "Watch link …" line with phone Wi-Fi off. If "phone NOT in reach" or errors persist with the phone app open, WC can't carry it during a CallKit call → Wi-Fi + travel router.
