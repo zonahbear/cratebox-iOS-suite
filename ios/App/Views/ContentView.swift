@@ -147,6 +147,8 @@ struct SettingsView: View {
     @EnvironmentObject var devices: Devices
     @Environment(\.dismiss) var dismiss
     @AppStorage("cb.bpmRange") var bpmRange = "88-175"
+    @AppStorage("cb.bpmLo") var bpmLo = 70
+    @AppStorage("cb.bpmHi") var bpmHi = 180
     @AppStorage("cb.split") var split = false
     @AppStorage("cb.recFmt") var recFmt = "wav"
     @AppStorage("cb.phrases") var phrases = true
@@ -207,7 +209,16 @@ struct SettingsView: View {
                 Section("Decks") {
                     Toggle("4 decks", isOn: Binding(get: { core.four }, set: { core.setFour($0); if !$0 { app.midi.resetSides() } }))
                     Toggle("Load lock (a playing deck can't be loaded)", isOn: $core.loadLock)
-                    Picker("BPM range (where half/double-time tracks land)", selection: $bpmRange) { ForEach(["58-115", "68-135", "78-155", "88-175"], id: \.self) { Text($0) } }
+                    Picker("BPM range (where half/double-time tracks land)", selection: $bpmRange) {
+                        ForEach(["58-115", "68-135", "78-155", "88-175", "70-180"], id: \.self) { Text($0) }
+                        Text("Custom").tag("custom")
+                    }
+                    if bpmRange == "custom" {
+                        // the top end stays at least an octave above the bottom, so every tempo has a place
+                        Stepper("From \(bpmLo) BPM", value: $bpmLo, in: 40...150)
+                            .onChange(of: bpmLo) { _, lo in if bpmHi < 2 * lo - 1 { bpmHi = 2 * lo - 1 } }
+                        Stepper("To \(bpmHi) BPM", value: $bpmHi, in: max(79, 2 * bpmLo - 1)...300)
+                    }
                     Picker("Jog sensitivity", selection: Binding(get: { core.jogSens }, set: { core.jogSens = $0 })) { ForEach([0.5, 0.75, 1, 1.5, 2], id: \.self) { Text("\(String($0))×") } }
                     Picker("Backspin", selection: Binding(get: { core.spinSecs }, set: { core.spinSecs = $0 })) { ForEach([1.0, 1.5, 2.5, 4], id: \.self) { Text("\(String($0)) s") } }
                 }

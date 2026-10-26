@@ -512,7 +512,15 @@ enum Settings {
         case "58-115": return (58, 116)
         case "68-135": return (68, 136)
         case "78-155": return (78, 156)
+        case "70-180": return (70, 181)   // wider than an octave: most tracks keep the tempo the analyser hears
+        case "custom": return customRange(lo: UserDefaults.standard.object(forKey: "cb.bpmLo") as? Int ?? 70,
+                                          hi: UserDefaults.standard.object(forKey: "cb.bpmHi") as? Int ?? 180)
         default: return (88, 176)
         }
+    }
+    /// a custom range made usable: at least an octave wide so every tempo folds into it; top end inclusive
+    static func customRange(lo: Int, hi: Int) -> (Double, Double) {
+        let lo = min(max(lo, 40), 150)
+        return (Double(lo), Double(min(max(hi, 2 * lo - 1), 300) + 1))
     }
 }
