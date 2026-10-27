@@ -220,11 +220,12 @@ final class Library: ObservableObject {
         analysing = true; current = t
         progress = "Analysing \(queue.count + 1) track\(queue.isEmpty ? "" : "s")…"
         let url = fileURL(t), grid = t.rec.gridManual ? (t.rec.bpm ?? 0, t.rec.firstBeat ?? 0) : nil
+        let range = Settings.bpmRange           // Settings → Decks → BPM range, as for a track analysed at load
         DispatchQueue.global(qos: .utility).async {
             var res: (AnalysisResult, Double)?
             if let url, let pcm = try? AudioDecoder.decode(url) {
                 let m = AudioDecoder.mono(pcm, 11025)
-                let r = Analysis.analyze(m.x, fs: m.fs, noWave: true, grid: grid.map { (bpm: $0.0, firstBeat: $0.1) })
+                let r = Analysis.analyze(m.x, fs: m.fs, range: range, noWave: true, grid: grid.map { (bpm: $0.0, firstBeat: $0.1) })
                 res = (r, Double(pcm.count) / pcm.sampleRate)
             }
             DispatchQueue.main.async {

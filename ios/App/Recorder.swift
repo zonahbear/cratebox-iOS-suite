@@ -30,12 +30,17 @@ final class Recorder: ObservableObject {
     }
 
     static var folder: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
+    /// the app's folder name in Files (On My iPhone / iPad): the app's display name, e.g. "Cratebox Suite"
+    static var filesName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Cratebox" }
 
     func start(_ engine: Engine) {
         guard !recording else { return }
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HH.mm"
         let ext = format == "aac" ? "m4a" : "wav"
-        let u = Recorder.folder.appendingPathComponent("Cratebox set \(df.string(from: Date())).\(ext)")
+        // never over an earlier set: two recordings started in the same minute get "(2)", "(3)"...
+        let stem = "Cratebox set \(df.string(from: Date()))"
+        var u = Recorder.folder.appendingPathComponent("\(stem).\(ext)"), k = 2
+        while FileManager.default.fileExists(atPath: u.path) { u = Recorder.folder.appendingPathComponent("\(stem) (\(k)).\(ext)"); k += 1 }
         let settings: [String: Any] = format == "aac"
             ? [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: AudioHost.sampleRate, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 256_000]
             : [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: AudioHost.sampleRate, AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false]
@@ -85,7 +90,7 @@ final class Recorder: ObservableObject {
         recording = false
         lastFile = url
         saveTracklist()
-        app?.status("Saved \(url?.lastPathComponent ?? "the recording") (Files → On My iPhone/iPad → Cratebox)", 8)
+        app?.status("Saved \(url?.lastPathComponent ?? "the recording") (Files → On My iPhone/iPad → \(Recorder.filesName))", 8)
     }
     /// call about once a second while recording
     func noteAudible(_ core: Core) {

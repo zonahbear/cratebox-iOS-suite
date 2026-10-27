@@ -202,7 +202,7 @@ struct CompactDeck: View {
     func loopBtn(_ s: String, _ on: Bool, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
             Text(s).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: c.btn)
-                .foregroundStyle(on ? Color.white : Theme.fg)
+                .foregroundStyle(on ? Color.black : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.loop : Theme.raise))
         }.buttonStyle(.plain)
     }

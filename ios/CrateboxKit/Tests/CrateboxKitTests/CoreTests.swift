@@ -76,6 +76,22 @@ final class CoreTests: XCTestCase {
         XCTAssertFalse(d.playing); XCTAssertFalse(d.loaded); XCTAssertNil(d.track)
         XCTAssertNil(c.engine.decks[0].track)        // the engine let go of the audio too
     }
+    /// Bluetooth: what you hear is `lag` behind the engine. A 4-beat jump still moves the music exactly 4 beats,
+    /// and a synced deck pressed into play starts in phase with what the master is playing, not what you hear.
+    func testJumpsAndSyncStartFromThePlayheadWithOutputLag() {
+        let (c, e) = makeCore()
+        c.clock = { e.time - 0.25 }; c.lag = { 0.25 }
+        load(c, 0, bpm: 120); load(c, 1, bpm: 120)
+        let d = c.decks[0]
+        d.togglePlay(); render(e, c, secs: 3)
+        let heard = d.now()
+        d.beatJump(4); render(e, c, secs: 1)               // 4 beats at 120 = 2 s, then 1 s of playing
+        XCTAssertEqual(d.now(), heard + 2 + 1, accuracy: 0.02)
+        let b = c.decks[1]
+        b.setSync(true); b.togglePlay(); render(e, c, secs: 0.5)
+        var err = b.beatAt(b.now()) - d.beatAt(d.now()); err -= err.rounded()
+        XCTAssertEqual(err, 0, accuracy: 0.02)              // in phase (a quarter-second lag is half a beat here)
+    }
     func testSyncHalftimeAndBeatLock() {
         let (c, e) = makeCore(); load(c, 0, bpm: 140); load(c, 1, bpm: 70.5)
         render(e, c, secs: 0.1)

@@ -70,6 +70,7 @@ final class AppModel: ObservableObject, ControlTarget {
     init() {
         core = Core(engine: audio.engine, prefs: DefaultsPrefs(), cues: UserCueStore())
         core.clock = { [unowned self] in self.smoothClock() }
+        core.lag = { [unowned self] in self.audio.latency }
         core.status = { [weak self] s, secs in self?.status(s, secs) }
         core.trackChanged = { [weak self] t in if let lt = self?.library.track(t.id) { self?.library.changed(lt) } }
         core.reanalyse = { [weak self] t in if let lt = self?.library.track(t.id) { lt.rec.ver = 0; self?.library.enqueue(lt) } }

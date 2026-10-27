@@ -39,12 +39,18 @@ struct HoldButton<Label: View>: View {
     let up: () -> Void
     @ViewBuilder let label: () -> Label
     @State private var held = false
+    /// true while the finger is down; SwiftUI resets it when the gesture is cancelled too (a system gesture, an
+    /// alert, the app leaving the screen), which never calls onEnded: then the release is sent from here, so a
+    /// CUE preview or a PAD FX can't stay stuck on
+    @GestureState private var pressing = false
     var body: some View {
         label()
             .opacity(held ? 0.75 : 1)
             .gesture(DragGesture(minimumDistance: 0)
+                .updating($pressing) { _, s, _ in s = true }
                 .onChanged { _ in if !held { held = true; down() } }
                 .onEnded { _ in held = false; up() })
+            .onChange(of: pressing) { _, p in if !p && held { held = false; up() } }
     }
 }
 

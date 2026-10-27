@@ -131,7 +131,7 @@ struct DeckBridgeSetup: View {
                 Section {
                     Button("Share the rekordbox mapping file…") { shared = bridge.writeMapping() }
                 } header: { Text("rekordbox") } footer: {
-                    Text("In rekordbox (Performance mode): MIDI (top right) → pick the network session / Deck Bridge in the device list → IMPORT → the file. Done: decks \(bridge.sides[0].deck + 1) and \(bridge.sides[1].deck + 1) follow this screen. The file is also in Files → On My iPhone → Cratebox → Deck Bridge. If rekordbox doesn't take a row from the file (jog wheels on some versions), use the learn helper below with MIDI LEARN.")
+                    Text("In rekordbox (Performance mode): MIDI (top right) → pick the network session / Deck Bridge in the device list → IMPORT → the file. Done: decks \(bridge.sides[0].deck + 1) and \(bridge.sides[1].deck + 1) follow this screen. The file is also in Files → On My iPhone → \(Recorder.filesName) → Deck Bridge. If rekordbox doesn't take a row from the file (jog wheels on some versions), use the learn helper below with MIDI LEARN.")
                 }
                 Section("Decks") {
                     Picker("Controls rekordbox decks", selection: $bridge.pair) { Text("1 and 2").tag(0); Text("3 and 4").tag(1) }

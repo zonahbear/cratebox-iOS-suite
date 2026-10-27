@@ -204,7 +204,7 @@ struct SettingsView: View {
                 }
                 Section("Recording") {
                     Picker("Format", selection: $recFmt) { Text("WAV (lossless, ~650 MB per hour)").tag("wav"); Text("AAC 256 kbps (~115 MB per hour)").tag("aac") }
-                    Text("Recordings and their tracklists go to Files → On My iPhone/iPad → Cratebox.").font(.caption).foregroundStyle(Theme.muted)
+                    Text("Recordings and their tracklists go to Files → On My iPhone/iPad → \(Recorder.filesName).").font(.caption).foregroundStyle(Theme.muted)
                 }
                 Section("Decks") {
                     Toggle("4 decks", isOn: Binding(get: { core.four }, set: { core.setFour($0); if !$0 { app.midi.resetSides() } }))

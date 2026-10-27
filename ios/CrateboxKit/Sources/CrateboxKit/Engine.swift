@@ -84,7 +84,11 @@ public final class Engine {
 
     func apply(_ c: EngineCommand) {
         switch c {
-        case .deck(let i, let m): decks[i].handle(m)
+        case .deck(let i, let m):
+            // unload drops the deck's audio: keep it alive until the main thread drops it, as .track does (freeing
+            // a whole track's buffers here would stall this thread)
+            if case .unload = m, let old = decks[i].track { trash.append(old) }
+            decks[i].handle(m)
         case .track(let i, let t):
             if let old = decks[i].track { trash.append(old) }       // keep it alive until the main thread drops it
             decks[i].setTrack(t)
