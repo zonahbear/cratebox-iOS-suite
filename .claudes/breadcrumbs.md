@@ -76,3 +76,17 @@
 - personal/heat port: 3 patches in project files `ios-review/personal-heat-port/` (PR #26 BPM range, the review fixes,
   HEAT wording). Not pushed: pushing personal/heat uploads Cratebox HEAT to TestFlight.
 - Open proposals needing Jonah: relative-drag tempo/cross faders (P1), streaming decode (P2), 44 pt targets (P3).
+
+## 2026-10-27 23:55: ChatGPT + Gemini cross-review of PR #27 (commit a864304)
+
+- Table of every claim (confirmed / rejected, with file:line) is in the report, section "Cross-review results".
+- Engine track hand-off: `retired` (audio thread only) → swap into `trash` under the try-lock → snapshot swaps it
+  out and frees after unlocking. Never append to `trash` from apply() (that raced snapshot()).
+- USB backups are named by the flattened full path + ms stamp + random tail (every ANLZ file is ANLZ0000.DAT).
+- Recorder tap is lock-free on the audio thread (try-lock publish, drop-and-count when full); stop reports errors.
+- Load task must not write TrackInfo: Devices.readAnalysis(at:) → RBRead value, Devices.apply on main.
+- Staged USB playlist edits persist in Application Support/Cratebox/usb/<stick>.playlists.json with the db hashes.
+- Rejected: Gemini's auto-loop/hot-cue lag concern (loops wrap by modulo; hot cues are absolute), contentShape-only
+  44 pt targets (can't exceed the frame), "SYNC still locks" wording (shared lag cancels).
+- New proposals P10-P13 (group write journal, re-analyse on BPM range change, SYNC phase-offset indicator, async REC stop).
+- HEAT port: 5 patches now (0004 = this commit, 0005 = HEAT recorder note). Still not pushed.
