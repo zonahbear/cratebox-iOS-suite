@@ -240,13 +240,11 @@ public final class DeckModel: ObservableObject, Identifiable {
         if core.wallMs() > coastHold { coasting = d.coast }
         if playing && !d.playing && d.ended { playing = false }
     }
-    public func now() -> Double {
-        let t = pos / sr + (core.clock() - posT) * speed
-        return clamp(t, 0, duration)
-    }
+    public func now() -> Double { clamp(heard(), 0, duration) }
+    func heard() -> Double { pos / sr + (core.clock() - posT) * speed }
     /// where the engine is playing now: `now()` is what you hear, `core.lag()` seconds behind it (a lot, on
     /// Bluetooth). Jumps by a distance and phase matching start from here, or they'd land that much short.
-    public func playhead() -> Double { clamp(now() + core.lag() * speed, 0, duration) }
+    public func playhead() -> Double { clamp(heard() + core.lag() * speed, 0, duration) }     // not clamped twice: exact near the ends
     public func beatAt(_ t: Double) -> Double {
         if let b = grid, let a = ana {
             let i = seg(b, t)
@@ -516,15 +514,17 @@ public final class DeckModel: ObservableObject, Identifiable {
         if let next { seek(next); if !playing { cue = next } }
     }
     func saveCues() { if let t = track { core.cues.save(t.id, cue: cue, hot: hot) } }
+    /// the PAD FX bank each held pad was pressed in: its release goes there even if the pad mode changed meanwhile
+    private var padHeld = [Int: PadMode]()
     public func padPress(_ p: Int, shift: Bool = false) {
         switch padMode {
-        case .padfx, .padfx2: core.fx.padDown(i, padMode, p)
+        case .padfx, .padfx2: padHeld[p] = padMode; core.fx.padDown(i, padMode, p)
         case .hotcue: shift ? clearHot(p) : hotcue(p)
         case .beatloop: beatLoop(LOOP_SIZES[p])
         case .beatjump: beatJump(JUMPS[p])
         }
     }
-    public func padRelease(_ p: Int) { if padMode == .padfx || padMode == .padfx2 { core.fx.padUp(i, padMode, p) } }
+    public func padRelease(_ p: Int) { if let b = padHeld.removeValue(forKey: p) { core.fx.padUp(i, b, p) } }
     /// for the screen: refresh @Published values that follow the playhead
     public func objectChanged() { objectWillChange.send() }
 }

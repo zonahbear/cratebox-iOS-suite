@@ -30,12 +30,16 @@ final class AudioHost {
     func start() {
         configureSession()
         build()
-        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] _ in self?.restart() }
+        NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] n in
+            // a category change is our own setCategory in restart() coming back: not a new route
+            let why = (n.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init)
+            if why != .categoryChange { self?.restartSoon() }
+        }
         NotificationCenter.default.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main) { [weak self] n in
             let t = (n.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt).flatMap(AVAudioSession.InterruptionType.init)
             if t == .ended { self?.restart() }
         }
-        NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] _ in self?.restart() }
+        NotificationCenter.default.addObserver(forName: .AVAudioEngineConfigurationChange, object: nil, queue: .main) { [weak self] _ in self?.restartSoon() }
         NotificationCenter.default.addObserver(forName: AVAudioSession.mediaServicesWereResetNotification, object: nil, queue: .main) { [weak self] _ in
             self?.source = nil; self?.av = AVAudioEngine(); self?.restart()
         }
@@ -147,7 +151,16 @@ final class AudioHost {
         describe(); measureLatency()
         return true
     }
+    /// a plug-in usually sends a route change and an engine configuration change together: one restart for both
+    private var restartWork: DispatchWorkItem?
+    private func restartSoon() {
+        restartWork?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.restart() }
+        restartWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: w)
+    }
     func restart() {
+        restartWork?.cancel(); restartWork = nil
         if building { return }
         building = true
         defer { building = false }

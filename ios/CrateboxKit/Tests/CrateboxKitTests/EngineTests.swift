@@ -75,4 +75,26 @@ final class EngineTests: XCTestCase {
         XCTAssertTrue(s.decks[0].playing)
         XCTAssertEqual(s.decks[0].pos / SR, s.time, accuracy: 0.05)
     }
+    /// a replaced or unloaded track is freed by whoever takes the snapshot, never on the audio thread, and the
+    /// hand-over between the two goes through the lock (the audio thread keeps its own list until then)
+    func testOldTracksAreFreedFromTheSnapshot() {
+        let e = Engine(sampleRate: SR)
+        weak var first: PCMTrack?, second: PCMTrack?
+        do {
+            let a = tone(440, 0.5), b = tone(220, 0.5)
+            first = a; second = b
+            e.post([.track(0, a), .deck(0, .load(mt: false, spin: nil))])
+            _ = run(e, skip: 0, secs: 0.05)
+            e.post([.track(0, b), .deck(0, .load(mt: false, spin: nil))])
+        }
+        _ = run(e, skip: 0, secs: 0.05)
+        XCTAssertNotNil(first, "handed over, but not freed until a snapshot takes it")
+        _ = e.snapshot()
+        XCTAssertNil(first)
+        XCTAssertNotNil(second, "the deck's own track stays")
+        e.post([.deck(0, .unload), .track(0, nil)])
+        _ = run(e, skip: 0, secs: 0.05)
+        _ = e.snapshot()
+        XCTAssertNil(second)
+    }
 }

@@ -142,27 +142,44 @@ final class Devices: ObservableObject {
         return d.root.appendingPathComponent(String(r.path.drop { $0 == "/" }))
     }
     /// rekordbox's own analysis for a stick track: grid, phrases, hot cues and the first memory cue
-    func readAnalysis(_ t: LibTrack) {
-        guard let d = device(of: t), let r = t.rb, !r.anlzPath.isEmpty else { return }
-        let datURL = d.root.appendingPathComponent(String(r.anlzPath.drop { $0 == "/" }))
-        guard let dat = try? Data(contentsOf: datURL) else { return }
+    struct RBRead {
+        var bpm: Double, firstBeat: Double
+        var beats: [Double]?, beat0 = 0          // beat by beat, only when the grid changes tempo
+        var phrases: [Phrase]?
+        var cues: (cue: Double?, hot: [Double?])
+    }
+    /// where a stick track's analysis file is (main thread: the device list lives there)
+    func anlzURL(_ t: LibTrack) -> URL? {
+        guard let d = device(of: t), let r = t.rb, !r.anlzPath.isEmpty else { return nil }
+        return d.root.appendingPathComponent(String(r.anlzPath.drop { $0 == "/" }))
+    }
+    /// reads it (any thread: touches nothing shared)
+    static func readAnalysis(at datURL: URL) -> RBRead? {
+        guard let dat = try? Data(contentsOf: datURL) else { return nil }
         let a = RekordboxANLZ.parse([UInt8](dat))
-        guard let g = RekordboxANLZ.grid(a.beats) else { return }
+        guard let g = RekordboxANLZ.grid(a.beats) else { return nil }
         var ext = RekordboxANLZ.parse([UInt8]((try? Data(contentsOf: datURL.deletingPathExtension().appendingPathExtension("EXT"))) ?? Data()))
         ext.beats = a.beats
-        if !t.info.gridManual { t.info.bpm = g.bpm; t.info.firstBeat = g.firstBeat; t.info.autoBpm = g.bpm; t.info.autoFirst = g.firstBeat }
-        t.info.rbGrid = true
+        var out = RBRead(bpm: g.bpm, firstBeat: g.firstBeat, phrases: RekordboxANLZ.phrases(ext), cues: (nil, []))
         // beat by beat only when rekordbox's grid actually changes tempo: an even grid is exact as BPM + first
         // beat (its stored beat times are just that, rounded to the millisecond)
         if Set(a.beats.map { $0.bpm }).count > 1 {
-            t.info.rbBeats = a.beats.map { Double($0.ms) / 1000 }
-            t.info.rbBeat0 = a.beats.firstIndex { $0.n == 1 } ?? 0
-        } else { t.info.rbBeats = nil }
-        if let ph = RekordboxANLZ.phrases(ext) { t.info.phrases = ph }
-        let cueSrc = !ext.hot.isEmpty || !ext.memory.isEmpty ? ext : a
-        t.info.rbCues = RekordboxANLZ.cues(cueSrc)
+            out.beats = a.beats.map { Double($0.ms) / 1000 }
+            out.beat0 = a.beats.firstIndex { $0.n == 1 } ?? 0
+        }
+        out.cues = RekordboxANLZ.cues(!ext.hot.isEmpty || !ext.memory.isEmpty ? ext : a)
+        return out
+    }
+    /// puts it on the track (main thread: the screen reads TrackInfo)
+    static func apply(_ x: RBRead, to t: LibTrack) {
+        if !t.info.gridManual { t.info.bpm = x.bpm; t.info.firstBeat = x.firstBeat; t.info.autoBpm = x.bpm; t.info.autoFirst = x.firstBeat }
+        t.info.rbGrid = true
+        t.info.rbBeats = x.beats; t.info.rbBeat0 = x.beat0
+        if let ph = x.phrases { t.info.phrases = ph }
+        t.info.rbCues = x.cues
         t.rec.ver = Library.ANALYSIS_VER
     }
+    func readAnalysis(_ t: LibTrack) { if let u = anlzURL(t), let x = Devices.readAnalysis(at: u) { Devices.apply(x, to: t) } }
 
     // ---- editing a stick's playlists ----
     func tracks(of n: PDBPlaylist, in d: Device) -> [LibTrack] { n.tracks.compactMap { d.byRbId[$0] } }

@@ -233,33 +233,48 @@ final class AppModel: ObservableObject, ControlTarget {
         status("Loading \(t.info.title) into deck \(deck + 1)...", 0)
         let info = t.info
         let analysedBefore = t.analysed && (t.info.bpm ?? 0) > 0 && t.info.firstBeat != nil
+        // what the analysis needs from the track, read here: TrackInfo is the screen's, so the background task
+        // works on copies and everything it finds is put back on the main thread
+        let rbURL = t.device != nil ? Devices.shared.anlzURL(t) : nil, onStick = t.device != nil
+        let manual = info.gridManual, keyRB = info.keyFromRekordbox
+        let had = (bpm: info.bpm, first: info.firstBeat, phrases: info.phrases, key: info.key, beats: info.rbBeats, beat0: info.rbBeat0)
         Task.detached(priority: .userInitiated) {
             do {
                 // a rekordbox USB track: rekordbox's own grid, phrases and cues (read first, so they're used
                 // instead of Cratebox's analysis)
-                var fromRekordbox = false
-                if t.device != nil { Devices.shared.readAnalysis(t); fromRekordbox = (info.bpm ?? 0) > 0 && info.firstBeat != nil }
+                let rb = rbURL.flatMap { Devices.readAnalysis(at: $0) }
+                var bpm = had.bpm, first = had.first, phrases = had.phrases, beats = had.beats, beat0 = had.beat0
+                if let rb {
+                    if !manual { bpm = rb.bpm; first = rb.firstBeat }
+                    beats = rb.beats; beat0 = rb.beat0
+                    if let ph = rb.phrases { phrases = ph }
+                }
+                let fromRekordbox = onStick && (bpm ?? 0) > 0 && first != nil
                 let cached = analysedBefore || fromRekordbox
                 let pcm = try AudioDecoder.decode(url)
                 let m = AudioDecoder.mono(pcm, 11025), w = AudioDecoder.mono(pcm, 22050)
                 let dur = Double(pcm.count) / pcm.sampleRate
                 var a: DeckAnalysis
-                if cached || info.gridManual {
+                var auto: (bpm: Double, first: Double)?
+                if cached || manual {
                     let wave = Analysis.waveform(w.x, w.fs)
-                    let ph = cached && !info.phrases.isEmpty ? info.phrases : Analysis.phraseAnalysis(m.x, m.fs, info.bpm ?? 120, info.firstBeat ?? 0)
-                    var key = info.key
+                    let ph = cached && !phrases.isEmpty ? phrases : Analysis.phraseAnalysis(m.x, m.fs, bpm ?? 120, first ?? 0)
+                    var key = had.key
                     if !cached { key = Analysis.detectKey(m.x, m.fs).key }
-                    a = DeckAnalysis(bpm: info.bpm ?? 120, firstBeat: info.firstBeat ?? 0, key: key, phrases: ph, wave: wave, duration: dur)
+                    a = DeckAnalysis(bpm: bpm ?? 120, firstBeat: first ?? 0, key: key, phrases: ph, wave: wave, duration: dur)
                     // rekordbox's grid beat by beat (unless the grid was edited by hand here)
-                    if fromRekordbox && !info.gridManual, let b = info.rbBeats, b.count >= 2 { a.beats = b; a.beat0 = info.rbBeat0 }
+                    if fromRekordbox && !manual, let b = beats, b.count >= 2 { a.beats = b; a.beat0 = beat0 }
                 } else {
                     let r = Analysis.analyze(m.x, fs: m.fs, range: Settings.bpmRange, waveSource: w)
-                    a = DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: info.keyFromRekordbox && info.key >= 0 ? info.key : r.key, phrases: r.phrases, wave: r.wave, duration: dur)
-                    info.autoBpm = r.bpm; info.autoFirst = r.firstBeat
+                    a = DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: keyRB && had.key >= 0 ? had.key : r.key, phrases: r.phrases, wave: r.wave, duration: dur)
+                    auto = (r.bpm, r.firstBeat)
                 }
+                let found = a, autoGrid = auto
                 await MainActor.run {
+                    if let rb { Devices.apply(rb, to: t) }
+                    if let g = autoGrid { info.autoBpm = g.bpm; info.autoFirst = g.first }
                     t.rec.ver = Library.ANALYSIS_VER
-                    d.finishLoad(info, pcm: pcm, analysis: a, mono: m)
+                    d.finishLoad(info, pcm: pcm, analysis: found, mono: m)
                     self.library.changed(t)
                     self.library.objectWillChange.send()
                 }

@@ -48,6 +48,13 @@ public enum USBSafeWrite {
         for x in b { h ^= UInt64(x); h = h &* 0x100000001b3 }
         return String(format: "%016llx-%ld", h, b.count)
     }
+    /// a backup's name: the file's whole path on the stick, flattened
+    static func backupName(_ rel: String) -> String { rel.replacingOccurrences(of: "/", with: "_") }
+    static func backupStamp() -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f.string(from: Date()).replacingOccurrences(of: ":", with: "-")
+    }
     static func journalURL(_ root: URL, _ rel: String) -> URL {
         root.appendingPathComponent(dirName).appendingPathComponent("journal-" + rel.replacingOccurrences(of: "/", with: "_") + ".json")
     }
@@ -74,9 +81,11 @@ public enum USBSafeWrite {
         // 2
         let dir = root.appendingPathComponent(dirName)
         let backups = dir.appendingPathComponent("backups")
-        let stamp = ISO8601DateFormatter().string(from: Date()).replacingOccurrences(of: ":", with: "-")
         let base = (rel as NSString).lastPathComponent
-        let backupRel = dirName + "/backups/" + base + "." + stamp + ".bak"
+        // named by the whole path (every track's analysis file is called ANLZ0000.DAT), to the millisecond, plus a
+        // random tail: two saves never share a backup, and one file's history never prunes another's
+        let name = backupName(rel) + "." + backupStamp() + "-" + String(UUID().uuidString.prefix(6)) + ".bak"
+        let backupRel = dirName + "/backups/" + name
         do {
             try fm.createDirectory(at: backups, withIntermediateDirectories: true)
             let bu = root.appendingPathComponent(backupRel)
@@ -85,10 +94,10 @@ public enum USBSafeWrite {
             guard try [UInt8](Data(contentsOf: bu)) == cur else { throw USBWriteError.backupFailed("the backup didn't read back") }
             if let a = appBackupDir {
                 try fm.createDirectory(at: a, withIntermediateDirectories: true)
-                try Data(cur).write(to: a.appendingPathComponent(base + "." + stamp + ".bak"))
+                try Data(cur).write(to: a.appendingPathComponent(name))
             }
             // keep the newest few
-            let mine = (try? fm.contentsOfDirectory(atPath: backups.path))?.filter { $0.hasPrefix(base + ".") && $0.hasSuffix(".bak") }.sorted() ?? []
+            let mine = (try? fm.contentsOfDirectory(atPath: backups.path))?.filter { $0.hasPrefix(backupName(rel) + ".") && $0.hasSuffix(".bak") }.sorted() ?? []
             for old in mine.dropLast(keepBackups) { try? fm.removeItem(at: backups.appendingPathComponent(old)) }
         } catch let e as USBWriteError { throw e } catch { throw USBWriteError.backupFailed(error.localizedDescription) }
         // 3
@@ -164,9 +173,15 @@ public enum USBSafeWrite {
     /// the newest backup of a file on the stick, if any
     public static func latestBackup(root: URL, rel: String) -> URL? {
         let backups = root.appendingPathComponent(dirName).appendingPathComponent("backups")
-        let base = (rel as NSString).lastPathComponent
-        let mine = (try? FileManager.default.contentsOfDirectory(atPath: backups.path))?.filter { $0.hasPrefix(base + ".") && $0.hasSuffix(".bak") }.sorted() ?? []
-        return mine.last.map { backups.appendingPathComponent($0) }
+        // older builds named backups by the file name alone: still found for the databases (their names are unique)
+        let dbDir = "PIONEER/rekordbox/", legacy = rel.hasPrefix(dbDir) && !rel.dropFirst(dbDir.count).contains("/")
+        let prefixes = [backupName(rel) + "."] + (legacy ? [(rel as NSString).lastPathComponent + "."] : [])
+        // newest by the time stamp in the name (FAT32 keeps file times to 2 s only)
+        var mine = [(stamp: String, name: String)]()
+        for n in (try? FileManager.default.contentsOfDirectory(atPath: backups.path)) ?? [] where n.hasSuffix(".bak") {
+            if let p = prefixes.first(where: { n.hasPrefix($0) }) { mine.append((String(n.dropFirst(p.count)), n)) }
+        }
+        return mine.max { $0.stamp < $1.stamp }.map { backups.appendingPathComponent($0.name) }
     }
 }
 

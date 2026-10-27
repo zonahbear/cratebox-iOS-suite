@@ -1,4 +1,4 @@
-// Set recording: the master output after the limiter (exactly what the speakers get), to a WAV (16-bit,
+// Set recording: Performance Mode's master output after the limiter (the decks, not Cratebox USB's preview), to a WAV (16-bit,
 // lossless) or an AAC .m4a (256 kbps; the web app's MP3 encoder isn't on iOS), in Cratebox's folder in the Files
 // app. A tracklist is kept while recording: every track that could be heard, with the time it came in.
 import AVFoundation
@@ -17,7 +17,11 @@ final class Recorder: ObservableObject {
     // the audio thread copies blocks in here; a writer thread empties it into the file
     private let cap = 48000 * 8
     private let ringL: UnsafeMutablePointer<Float>, ringR: UnsafeMutablePointer<Float>
-    private var w = 0, r = 0
+    // w / r / dropped are shared (under the lock); the tap keeps its own copies and never waits for the lock: it
+    // publishes with a try-lock, and a block that finds the ring full is counted as dropped, never written over
+    private var w = 0, r = 0, dropped = 0
+    private var tapW = 0, tapR = 0, tapDropped = 0          // the audio thread's own
+    private var writeError: String?                          // the writer thread's, read after it's finished
     private var lock = os_unfair_lock()
     private var writer: Thread?
     private var stopFlag = false
@@ -45,15 +49,20 @@ final class Recorder: ObservableObject {
             ? [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: AudioHost.sampleRate, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 256_000]
             : [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: AudioHost.sampleRate, AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false]
         guard let f = try? AVAudioFile(forWriting: u, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false) else { app?.status("Couldn't start recording"); return }
-        file = f; url = u; w = 0; r = 0; seconds = 0; tracklist = []; noted = []
+        file = f; url = u; w = 0; r = 0; dropped = 0; tapW = 0; tapR = 0; tapDropped = 0; writeError = nil; seconds = 0; tracklist = []; noted = []
         stopFlag = false; recording = true
         let L = ringL, R = ringR, cap = self.cap
         engine.post(.recordTap { [unowned self] l, rr, n in
-            os_unfair_lock_lock(&self.lock)
-            var wi = self.w
-            for j in 0..<n { L[wi] = l[j]; R[wi] = rr[j]; wi += 1; if wi == cap { wi = 0 } }
-            self.w = wi
-            os_unfair_lock_unlock(&self.lock)
+            var wi = self.tapW
+            // one slot stays empty so a full ring can't look like an empty one
+            if n <= cap - 1 - (wi - self.tapR + cap) % cap {
+                for j in 0..<n { L[wi] = l[j]; R[wi] = rr[j]; wi += 1; if wi == cap { wi = 0 } }
+                self.tapW = wi
+            } else { self.tapDropped += n }
+            if os_unfair_lock_trylock(&self.lock) {
+                self.w = self.tapW; self.tapR = self.r; self.dropped += self.tapDropped; self.tapDropped = 0
+                os_unfair_lock_unlock(&self.lock)
+            }
         })
         let th = Thread { [weak self] in self?.drainLoop() }
         th.qualityOfService = .userInitiated
@@ -63,16 +72,17 @@ final class Recorder: ObservableObject {
     private func drainLoop() {
         let fmt = AVAudioFormat(standardFormatWithSampleRate: AudioHost.sampleRate, channels: 2)!
         let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: 48000)!
-        var total = 0
+        var total = 0, rd = 0
         while true {
             os_unfair_lock_lock(&lock); let wi = w, done = stopFlag; os_unfair_lock_unlock(&lock)
-            var n = (wi - r + cap) % cap
+            var n = (wi - rd + cap) % cap
             while n > 0 {
                 let m = min(n, Int(buf.frameCapacity))
-                for j in 0..<m { let k = (r + j) % cap; buf.floatChannelData![0][j] = ringL[k]; buf.floatChannelData![1][j] = ringR[k] }
+                for j in 0..<m { let k = (rd + j) % cap; buf.floatChannelData![0][j] = ringL[k]; buf.floatChannelData![1][j] = ringR[k] }
                 buf.frameLength = AVAudioFrameCount(m)
-                try? file?.write(from: buf)
-                r = (r + m) % cap; n -= m; total += m
+                do { try file?.write(from: buf) } catch { if writeError == nil { writeError = error.localizedDescription } }
+                rd = (rd + m) % cap; n -= m; total += m
+                os_unfair_lock_lock(&lock); r = rd; os_unfair_lock_unlock(&lock)     // that much room again for the tap
             }
             let secs = Double(total) / AudioHost.sampleRate
             DispatchQueue.main.async { self.seconds = secs }
@@ -90,7 +100,10 @@ final class Recorder: ObservableObject {
         recording = false
         lastFile = url
         saveTracklist()
-        app?.status("Saved \(url?.lastPathComponent ?? "the recording") (Files → On My iPhone/iPad → \(Recorder.filesName))", 8)
+        let name = url?.lastPathComponent ?? "the recording", lost = Double(dropped) / AudioHost.sampleRate
+        if let e = writeError { app?.status("\(name) is incomplete: writing it failed (\(e)). Is the phone's storage full?", 12) }
+        else if lost > 0 { app?.status("Saved \(name), but \(String(format: "%.1f", lost)) s are missing: the phone's storage fell behind", 12) }
+        else { app?.status("Saved \(name) (Files → On My iPhone/iPad → \(Recorder.filesName))", 8) }
     }
     /// call about once a second while recording
     func noteAudible(_ core: Core) {

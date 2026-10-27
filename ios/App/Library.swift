@@ -248,31 +248,34 @@ final class Library: ObservableObject {
 enum AudioDecoder {
     enum Failure: Error { case cantRead }
     static func decode(_ url: URL, rate: Double = AudioHost.sampleRate) throws -> PCMTrack {
-        let f = try AVAudioFile(forReading: url)
-        let fmt = f.processingFormat
-        guard let src = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(f.length)) else { throw Failure.cantRead }
-        try f.read(into: src)
-        var buf = src
-        if fmt.sampleRate != rate {
-            let outFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: fmt.channelCount, interleaved: false)!
-            guard let conv = AVAudioConverter(from: fmt, to: outFmt),
-                  let out = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: AVAudioFrameCount(Double(src.frameLength) * rate / fmt.sampleRate) + 1024) else { throw Failure.cantRead }
-            conv.sampleRateConverterQuality = AVAudioQuality.max.rawValue
-            var fed = false
-            var err: NSError?
-            conv.convert(to: out, error: &err) { _, status in
-                if fed { status.pointee = .endOfStream; return nil }
-                fed = true; status.pointee = .haveData; return src
-            }
-            if let err { throw err }
-            buf = out
-        }
+        // the file's own buffer is gone by the time the track's is made: two copies at most, not three
+        let buf = try read(url, rate: rate)
         guard let ch = buf.floatChannelData else { throw Failure.cantRead }
         let n = Int(buf.frameLength), nc = Int(buf.format.channelCount)
         let t = PCMTrack(count: n, sampleRate: rate)
         t.left.update(from: ch[0], count: n)
         t.right.update(from: ch[nc > 1 ? 1 : 0], count: n)
         return t
+    }
+    /// the whole file at `rate` (resampled if it's at another one; the original is freed on the way out)
+    private static func read(_ url: URL, rate: Double) throws -> AVAudioPCMBuffer {
+        let f = try AVAudioFile(forReading: url)
+        let fmt = f.processingFormat
+        guard let src = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(f.length)) else { throw Failure.cantRead }
+        try f.read(into: src)
+        if fmt.sampleRate == rate { return src }
+        let outFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: fmt.channelCount, interleaved: false)!
+        guard let conv = AVAudioConverter(from: fmt, to: outFmt),
+              let out = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: AVAudioFrameCount(Double(src.frameLength) * rate / fmt.sampleRate) + 1024) else { throw Failure.cantRead }
+        conv.sampleRateConverterQuality = AVAudioQuality.max.rawValue
+        var fed = false
+        var err: NSError?
+        conv.convert(to: out, error: &err) { _, status in
+            if fed { status.pointee = .endOfStream; return nil }
+            fed = true; status.pointee = .haveData; return src
+        }
+        if let err { throw err }
+        return out
     }
     static func mono(_ t: PCMTrack, _ target: Double) -> (x: [Float], fs: Double) {
         let m = Analysis.monoFor([UnsafePointer(t.left), UnsafePointer(t.right)], length: t.count, sampleRate: t.sampleRate, target: target)

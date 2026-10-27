@@ -128,6 +128,10 @@ final class USBTests: XCTestCase {
         // skipping them makes the set ready
         let skipped = Set(e.issues.filter { $0.severity == .critical }.map { $0.id })
         XCTAssertEqual(e.readiness(skipped: skipped), .ready)
+        // emergency with no set: the whole stick is checked, and its missing tracks count (not "Ready")
+        let all = Preflight.run(lib, root: root, options: ScanOptions(mode: .emergency, players: ["cdj2000nxs2"]), pdbBytes: pdb, olBytes: ol)
+        XCTAssertTrue(all.issues.contains { $0.category == .missingFile && $0.severity == .critical })
+        if case .notReady = all.readiness(skipped: []) {} else { XCTFail("no set: \(all.readiness(skipped: []))") }
         // standard for a CDJ-2000NXS: HORN's 96 kHz is too much, and every library is checked
         let s = Preflight.run(lib, root: root, options: ScanOptions(mode: .standard, players: ["cdj2000nxs"]), pdbBytes: pdb, olBytes: ol)
         XCTAssertTrue(s.issues.contains { $0.id.hasPrefix("track|rate|") && $0.trackKey?.hasSuffix("horn.wav") == true }, "\(s.issues.map { $0.id })")
@@ -202,6 +206,27 @@ final class USBTests: XCTestCase {
         XCTAssertEqual(rec.count, 1)
         if case .restored = rec[0] {} else { XCTFail("\(rec)") }
         XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(rel))), before)
+    }
+    /// every track's analysis file is ANLZ0000.DAT: backups are kept per path, and two saves in a row (even of
+    /// the same file in the same second) never share one
+    func testBackupsOfSameNamedFilesStayApart() throws {
+        let root = try tempStick(oneLibrary: nil)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let relA = "PIONEER/USBANLZ/P001/0000AAAA/ANLZ0000.DAT", relB = "PIONEER/USBANLZ/P002/0000BBBB/ANLZ0000.DAT"
+        for (rel, v) in [(relA, UInt8(1)), (relB, UInt8(2))] {
+            try fm.createDirectory(at: root.appendingPathComponent(rel).deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data([v, v, v]).write(to: root.appendingPathComponent(rel))
+        }
+        let bA = try USBSafeWrite.write([1, 1, 9], root: root, rel: relA, expectedHash: nil, appBackupDir: nil) { _ in }
+        let bB = try USBSafeWrite.write([2, 2, 9], root: root, rel: relB, expectedHash: nil, appBackupDir: nil) { _ in }
+        let bA2 = try USBSafeWrite.write([1, 9, 9], root: root, rel: relA, expectedHash: nil, appBackupDir: nil) { _ in }
+        XCTAssertEqual(Set([bA, bB, bA2]).count, 3)
+        XCTAssertEqual([UInt8](try Data(contentsOf: bA)), [1, 1, 1])     // the original, not overwritten by the second save
+        XCTAssertEqual([UInt8](try Data(contentsOf: bB)), [2, 2, 2])
+        XCTAssertEqual([UInt8](try Data(contentsOf: bA2)), [1, 1, 9])
+        XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: relA), bA2)
+        XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: relB), bB)
     }
     func testWriteGate() {
         let none = USBWriteGate(proven: [])

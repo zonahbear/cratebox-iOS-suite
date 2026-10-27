@@ -36,6 +36,7 @@ final class USBPreview: ObservableObject {
         var m = MixerState(); m.master = 0.8
         core.mixer = m
         core.clock = { [unowned self] in self.smoothClock() }
+        core.lag = { [unowned audio] in audio.latency }          // jumps start from the playhead, as on the decks
         core.status = { [weak self] s, _ in self?.session?.message = s }
         // the grid tools edit the track's grid: record it as the staged edit
         core.trackChanged = { [weak self] t in
@@ -78,9 +79,11 @@ final class USBPreview: ObservableObject {
         return t - audio.latency
     }
 
+    /// takes the track off the preview deck and frees its audio; a load still decoding is dropped when it
+    /// finishes (finishLoad only takes the track the deck is waiting for)
     func unload() {
-        if deck.playing { deck.setPlaying(false) }
-        key = nil
+        deck.unload()
+        key = nil; loadingKey = nil
     }
 
     /// what rekordbox's analysis files say about a track: grid (beat by beat when it changes tempo), phrases,
@@ -144,6 +147,7 @@ final class USBPreview: ObservableObject {
                 info.rbCues = (rb.cue, rb.hot)
                 let memory = rb.memory
                 await MainActor.run {
+                    guard d.track === info else { return }        // unloaded or replaced meanwhile
                     d.finishLoad(info, pcm: pcm, analysis: a, mono: m)
                     // the memory cues start as rekordbox's, unless you've edited them
                     if s.edits[t.key]?.memory == nil && !memory.isEmpty { s.rbMemory[t.key] = memory }

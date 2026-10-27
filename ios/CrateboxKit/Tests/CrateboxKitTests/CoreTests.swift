@@ -92,6 +92,17 @@ final class CoreTests: XCTestCase {
         var err = b.beatAt(b.now()) - d.beatAt(d.now()); err -= err.rounded()
         XCTAssertEqual(err, 0, accuracy: 0.02)              // in phase (a quarter-second lag is half a beat here)
     }
+    /// hold a PAD FX pad, switch the pads to hot cues, let go: the effect still turns off
+    func testPadFxLetsGoAfterThePadModeChanges() {
+        let (c, _) = makeCore(); load(c, 0, bpm: 120)
+        let d = c.decks[0]
+        d.padMode = .padfx; d.padPress(0)
+        XCTAssertNotNil(c.fx.pad[0])
+        d.padMode = .hotcue; d.padRelease(0)
+        XCTAssertNil(c.fx.pad[0])
+        d.padRelease(0)                                     // a second release does nothing
+        XCTAssertNil(d.hot[0])                              // and the release didn't set a hot cue
+    }
     func testSyncHalftimeAndBeatLock() {
         let (c, e) = makeCore(); load(c, 0, bpm: 140); load(c, 1, bpm: 70.5)
         render(e, c, secs: 0.1)
