@@ -136,7 +136,7 @@ final class HeatController: NSObject, ObservableObject {
             guard let self else { return }
             if self.running { self.abort = true }
             self.dev = nil; self.ble = nil
-            self.say(self.running ? "Connection lost mid-curve; the device finishes its own cycle at its last temperature." : "Disconnected.")
+            self.say(self.running ? "Connection lost mid-\(self.phase == .hold ? "HOLD" : "curve"); the device finishes its own cycle at its last temperature." : "Disconnected.")
         }
         Task {
             do {
@@ -362,7 +362,7 @@ extension HeatController: CBCentralManagerDelegate {
         guard scanning else { return }
         switch c.state {
         case .poweredOn: startScan(c)
-        case .unauthorized: stopScan(); say("Cratebox Suite isn't allowed to use Bluetooth: turn it on in Settings → Privacy & Security → Bluetooth.")
+        case .unauthorized: stopScan(); say("\(Recorder.filesName) isn't allowed to use Bluetooth: turn it on in Settings → Privacy & Security → Bluetooth.")
         case .poweredOff: stopScan(); say("Bluetooth is off.")
         case .unsupported: stopScan(); say("This device has no Bluetooth LE.")
         default: break
