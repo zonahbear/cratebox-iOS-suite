@@ -162,7 +162,8 @@ struct USBTrackPanel: View {
         }
     }
     var info: some View {
-        DisclosureGroup(isExpanded: $meta) { USBMetaEditor(usb: usb, t: t).id(t.key) }     // a fresh form per track, so one track's fields can't be kept for the next label: { section("TRACK INFO", usb.edits[t.key]?.hasMeta == true ? "edited" : "") }
+        // .id: a fresh form per track, so one track's fields can't be saved onto the next
+        DisclosureGroup(isExpanded: $meta) { USBMetaEditor(usb: usb, t: t).id(t.key) } label: { section("TRACK INFO", usb.edits[t.key]?.hasMeta == true ? "edited" : "") }
             .tint(Theme.accent)
     }
     func section(_ s: String, _ note: String) -> some View {
