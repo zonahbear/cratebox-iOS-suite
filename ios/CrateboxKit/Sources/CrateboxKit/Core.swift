@@ -244,6 +244,9 @@ public final class DeckModel: ObservableObject, Identifiable {
         let t = pos / sr + (core.clock() - posT) * speed
         return clamp(t, 0, duration)
     }
+    /// where the engine is playing now: `now()` is what you hear, `core.lag()` seconds behind it (a lot, on
+    /// Bluetooth). Jumps by a distance and phase matching start from here, or they'd land that much short.
+    public func playhead() -> Double { clamp(now() + core.lag() * speed, 0, duration) }
     public func beatAt(_ t: Double) -> Double {
         if let b = grid, let a = ana {
             let i = seg(b, t)
@@ -265,7 +268,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     // ---- loading: the app decodes and analyses, then hands the deck the result ----
     public func canLoad() -> String? {
         if !active { return "Deck \(i + 1) is hidden: turn on 4 DECKS first" }
-        if playing && core.loadLock { return "Deck \(i + 1) is playing. Stop it before loading (or Settings → Load lock: Unlocked)." }
+        if playing && core.loadLock { return "Deck \(i + 1) is playing. Stop it before loading (or turn off Settings → Decks → Load lock)." }
         return nil
     }
     public func beginLoad(_ t: TrackInfo) {
@@ -312,7 +315,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     public func seekTo(_ t0: Double) {
         guard loaded else { return }
         var t = t0
-        if playing && quant && bpm > 0 { let n = now(); t = n + jsRound((t - n) / spb) * spb }
+        if playing && quant && bpm > 0 { let n = playhead(); t = n + jsRound((t - n) / spb) * spb }
         seek(t)
     }
     public func seek(_ t0: Double) {
@@ -373,15 +376,15 @@ public final class DeckModel: ObservableObject, Identifiable {
                 sendRate()
                 if playing && m.playing { alignPhase() }
                 if syncMult != 1 { core.status("Deck \(i + 1) synced at \(syncMult < 1 ? "half" : "double") time: \(String(format: "%.2f", bpm * syncRate)) against \(String(format: "%.2f", m.effBpm()))") }
-            } else { core.status("Load a track on the other deck to sync to") }
+            } else { core.status(playing ? "Deck \(i + 1) leads: no other deck is playing, so it keeps its tempo and the next deck you sync follows it." : "Deck \(i + 1): load a track on another deck to sync to") }
         } else { syncTrim = 0; phaseErr = nil }
         sendRate()
     }
     func alignPhase() {
         guard let m = master(), m.bpm > 0, bpm > 0 else { return }
-        let mb = m.beatAt(m.now()) * syncMult
+        let mb = m.beatAt(m.playhead()) * syncMult
         let frac = mb - jsFloor(mb)
-        let myB = beatAt(now())
+        let myB = beatAt(playhead())
         var target = jsFloor(myB) + frac
         if target - myB > 0.5 { target -= 1 }
         if myB - target > 0.5 { target += 1 }
@@ -490,7 +493,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         guard loaded else { return }
         let d = beats * spb
         if loop.on, let a = loop.a, let b = loop.b { loop.a = a + d; loop.b = b + d; sendLoop() }
-        seek(now() + d)
+        seek(playhead() + d)
     }
     // hold LOOP IN for half a second: 4-beat loop
     public func loopInPress(_ on: Bool) {
@@ -558,6 +561,8 @@ public final class Core: ObservableObject {
     public lazy var fx = FxController(core: self)
     /// the audio clock now (seconds): the app works it out from the last report and the host clock
     public var clock: () -> Double = { 0 }
+    /// how far what you hear is behind `clock` (the output's latency); the app sets it, tests can
+    public var lag: () -> Double = { 0 }
     public var wallMs: () -> Double = { hostSeconds() * 1000 }
     public var status: (String, Double) -> Void = { _, _ in }
     public var trackChanged: (TrackInfo) -> Void = { _ in }

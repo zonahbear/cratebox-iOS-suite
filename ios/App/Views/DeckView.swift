@@ -253,6 +253,9 @@ struct JogView: View {
     @ObservedObject var deck: DeckModel
     let color: Color
     @State private var last: Double?
+    /// reset by SwiftUI when the drag is cancelled (onEnded isn't called then): lets go of the platter, so a
+    /// playing deck isn't left held still under a finger that's gone
+    @GestureState private var touching = false
     var body: some View {
         GeometryReader { g in
             let c = CGPoint(x: g.size.width / 2, y: g.size.height / 2)
@@ -264,6 +267,7 @@ struct JogView: View {
             }
             .contentShape(Circle())
             .gesture(DragGesture(minimumDistance: 0)
+                .updating($touching) { _, s, _ in s = true }
                 .onChanged { v in
                     let a = atan2(Double(v.location.y - c.y), Double(v.location.x - c.x))
                     if let l = last {
@@ -275,6 +279,7 @@ struct JogView: View {
                     last = a
                 }
                 .onEnded { _ in last = nil; deck.jogTouch(false) })
+            .onChange(of: touching) { _, t in if !t && last != nil { last = nil; deck.jogTouch(false) } }
         }
     }
 }
@@ -340,13 +345,16 @@ struct WaveformView: View {
     @ObservedObject var deck: DeckModel
     let color: Color
     @State private var dragX: CGFloat?
+    @GestureState private var dragging = false          // reset on a cancelled drag (see JogView)
     var body: some View {
         GeometryReader { g in
-            TimelineView(.animation) { _ in
+            // capped at 60 a second (ProMotion would draw every lane 120 times), and still while nothing's loaded
+            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !deck.loaded)) { _ in
                 Canvas { ctx, size in draw(ctx, size) }
             }
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
+                .updating($dragging) { _, s, _ in s = true }
                 .onChanged { v in
                     guard deck.loaded else { return }
                     if let x = dragX {
@@ -358,6 +366,7 @@ struct WaveformView: View {
                     dragX = v.location.x
                 }
                 .onEnded { _ in dragX = nil; deck.jogTouch(false, noCoast: true) })
+            .onChange(of: dragging) { _, d in if !d && dragX != nil { dragX = nil; deck.jogTouch(false, noCoast: true) } }
         }
         .background(Theme.bg)
         .clipShape(RoundedRectangle(cornerRadius: 6))
