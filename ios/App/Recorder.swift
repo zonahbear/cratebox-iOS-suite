@@ -1,4 +1,4 @@
-// Set recording: Performance Mode's master output after the limiter (the decks, not Cratebox USB's preview), to a WAV (16-bit,
+// Set recording: Performance Mode's master output after the limiter (the decks: not the watch mic or Cratebox USB's preview, which are mixed in after it), to a WAV (16-bit,
 // lossless) or an AAC .m4a (256 kbps; the web app's MP3 encoder isn't on iOS), in Cratebox's folder in the Files
 // app. A tracklist is kept while recording: every track that could be heard, with the time it came in.
 import AVFoundation
