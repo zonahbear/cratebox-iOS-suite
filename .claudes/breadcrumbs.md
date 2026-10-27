@@ -65,3 +65,14 @@
   (not run: no Swift here; ios.yml is the compiler). Web: Cratebox tests/test_sync.py 14/14 with the new checks.
 - Not changed: SYNC off still jumps to the tempo fader's position (old behaviour).
 - personal/heat still needs the same commit (Core.swift applies cleanly there; push to it uploads TestFlight).
+
+## 2026-10-27 22:40: code review of the shipping app + personal/heat (PR #27, branch claude/project-thread-p0805m)
+
+- Report: project files `ios-review/index.html` (published as an artifact). Findings F1-F9 fixed, P1-P9 proposed.
+- Key fix: `DeckModel.playhead()` = now() + core.lag() x speed. `now()` is the HEARD position (AppModel.smoothClock
+  subtracts audio.latency); relative jumps and phase matching must use playhead() or they land short on Bluetooth.
+- Engine `.unload` now trashes the track (was freed on the audio thread). Library background analysis passes Settings.bpmRange.
+- Merging PR #27 = TestFlight upload (testflight.yml on preview/truecurve-usb). Waiting on Jonah's go.
+- personal/heat port: 3 patches in project files `ios-review/personal-heat-port/` (PR #26 BPM range, the review fixes,
+  HEAT wording). Not pushed: pushing personal/heat uploads Cratebox HEAT to TestFlight.
+- Open proposals needing Jonah: relative-drag tempo/cross faders (P1), streaming decode (P2), 44 pt targets (P3).
