@@ -49,7 +49,7 @@ struct HoldButton<Label: View>: View {
             .gesture(DragGesture(minimumDistance: 0)
                 .updating($pressing) { _, s, _ in s = true }
                 .onChanged { _ in if !held { held = true; down() } }
-                .onEnded { _ in held = false; up() })
+                .onEnded { _ in if held { held = false; up() } })     // either path may come first: one release
             .onChange(of: pressing) { _, p in if !p && held { held = false; up() } }
     }
 }

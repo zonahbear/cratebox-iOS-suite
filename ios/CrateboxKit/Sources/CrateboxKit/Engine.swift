@@ -49,7 +49,9 @@ public final class Engine {
     // written by the audio thread in place (no array copy-on-write there)
     let reports = UnsafeMutablePointer<DeckReport>.allocate(capacity: 4)
     var reportTime = 0.0, reportHost = 0.0, reportMaster: (Float, Float) = (0, 0)
-    var trash = [PCMTrack]()                    // replaced tracks, freed off the audio thread
+    // replaced tracks, freed off the audio thread: `retired` belongs to the audio thread alone; it hands them to
+    // `trash` (shared, under the lock) and the main thread takes them from there and lets go after unlocking
+    var retired = [PCMTrack](), trash = [PCMTrack]()
     /// a copy of the master output (after the limiter) for recording; set by the recorder
     var recordTap: ((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?
 
@@ -64,7 +66,7 @@ public final class Engine {
         dl = (0..<4).map { _ in buf() }; dr = (0..<4).map { _ in buf() }
         mL = buf(); mR = buf(); cL = buf(); cR = buf(); hL = buf(); hR = buf()
         reports.initialize(repeating: DeckReport(), count: 4)
-        pending.reserveCapacity(1024); inbox.reserveCapacity(1024); trash.reserveCapacity(16)
+        pending.reserveCapacity(1024); inbox.reserveCapacity(1024); retired.reserveCapacity(16); trash.reserveCapacity(16)
         for i in 0..<4 { strips[i].apply(mixer, i) }
     }
 
@@ -74,11 +76,13 @@ public final class Engine {
     /// What the audio thread last reported, and the tracks it's done with (drop them here).
     public func snapshot() -> EngineSnapshot {
         var s = EngineSnapshot()
+        var done = [PCMTrack]()
         os_unfair_lock_lock(&lock)
         s.time = reportTime; s.host = reportHost; s.masterPeak = reportMaster
         for i in 0..<4 { s.decks[i] = reports[i] }
-        if !trash.isEmpty { trash.removeAll(keepingCapacity: true) }
+        if !trash.isEmpty { done.reserveCapacity(trash.capacity); swap(&trash, &done) }   // trash keeps an empty buffer
         os_unfair_lock_unlock(&lock)
+        withExtendedLifetime(done) {}           // freed after this, outside the lock
         return s
     }
 
@@ -87,10 +91,10 @@ public final class Engine {
         case .deck(let i, let m):
             // unload drops the deck's audio: keep it alive until the main thread drops it, as .track does (freeing
             // a whole track's buffers here would stall this thread)
-            if case .unload = m, let old = decks[i].track { trash.append(old) }
+            if case .unload = m, let old = decks[i].track { retired.append(old) }
             decks[i].handle(m)
         case .track(let i, let t):
-            if let old = decks[i].track { trash.append(old) }       // keep it alive until the main thread drops it
+            if let old = decks[i].track { retired.append(old) }     // keep it alive until the main thread drops it
             decks[i].setTrack(t)
         case .mixer(let m): mixer = m; for i in 0..<4 { strips[i].apply(m, i) }
         case .fx(let u, let slot, let fx, let beats, let depth, let on):
@@ -171,6 +175,9 @@ public final class Engine {
                 reports[i] = DeckReport(pos: d.pos, speed: d.speed, playing: d.playing, ended: d.ended, coast: d.coast, peakL: strips[i].peakL, peakR: strips[i].peakR, seq: d.seq)
             }
             reportMaster = (mpl, mpr)
+            // hand retired tracks over (a swap of two buffers: nothing allocated or freed here); if the main
+            // thread hasn't taken the last lot yet, they wait for the next block
+            if !retired.isEmpty && trash.isEmpty { swap(&retired, &trash) }
             os_unfair_lock_unlock(&lock)
         }
     }

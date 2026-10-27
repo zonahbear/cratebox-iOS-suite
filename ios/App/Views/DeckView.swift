@@ -278,7 +278,7 @@ struct JogView: View {
                     } else { deck.jogTouch(true) }
                     last = a
                 }
-                .onEnded { _ in last = nil; deck.jogTouch(false) })
+                .onEnded { _ in if last != nil { last = nil; deck.jogTouch(false) } })
             .onChange(of: touching) { _, t in if !t && last != nil { last = nil; deck.jogTouch(false) } }
         }
     }
@@ -352,6 +352,7 @@ struct WaveformView: View {
             TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !deck.loaded)) { _ in
                 Canvas { ctx, size in draw(ctx, size) }
             }
+            .id(deck.loaded)                // a new canvas on load/eject, so a paused one can't keep the old track
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .updating($dragging) { _, s, _ in s = true }
@@ -365,7 +366,7 @@ struct WaveformView: View {
                     } else { deck.jogTouch(true, noCoast: true) }
                     dragX = v.location.x
                 }
-                .onEnded { _ in dragX = nil; deck.jogTouch(false, noCoast: true) })
+                .onEnded { _ in if dragX != nil { dragX = nil; deck.jogTouch(false, noCoast: true) } })
             .onChange(of: dragging) { _, d in if !d && dragX != nil { dragX = nil; deck.jogTouch(false, noCoast: true) } }
         }
         .background(Theme.bg)

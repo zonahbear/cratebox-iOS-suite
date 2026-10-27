@@ -162,7 +162,7 @@ struct USBTrackPanel: View {
         }
     }
     var info: some View {
-        DisclosureGroup(isExpanded: $meta) { USBMetaEditor(usb: usb, t: t) } label: { section("TRACK INFO", usb.edits[t.key]?.hasMeta == true ? "edited" : "") }
+        DisclosureGroup(isExpanded: $meta) { USBMetaEditor(usb: usb, t: t).id(t.key) }     // a fresh form per track, so one track's fields can't be kept for the next label: { section("TRACK INFO", usb.edits[t.key]?.hasMeta == true ? "edited" : "") }
             .tint(Theme.accent)
     }
     func section(_ s: String, _ note: String) -> some View {
@@ -186,7 +186,7 @@ struct USBMetaEditor: View {
         VStack(spacing: 6) {
             field("Title", $title); field("Artist", $artist); field("Album", $album); field("Genre", $genre); field("Comment", $comment)
             Stepper("Rating: " + String(repeating: "★", count: rating) + String(repeating: "☆", count: 5 - rating), value: $rating, in: 0...5).font(.system(size: 12))
-            LitButton(label: "KEEP THESE", on: true, color: Theme.accent, wide: true) {
+            LitButton(label: "STAGE CHANGES", on: true, color: Theme.accent, wide: true) {
                 usb.edit(t.key) { e in
                     e.title = title == t.title ? nil : title; e.artist = artist == t.artist ? nil : artist; e.album = album == t.album ? nil : album
                     e.genre = genre == t.genre ? nil : genre; e.comment = comment == t.comment ? nil : comment; e.rating = rating == t.rating ? nil : rating
@@ -383,7 +383,7 @@ struct USBStagedView: View {
                         .disabled(usb.playlistBlocker != nil || usb.writing || !usb.playlistsChanged)
                     if usb.playlistsChanged { Button("Discard playlist changes", role: .destructive) { usb.discardPlaylistChanges() } }
                 } header: { Text("Playlists") } footer: {
-                    Text(usb.playlistBlocker ?? "Writes go to every library on the stick, or none: backed up first, staged, checked, swapped in, and recoverable if the stick is pulled half way.")
+                    Text(usb.playlistBlocker ?? "Writes go to every library on the stick: each is backed up first, staged, checked and swapped in, and the first is put back if the second fails. If the stick is pulled half way, each file is recovered on its own the next time it's opened.")
                 }
                 Section {
                     if usb.editedTracks.isEmpty { Text("No cue, grid or info edits").foregroundStyle(Theme.muted) }
@@ -397,13 +397,13 @@ struct USBStagedView: View {
                     }
                     Button { usb.writeTrackEdits() } label: { Label(usb.writing ? "Writing…" : "Write edits to the stick", systemImage: usb.trackEditBlocker == nil ? "square.and.arrow.down" : "lock") }
                         .disabled(usb.trackEditBlocker != nil || usb.writing || usb.editedTracks.isEmpty)
-                    Button("Use in Performance Mode") { usb.applyToPerformance() }.disabled(usb.editedTracks.isEmpty)
+                    Button("Use cues and grids in Performance Mode") { usb.applyToPerformance() }.disabled(usb.editedTracks.isEmpty)
                     HStack {
                         TextField("Stick's path on the computer (e.g. E:/ or /Volumes/DJ USB)", text: $base).font(.system(size: 12))
                         Button("Export rekordbox XML") { UserDefaults.standard.set(base, forKey: "cb.usb.xmlBase"); shared = usb.exportXML(base: base) }
                     }
                 } header: { Text("Cues, grid and track info") } footer: {
-                    Text(usb.trackEditBlocker ?? "Cues and grid go into the tracks' analysis files, track info into every library on the stick: backed up first, staged, checked, swapped in, and put back if any file fails.")
+                    Text(usb.trackEditBlocker ?? "Cues and grid go into the tracks' analysis files, track info into every library on the stick: each file backed up first, staged, checked and swapped in, and all put back if one fails. If the stick is pulled half way, each file is recovered on its own.")
                     + Text(" Performance Mode uses these edits when it plays this stick; the XML carries them to rekordbox (Preferences → View → rekordbox xml) to apply and export again.")
                 }
                 Section("Fix list") {

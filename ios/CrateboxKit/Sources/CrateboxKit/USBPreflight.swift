@@ -18,9 +18,9 @@ public enum ScanMode: String, CaseIterable, Codable, Identifiable {
     public var title: String { ["emergency": "Emergency", "standard": "Standard", "deep": "Deep Scan"][rawValue]! }
     public var blurb: String {
         switch self {
-        case .emergency: return "Seconds. The set only: files, formats, libraries."
+        case .emergency: return "Quick: the set's files, formats and libraries (the whole stick if no set is picked)."
         case .standard: return "The whole stick, set first: headers, databases, sync."
-        case .deep: return "Everything, decoding every file. Takes a while."
+        case .deep: return "Everything, and a test decode of every file (its start, middle and end). Takes a while."
         }
     }
 }
@@ -100,7 +100,8 @@ public struct ScanReport {
     public var pdbHash: String?, olHash: String?
 
     public func readiness(skipped: Set<String>) -> Readiness {
-        let open = issues.filter { !skipped.contains($0.id) && (options.mode != .emergency || $0.inSet || $0.trackKey == nil) }
+        // an Emergency scan with no set (or an empty one) checked the whole stick: every track it found counts then
+        let open = issues.filter { !skipped.contains($0.id) && (options.mode != .emergency || setTracks == 0 || $0.inSet || $0.trackKey == nil) }
         let crit = open.filter { $0.severity == .critical }.count, warn = open.filter { $0.severity == .warning }.count
         if cancelled { return .unknown }
         return crit > 0 ? .notReady(crit) : warn > 0 ? .warnings(warn) : .ready
@@ -241,13 +242,13 @@ public enum Preflight {
             }
             if !req.codecs.contains(codec) {
                 add("codec", sev, .hardware, "\(codec.rawValue.uppercased()) won't play on \(names): \(t.title)",
-                    "Convert it (\(req.codecs.contains(.aiff) ? "AIFF or WAV for lossless" : "MP3") ), then re-export.", fix: .exportFixList)
+                    "Convert it to \(req.codecs.contains(.aiff) ? "AIFF or WAV for lossless" : "MP3"), then re-export.", fix: .exportFixList)
             } else if isFloat {
                 add("float", sev, .hardware, "32-bit float audio: \(t.title)", "Players read integer PCM only. Convert to 24-bit.", fix: .exportFixList)
             } else if rate > req.maxSampleRate {
                 add("rate", sev, .hardware, "\(rate / 1000) kHz is too high for \(names): \(t.title)", "They read up to \(req.maxSampleRate / 1000) kHz.", fix: .exportFixList)
             } else if ([.wav, .aiff, .flac, .alac] as [AudioCodec]).contains(codec) && depth > req.maxBitDepth {
-                add("depth", sev, .hardware, "\(depth)-bit is too deep for \(names): \(t.title)", "They read up to \(req.maxBitDepth)-bit.", fix: .exportFixList)
+                add("depth", sev, .hardware, "\(depth)-bit audio won't play on \(names): \(t.title)", "They read up to \(req.maxBitDepth)-bit. Convert it, then re-export.", fix: .exportFixList)
             }
             // analysis
             if t.anlzPath.isEmpty {
