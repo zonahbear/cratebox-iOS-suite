@@ -120,9 +120,11 @@ struct PhoneTopBar: View {
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
             LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
             DriveEjectButton()
-            // drawn at 16 pt, touched at about 44 × 44 (HIG minimum) without making the bar any wider
-            Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
-                .contentShape(Rectangle().inset(by: -14))
+            // drawn at 16 pt, touched at about 44 × 44 (HIG minimum) without making the bar any wider: the padded
+            // view takes the touches, the negative padding gives the room back to the layout (a contentShape alone
+            // can't reach past the view's frame)
+            Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)).padding(14).contentShape(Rectangle()) }
+                .buttonStyle(.plain).padding(-14)
         }
     }
 }
@@ -228,8 +230,8 @@ struct PhoneDeck: View {
                             Text("DECK \(d + 1)").font(.system(size: 10, weight: .bold)).frame(maxWidth: .infinity, minHeight: 18)
                                 .foregroundStyle(on ? Color.black : Theme.deck[d])
                                 .background(RoundedRectangle(cornerRadius: 4).fill(on ? Theme.deck[d] : Theme.raise))
-                                .contentShape(Rectangle().inset(by: -6))      // an 18 pt chip, touched at 30 pt
-                        }.buttonStyle(.plain)
+                                .padding(.vertical, 6).contentShape(Rectangle())     // an 18 pt chip, touched at 30 pt
+                        }.buttonStyle(.plain).padding(.vertical, -6)
                     }
                 }
             }

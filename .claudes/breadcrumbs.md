@@ -127,3 +127,18 @@
   (not run: no Swift here; ios.yml is the compiler). Web: Cratebox tests/test_sync.py 14/14 with the new checks.
 - Not changed: SYNC off still jumps to the tempo fader's position (old behaviour).
 - personal/heat still needs the same commit (Core.swift applies cleanly there; push to it uploads TestFlight).
+## 2026-10-28 01:20: second cross-review round (R1-R4), proposals, EQ tap (PR #27)
+
+- R1: DeckModel's optimistic pos/posT are stamped with the AUDIO clock (`audioNow = core.clock() + core.lag()`),
+  like the engine's reports; speed changes go through `rebase(speed:)`. Test: two jumps before a report, 250 ms lag.
+- R2: USB backups carry `.nNNNNNNNN.` sequence numbers (order); pruning keeps backups a journal points at.
+- R3: RecordRing (CrateboxKit) + Engine.tapChanges: Recorder.stop waits off-main until the tap is gone, then finish().
+- R4: RequestTokens: USBSession reload/scan results are dropped after eject/reopen/newer request; per-scan Cancel.
+- USBSafeWrite.group: multi-file writes (playlists to both libraries, USBTrackWrite.apply) have a group journal;
+  recover() puts every finished member back. swapFailed keeps the journal for the next open.
+- EQ: tap LOW/MID/HI = centre → kill, else → centre (MixerCurves.eqTap), in CompactPhone always, else only with
+  no controller. Faders use `.faderDrag` (relative). SYNC phaseHeld → "TEMPO ±ms".
+- ios.yml now fails the run if the tests or the app build fail (last step). Still read the log.
+- Open: P2 (streaming/mono decode: changes analysis input, parity risk), P9 (measure new devices).
+- HEAT (personal/heat only): Engine.recordAfterMix + recordMixed → REC includes the watch mic; slot-4 backup kept in
+  UserDefaults `cb.tc.restore.<id>` and restored on the next connect after the device's own cycle.
