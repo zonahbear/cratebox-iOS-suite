@@ -148,11 +148,41 @@ final class CoreTests: XCTestCase {
         d.beginLoad(info)
         d.finishLoad(info, pcm: clickTrack(bpm: bpm, secs: 90), analysis: DeckAnalysis(bpm: bpm, firstBeat: 0, key: 21, phrases: [], wave: nil, duration: 90), mono: nil)
     }
+    // hold SYNC = master: the held deck keeps its tempo and leads, the other synced deck follows it
+    func testHoldSyncMakesTheMaster() {
+        let (c, e) = makeCore(); longClicks(c, 0, bpm: 124); longClicks(c, 1, bpm: 120)
+        render(e, c, secs: 0.1)
+        let a = c.decks[0], b = c.decks[1]
+        a.togglePlay(); render(e, c, secs: 0.5)
+        b.setSync(true); b.togglePlay(); render(e, c, secs: 1)
+        a.setSync(true); render(e, c, secs: 1)                     // synced later: deck 1 follows deck 2
+        a.setPitch(0.5); render(e, c, secs: 0.5)
+        XCTAssertEqual(a.effBpm(), 124, accuracy: 0.1, "a follower's fader does nothing")
+        a.setPitch(0)
+        a.makeMaster(); render(e, c, secs: 0.5)
+        XCTAssertTrue(a.sync && b.sync)
+        a.setPitch(0.5); render(e, c, secs: 1)                     // now deck 1 leads: its fader moves both
+        XCTAssertEqual(a.effBpm(), 124 * 1.03, accuracy: 0.1)
+        XCTAssertEqual(b.effBpm(), 124 * 1.03, accuracy: 0.1)
+        a.syncPressed(); XCTAssertTrue(a.sync, "the release that ends the hold doesn't turn SYNC off")
+    }
+    func testSyncMultipliersStayInTheTempoRange() {
+        XCTAssertEqual(DeckModel.pickMult(96.0 / 92, range: 6), 1)                // +4.3%: fine at ±6
+        XCTAssertNil(DeckModel.pickMult(100.0 / 92, range: 6))                    // +8.7%: not at ±6
+        XCTAssertEqual(DeckModel.pickMult(100.0 / 92, range: 10), 1)
+        XCTAssertEqual(DeckModel.pickMult(140.0 / 70.5, range: 6), 0.5)           // halftime inside the range
+        XCTAssertEqual(DeckModel.pickMult(140.0 / 92), 0.5)                        // WIDE: the nearest, as before
+        XCTAssertEqual(DeckModel.pickMult(92.0 / 140), 2)
+    }
     func testSyncFlipFlop140And92EndsOnTheBeat() {
         let (c, e) = makeCore(); longClicks(c, 0, bpm: 140); longClicks(c, 1, bpm: 92)
         render(e, c, secs: 0.1)
         let a = c.decks[0], b = c.decks[1]
         a.togglePlay(); render(e, c, secs: 1)
+        // at ±16% neither ½× (−24%), 1× (+52%) nor 2× (+31%) fits: SYNC stays off and the tempo doesn't move
+        b.cycleRange(); b.cycleRange(); XCTAssertEqual(b.range, 16)
+        b.setSync(true); XCTAssertFalse(b.sync); XCTAssertEqual(b.effBpm(), 92, accuracy: 0.01)
+        for d in [a, b] { while d.range < 100 { d.cycleRange() } }               // WIDE: any of them
         b.seek(5); b.setSync(true); b.togglePlay(); render(e, c, secs: 2)          // 92 follows 140 at half time
         XCTAssertEqual(b.effBpm(), 70, accuracy: 0.1)
         b.setSync(false); render(e, c, secs: 1)

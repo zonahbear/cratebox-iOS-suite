@@ -50,7 +50,7 @@ struct DeckView: View {
                 JogView(deck: deck, color: color).frame(width: app.core.four ? 92 : 104, height: app.core.four ? 92 : 104)
                 VStack(spacing: 6) {
                     HStack(spacing: 4) {
-                        LitButton(label: "SYNC", on: deck.sync, color: color) { deck.setSync(!deck.sync) }
+                        LitButton(label: "SYNC", on: deck.sync, color: color) { deck.syncPressed() }.simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in deck.makeMaster() })
                         LitButton(label: "MT", on: deck.mt, color: color) { deck.setMT(!deck.mt) }
                         LitButton(label: "Q", on: deck.quant, color: color) { deck.quant.toggle() }
                     }
@@ -163,7 +163,7 @@ struct DeckView: View {
     var transport: some View {
         VStack(spacing: 6) {
             HStack(spacing: 6) {
-                LitButton(label: "SYNC", on: deck.sync, color: color) { deck.setSync(!deck.sync) }
+                LitButton(label: "SYNC", on: deck.sync, color: color) { deck.syncPressed() }.simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in deck.makeMaster() })
                 LitButton(label: "MT", on: deck.mt, color: color) { deck.setMT(!deck.mt) }
                 LitButton(label: "Q", on: deck.quant, color: color) { deck.quant.toggle() }
             }

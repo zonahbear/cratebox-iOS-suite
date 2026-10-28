@@ -76,6 +76,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     @Published public private(set) var rangeIdx = 0
     @Published public private(set) var sync = false
     var syncSince = 0.0, syncRate = 1.0
+    var heldAt = -1e9                    // when SYNC was last held (makeMaster): the release that follows isn't a press
     var phaseFree = false                // the user moved this synced deck off the beat by hand (jog): beat lock leaves it
     public private(set) var syncMult = 1.0
     var syncTrim = 0.0
@@ -361,8 +362,15 @@ public final class DeckModel: ObservableObject, Identifiable {
     }
 
     // ---- sync ----
-    static func pickMult(_ r: Double) -> Double {
-        [0.5, 1, 2].reduce(1.0) { best, k in abs(log(r * k)) < abs(log(r * best)) ? k : best }
+    /// of ½×, 1× and 2× the master's tempo (r = master / ours), the one nearest our own that our tempo range allows
+    /// (WIDE: any of them); nil when none fits. Ties go to 1×.
+    static func pickMult(_ r: Double, range: Double = 100) -> Double? {
+        [1, 0.5, 2].filter { range >= 100 || abs(r * $0 - 1) <= range / 100 + 1e-9 }.min { abs(log(r * $0)) < abs(log(r * $1)) }
+    }
+    /// SYNC refused: following `m` needs more than this deck's tempo range
+    func syncOutOfRange(_ m: DeckModel, _ r: Double) {
+        let need = [1, 0.5, 2].map { (r * $0 - 1) * 100 }.min { abs($0) < abs($1) } ?? 0
+        core.status("Deck \(i + 1) can't sync to deck \(m.i + 1): \(String(format: "%.2f", tempoNow())) against \(String(format: "%.2f", m.effBpm())) needs \(String(format: "%+.1f", need))% at best, outside its ±\(Int(range))% range. Tap the range until it says WIDE to allow it.", 8)
     }
     public func setSync(_ on: Bool) {
         if on && (!loaded || bpm == 0) { return }
@@ -375,7 +383,11 @@ public final class DeckModel: ObservableObject, Identifiable {
             if let m {
                 // halftime / double time: of 1/2x, 1x and 2x the master's tempo, take the one nearest our own
                 let r = m.effBpm() / tempoNow()
-                syncMult = DeckModel.pickMult(r)
+                guard let k = DeckModel.pickMult(r, range: range) else {
+                    sync = false; syncWith = nil; syncTrack = nil; phaseFree = false
+                    syncOutOfRange(m, r); sendRate(); return
+                }
+                syncMult = k
                 syncRate = clamp(r * syncMult, 0.5, 2)
                 syncTrim = 0
                 sendRate()
@@ -385,6 +397,30 @@ public final class DeckModel: ObservableObject, Identifiable {
         } else { syncTrim = 0; phaseErr = nil; phaseHeld = false }
         phaseFree = false
         sendRate()
+    }
+    /// SYNC as the button sees it: a tap toggles it, but not the release that ends a hold (makeMaster)
+    public func syncPressed() {
+        if core.wallMs() - heldAt < 2000 { heldAt = -1e9; return }
+        setSync(!sync)
+    }
+    /// hold SYNC: this deck becomes the master. It keeps its tempo (synced or not) and every other synced deck follows
+    /// it from here, at ½×, 1× or 2× as its tempo range allows (one that can't is unsynced and says so).
+    public func makeMaster() {
+        guard loaded, bpm > 0 else { return }
+        heldAt = core.wallMs()
+        if sync {
+            syncWith = nil; syncTrack = nil; syncTrim = 0; phaseFree = false; phaseErr = nil; phaseHeld = false
+            syncSince = (core.decks.map(\.syncSince).min() ?? 0) - 1         // the oldest sync: nobody it would follow
+            sendRate()
+        }
+        for o in core.decks where o !== self && o.sync && core.deckActive(o.i) && o.loaded && o.bpm > 0 {
+            let r = effBpm() / o.tempoNow()
+            guard let k = DeckModel.pickMult(r, range: o.range) else { o.setSync(false); o.syncOutOfRange(self, r); continue }
+            o.syncWith = self; o.syncTrack = track; o.syncMult = k; o.syncTrim = 0; o.phaseFree = false
+            o.syncRate = clamp(r * k, 0.5, 2); o.sendRate()
+            if o.playing && playing { o.alignPhase() }
+        }
+        core.status("Deck \(i + 1) is the master: synced decks follow it")
     }
     func alignPhase() {
         guard let m = master(), m.bpm > 0, bpm > 0 else { return }
@@ -410,7 +446,11 @@ public final class DeckModel: ObservableObject, Identifiable {
             return
         }
         // a different master, or a new track on it: pick half/normal/double time again
-        if m !== syncWith || m.track !== syncTrack { syncMult = DeckModel.pickMult(m.effBpm() / tempoNow()) }
+        if m !== syncWith || m.track !== syncTrack {
+            let r0 = m.effBpm() / tempoNow()
+            guard let k = DeckModel.pickMult(r0, range: range) else { setSync(false); syncOutOfRange(m, r0); return }
+            syncMult = k
+        }
         syncWith = m; syncTrack = m.track
         let r = clamp(m.effBpm() * syncMult / tempoNow(), 0.5, 2)
         if abs(r - syncRate) > 1e-7 { syncRate = r; sendRate() }

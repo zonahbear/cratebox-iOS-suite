@@ -193,11 +193,12 @@ struct CompactDeck: View {
                 Image(systemName: deck.playing ? "pause.fill" : "play.fill").font(.system(size: 17)).frame(maxWidth: .infinity, minHeight: c.btn, maxHeight: c.btn)
                     .background(Capsule().fill(deck.playing ? Theme.ok.opacity(0.25) : Theme.raise)).overlay(Capsule().stroke(Theme.ok, lineWidth: 2))
             }.buttonStyle(.plain)
-            Button { deck.setSync(!deck.sync) } label: {
+            Button { deck.syncPressed() } label: {
                 Text("SYNC").font(.system(size: 12, weight: .bold)).frame(maxWidth: .infinity, minHeight: c.btn, maxHeight: c.btn)
                     .foregroundStyle(deck.sync ? Color.black : Theme.fg)
                     .background(RoundedRectangle(cornerRadius: 8).fill(deck.sync ? color : Theme.raise))
             }.buttonStyle(.plain)
+            .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in deck.makeMaster() })
         }
     }
     /// the pad mode (a menu), IN / OUT / RELOOP, then the 8 pads
