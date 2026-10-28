@@ -128,6 +128,10 @@ final class USBTests: XCTestCase {
         // skipping them makes the set ready
         let skipped = Set(e.issues.filter { $0.severity == .critical }.map { $0.id })
         XCTAssertEqual(e.readiness(skipped: skipped), .ready)
+        // emergency with no set: the whole stick is checked, and its missing tracks count (not "Ready")
+        let all = Preflight.run(lib, root: root, options: ScanOptions(mode: .emergency, players: ["cdj2000nxs2"]), pdbBytes: pdb, olBytes: ol)
+        XCTAssertTrue(all.issues.contains { $0.category == .missingFile && $0.severity == .critical })
+        if case .notReady = all.readiness(skipped: []) {} else { XCTFail("no set: \(all.readiness(skipped: []))") }
         // standard for a CDJ-2000NXS: HORN's 96 kHz is too much, and every library is checked
         let s = Preflight.run(lib, root: root, options: ScanOptions(mode: .standard, players: ["cdj2000nxs"]), pdbBytes: pdb, olBytes: ol)
         XCTAssertTrue(s.issues.contains { $0.id.hasPrefix("track|rate|") && $0.trackKey?.hasSuffix("horn.wav") == true }, "\(s.issues.map { $0.id })")
@@ -202,6 +206,79 @@ final class USBTests: XCTestCase {
         XCTAssertEqual(rec.count, 1)
         if case .restored = rec[0] {} else { XCTFail("\(rec)") }
         XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(rel))), before)
+    }
+    /// every track's analysis file is ANLZ0000.DAT: backups are kept per path, and two saves in a row (even of
+    /// the same file in the same second) never share one
+    func testBackupsOfSameNamedFilesStayApart() throws {
+        let root = try tempStick(oneLibrary: nil)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let relA = "PIONEER/USBANLZ/P001/0000AAAA/ANLZ0000.DAT", relB = "PIONEER/USBANLZ/P002/0000BBBB/ANLZ0000.DAT"
+        for (rel, v) in [(relA, UInt8(1)), (relB, UInt8(2))] {
+            try fm.createDirectory(at: root.appendingPathComponent(rel).deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data([v, v, v]).write(to: root.appendingPathComponent(rel))
+        }
+        let bA = try USBSafeWrite.write([1, 1, 9], root: root, rel: relA, expectedHash: nil, appBackupDir: nil) { _ in }
+        let bB = try USBSafeWrite.write([2, 2, 9], root: root, rel: relB, expectedHash: nil, appBackupDir: nil) { _ in }
+        let bA2 = try USBSafeWrite.write([1, 9, 9], root: root, rel: relA, expectedHash: nil, appBackupDir: nil) { _ in }
+        XCTAssertEqual(Set([bA, bB, bA2]).count, 3)
+        XCTAssertEqual([UInt8](try Data(contentsOf: bA)), [1, 1, 1])     // the original, not overwritten by the second save
+        XCTAssertEqual([UInt8](try Data(contentsOf: bB)), [2, 2, 2])
+        XCTAssertEqual([UInt8](try Data(contentsOf: bA2)), [1, 1, 9])
+        XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: relA), bA2)
+        XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: relB), bB)
+    }
+    /// backups are ordered by their sequence number, not their time: a clock tie or a clock set back can't make an
+    /// older backup look newer, and pruning never removes one a journal still points at
+    func testBackupOrderIgnoresTheClockAndKeepsJournalledOnes() throws {
+        let root = try tempStick(oneLibrary: nil)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let rel = "PIONEER/USBANLZ/P001/0000AAAA/ANLZ0000.DAT", flat = "PIONEER_USBANLZ_P001_0000AAAA_ANLZ0000.DAT"
+        try fm.createDirectory(at: root.appendingPathComponent(rel).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([0]).write(to: root.appendingPathComponent(rel))
+        let dir = root.appendingPathComponent(USBSafeWrite.dirName + "/backups")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        // an earlier backup whose time and tail sort after anything made now (a clock that was ahead)
+        let early = "\(flat).n00000001.2099-12-31T23-59-59.999Z-FFFFFF.bak"
+        try Data([9]).write(to: dir.appendingPathComponent(early))
+        // a journal of an unfinished write that still points at it
+        let j = USBJournal(target: rel, backup: USBSafeWrite.dirName + "/backups/" + early, oldHash: "a", newHash: "b", oldSize: 1, newSize: 1, state: "staged", when: Date())
+        try JSONEncoder().encode(j).write(to: USBSafeWrite.journalURL(root, "PIONEER/other.pdb"))
+        var made = [URL]()
+        for k in 1...7 { made.append(try USBSafeWrite.write([UInt8(k)], root: root, rel: rel, expectedHash: nil, appBackupDir: nil, keepBackups: 3) { _ in }) }
+        XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: rel), made.last)
+        XCTAssertTrue(made.last!.lastPathComponent.contains(".n00000008."))
+        let left = Set(try fm.contentsOfDirectory(atPath: dir.path))
+        XCTAssertTrue(left.contains(early), "journalled: kept")
+        XCTAssertEqual(left.subtracting([early]), Set(made.suffix(3).map { $0.lastPathComponent }))
+    }
+    /// a two-file save cut off after the first file: opening the stick again puts the first back too
+    func testAGroupCutOffPartWayIsPutBackAsAWhole() throws {
+        let root = try tempStick(oneLibrary: nil)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let a = "PIONEER/rekordbox/a.bin", b = "PIONEER/rekordbox/b.bin"
+        try Data([1, 1]).write(to: root.appendingPathComponent(a)); try Data([2, 2]).write(to: root.appendingPathComponent(b))
+        let files: [(rel: String, old: [UInt8], new: [UInt8])] = [(a, [1, 1], [10]), (b, [2, 2], [20])]
+        func groups() -> [String] { ((try? fm.contentsOfDirectory(atPath: root.appendingPathComponent(USBSafeWrite.dirName).path)) ?? []).filter { $0.hasPrefix("group-") } }
+        // the app "stops" after a: swapFailed stands for that (it's the error that keeps the journal)
+        XCTAssertThrowsError(try USBSafeWrite.group(root: root, files) { () throws -> Void in
+            try USBSafeWrite.write([10], root: root, rel: a, expectedHash: USBSafeWrite.hash([1, 1]), appBackupDir: nil) { _ in }
+            throw USBWriteError.swapFailed("cut off")
+        })
+        XCTAssertEqual(groups().count, 1)
+        XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(a))), [10], "half a change on the stick")
+        let rec = USBSafeWrite.recover(root: root)
+        XCTAssertTrue(rec.contains { if case .restored = $0 { return true }; return false }, "\(rec)")
+        XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(a))), [1, 1], "put back with the rest")
+        XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(b))), [2, 2])
+        XCTAssertTrue(groups().isEmpty)
+        // a whole save, and a failure that was put back in the app, leave no group journal behind
+        try USBSafeWrite.group(root: root, files) { () throws -> Void in for f in files { try USBSafeWrite.write(f.new, root: root, rel: f.rel, expectedHash: nil, appBackupDir: nil) { _ in } } }
+        XCTAssertTrue(groups().isEmpty)
+        XCTAssertThrowsError(try USBSafeWrite.group(root: root, files) { () throws -> Void in throw USBWriteError.verifyFailed("x") })
+        XCTAssertTrue(groups().isEmpty)
     }
     func testWriteGate() {
         let none = USBWriteGate(proven: [])

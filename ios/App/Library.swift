@@ -201,6 +201,18 @@ final class Library: ObservableObject {
     }
 
     // ---- analysis in the background (one at a time, paused while the decks play on small devices) ----
+    /// Settings → Decks → BPM range changed (checked when Settings closes, so the steppers don't start a run per
+    /// tap): the tracks Cratebox analysed itself go round again. A grid you set and rekordbox's analysis stay.
+    func bpmRangeChanged() {
+        let now = "\(Settings.bpmRange)", k = "cb.bpmRangeAnalysed"
+        let was = UserDefaults.standard.string(forKey: k)
+        UserDefaults.standard.set(now, forKey: k)
+        guard let was, was != now else { return }          // first run: the library was analysed with this range
+        let again = tracks.filter { $0.device == nil && !$0.rec.gridManual && $0.analysed }
+        for t in again { t.rec.ver = 0; if !queue.contains(where: { $0 === t }) { queue.append(t) } }
+        if !again.isEmpty { status("BPM range changed: analysing \(again.count) track\(again.count == 1 ? "" : "s") again") }
+        save(); runQueue()
+    }
     func enqueue(_ t: LibTrack) { if !queue.contains(where: { $0 === t }) { queue.append(t) }; runQueue() }
     func runQueue() {
         guard !analysing else { return }
@@ -220,11 +232,12 @@ final class Library: ObservableObject {
         analysing = true; current = t
         progress = "Analysing \(queue.count + 1) track\(queue.isEmpty ? "" : "s")…"
         let url = fileURL(t), grid = t.rec.gridManual ? (t.rec.bpm ?? 0, t.rec.firstBeat ?? 0) : nil
+        let range = Settings.bpmRange           // Settings → Decks → BPM range, as for a track analysed at load
         DispatchQueue.global(qos: .utility).async {
             var res: (AnalysisResult, Double)?
             if let url, let pcm = try? AudioDecoder.decode(url) {
                 let m = AudioDecoder.mono(pcm, 11025)
-                let r = Analysis.analyze(m.x, fs: m.fs, noWave: true, grid: grid.map { (bpm: $0.0, firstBeat: $0.1) })
+                let r = Analysis.analyze(m.x, fs: m.fs, range: range, noWave: true, grid: grid.map { (bpm: $0.0, firstBeat: $0.1) })
                 res = (r, Double(pcm.count) / pcm.sampleRate)
             }
             DispatchQueue.main.async {
@@ -247,31 +260,34 @@ final class Library: ObservableObject {
 enum AudioDecoder {
     enum Failure: Error { case cantRead }
     static func decode(_ url: URL, rate: Double = AudioHost.sampleRate) throws -> PCMTrack {
-        let f = try AVAudioFile(forReading: url)
-        let fmt = f.processingFormat
-        guard let src = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(f.length)) else { throw Failure.cantRead }
-        try f.read(into: src)
-        var buf = src
-        if fmt.sampleRate != rate {
-            let outFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: fmt.channelCount, interleaved: false)!
-            guard let conv = AVAudioConverter(from: fmt, to: outFmt),
-                  let out = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: AVAudioFrameCount(Double(src.frameLength) * rate / fmt.sampleRate) + 1024) else { throw Failure.cantRead }
-            conv.sampleRateConverterQuality = AVAudioQuality.max.rawValue
-            var fed = false
-            var err: NSError?
-            conv.convert(to: out, error: &err) { _, status in
-                if fed { status.pointee = .endOfStream; return nil }
-                fed = true; status.pointee = .haveData; return src
-            }
-            if let err { throw err }
-            buf = out
-        }
+        // the file's own buffer is gone by the time the track's is made: two copies at most, not three
+        let buf = try read(url, rate: rate)
         guard let ch = buf.floatChannelData else { throw Failure.cantRead }
         let n = Int(buf.frameLength), nc = Int(buf.format.channelCount)
         let t = PCMTrack(count: n, sampleRate: rate)
         t.left.update(from: ch[0], count: n)
         t.right.update(from: ch[nc > 1 ? 1 : 0], count: n)
         return t
+    }
+    /// the whole file at `rate` (resampled if it's at another one; the original is freed on the way out)
+    private static func read(_ url: URL, rate: Double) throws -> AVAudioPCMBuffer {
+        let f = try AVAudioFile(forReading: url)
+        let fmt = f.processingFormat
+        guard let src = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: AVAudioFrameCount(f.length)) else { throw Failure.cantRead }
+        try f.read(into: src)
+        if fmt.sampleRate == rate { return src }
+        let outFmt = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: rate, channels: fmt.channelCount, interleaved: false)!
+        guard let conv = AVAudioConverter(from: fmt, to: outFmt),
+              let out = AVAudioPCMBuffer(pcmFormat: outFmt, frameCapacity: AVAudioFrameCount(Double(src.frameLength) * rate / fmt.sampleRate) + 1024) else { throw Failure.cantRead }
+        conv.sampleRateConverterQuality = AVAudioQuality.max.rawValue
+        var fed = false
+        var err: NSError?
+        conv.convert(to: out, error: &err) { _, status in
+            if fed { status.pointee = .endOfStream; return nil }
+            fed = true; status.pointee = .haveData; return src
+        }
+        if let err { throw err }
+        return out
     }
     static func mono(_ t: PCMTrack, _ target: Double) -> (x: [Float], fs: Double) {
         let m = Analysis.monoFor([UnsafePointer(t.left), UnsafePointer(t.right)], length: t.count, sampleRate: t.sampleRate, target: target)

@@ -65,7 +65,12 @@ public final class DeckModel: ObservableObject, Identifiable {
     public private(set) var duration = 0.0
     var sr = 44100.0
     // position: from the engine's reports, moved on by the clock in between
+    // the engine's position (frames) at audio-clock time posT: reports are stamped with the audio clock, so the
+    // guesses made here between reports are too (core.clock() + core.lag(), not the heard clock)
     var pos = 0.0, posT = 0.0, speed = 0.0
+    var audioNow: Double { core.clock() + core.lag() }
+    /// a new speed from now on: restamp the engine's position first, so the time since the last report isn't lost
+    func rebase(speed v: Double) { pos = (heard() + core.lag() * speed) * sr; posT = audioNow; speed = v }
     @Published public private(set) var playing = false
     @Published public private(set) var pitch = 0.0          // -1...1 from the tempo fader (top = negative, Pioneer style)
     @Published public private(set) var rangeIdx = 0
@@ -74,6 +79,8 @@ public final class DeckModel: ObservableObject, Identifiable {
     public private(set) var syncMult = 1.0
     var syncTrim = 0.0
     public private(set) var phaseErr: Double?
+    /// SYNC is matching the tempo but leaving the phase alone: the beats are a quarter beat or more apart, taken as on purpose
+    public private(set) var phaseHeld = false
     @Published public private(set) var cue = 0.0
     @Published public private(set) var hot = [Double?](repeating: nil, count: 8)
     @Published public private(set) var loop = Loop()
@@ -240,10 +247,11 @@ public final class DeckModel: ObservableObject, Identifiable {
         if core.wallMs() > coastHold { coasting = d.coast }
         if playing && !d.playing && d.ended { playing = false }
     }
-    public func now() -> Double {
-        let t = pos / sr + (core.clock() - posT) * speed
-        return clamp(t, 0, duration)
-    }
+    public func now() -> Double { clamp(heard(), 0, duration) }
+    func heard() -> Double { pos / sr + (core.clock() - posT) * speed }
+    /// where the engine is playing now: `now()` is what you hear, `core.lag()` seconds behind it (a lot, on
+    /// Bluetooth). Jumps by a distance and phase matching start from here, or they'd land that much short.
+    public func playhead() -> Double { clamp(heard() + core.lag() * speed, 0, duration) }     // not clamped twice: exact near the ends
     public func beatAt(_ t: Double) -> Double {
         if let b = grid, let a = ana {
             let i = seg(b, t)
@@ -265,7 +273,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     // ---- loading: the app decodes and analyses, then hands the deck the result ----
     public func canLoad() -> String? {
         if !active { return "Deck \(i + 1) is hidden: turn on 4 DECKS first" }
-        if playing && core.loadLock { return "Deck \(i + 1) is playing. Stop it before loading (or Settings → Load lock: Unlocked)." }
+        if playing && core.loadLock { return "Deck \(i + 1) is playing. Stop it before loading (or turn off Settings → Decks → Load lock)." }
         return nil
     }
     public func beginLoad(_ t: TrackInfo) {
@@ -291,7 +299,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         guard track === t else { return }
         sr = pcm.sampleRate; duration = Double(pcm.count) / pcm.sampleRate
         core.engine.post([.track(i, pcm), .deck(i, .load(mt: mt, spin: core.spinSecs))])
-        pos = 0; posT = core.clock(); speed = 0
+        pos = 0; posT = audioNow; speed = 0
         loop = Loop(); previewing = false
         self.mono = mono
         ana = a
@@ -312,7 +320,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     public func seekTo(_ t0: Double) {
         guard loaded else { return }
         var t = t0
-        if playing && quant && bpm > 0 { let n = now(); t = n + jsRound((t - n) / spb) * spb }
+        if playing && quant && bpm > 0 { let n = playhead(); t = n + jsRound((t - n) / spb) * spb }
         seek(t)
     }
     public func seek(_ t0: Double) {
@@ -320,7 +328,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         let t = clamp(t0, 0, max(0, duration - 0.01))
         seekSeq += 1
         post(.seek(t * sr, seq: seekSeq))
-        pos = t * sr; posT = core.clock()
+        pos = t * sr; posT = audioNow
     }
     public func setPlaying(_ on: Bool) {
         guard loaded else { return }
@@ -331,8 +339,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         previewing = false
         sendRate()
         post(.play(on))
-        speed = on ? rate() : 0
-        posT = core.clock()
+        rebase(speed: on ? rate() : 0)
     }
     public func togglePlay() { setPlaying(!playing) }
 
@@ -343,7 +350,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         if playing { setPlaying(false); seek(cue) }
         else if abs(now() - cue) < 0.02 {
             previewing = true; playing = true
-            sendRate(); post(.play(true)); speed = rate()
+            sendRate(); post(.play(true)); rebase(speed: rate())
         } else {
             cue = snap(now()); seek(cue); saveCues()
         }
@@ -373,15 +380,15 @@ public final class DeckModel: ObservableObject, Identifiable {
                 sendRate()
                 if playing && m.playing { alignPhase() }
                 if syncMult != 1 { core.status("Deck \(i + 1) synced at \(syncMult < 1 ? "half" : "double") time: \(String(format: "%.2f", bpm * syncRate)) against \(String(format: "%.2f", m.effBpm()))") }
-            } else { core.status("Load a track on the other deck to sync to") }
-        } else { syncTrim = 0; phaseErr = nil }
+            } else { core.status(playing ? "Deck \(i + 1) leads: no other deck is playing, so it keeps its tempo and the next deck you sync follows it." : "Deck \(i + 1): load a track on another deck to sync to") }
+        } else { syncTrim = 0; phaseErr = nil; phaseHeld = false }
         sendRate()
     }
     func alignPhase() {
         guard let m = master(), m.bpm > 0, bpm > 0 else { return }
-        let mb = m.beatAt(m.now()) * syncMult
+        let mb = m.beatAt(m.playhead()) * syncMult
         let frac = mb - jsFloor(mb)
-        let myB = beatAt(now())
+        let myB = beatAt(playhead())
         var target = jsFloor(myB) + frac
         if target - myB > 0.5 { target -= 1 }
         if myB - target > 0.5 { target += 1 }
@@ -397,7 +404,7 @@ public final class DeckModel: ObservableObject, Identifiable {
                 if playing { syncSince = (core.decks.map(\.syncSince).min() ?? 0) - 1 }
             }
             if syncTrim != 0 { syncTrim = 0; sendRate() }
-            phaseErr = nil
+            phaseErr = nil; phaseHeld = false
             return
         }
         // a different master, or a new track on it: pick half/normal/double time again
@@ -411,11 +418,11 @@ public final class DeckModel: ObservableObject, Identifiable {
     // tiny speed change. A deliberate offset of more than a quarter beat is left alone.
     func lockPhase(_ m: DeckModel) {
         let live = playing && m.playing && !touch && !m.touch && !coasting && !m.coasting && !previewing && loaded && m.loaded
-        if !live { if syncTrim != 0 { syncTrim = 0; sendRate() }; phaseErr = nil; return }
+        if !live { if syncTrim != 0 { syncTrim = 0; sendRate() }; phaseErr = nil; phaseHeld = false; return }
         var err = beatAt(now()) - m.beatAt(m.now()) * syncMult
         err -= jsRound(err)
         let errSec = err * spb / max(0.05, rate())
-        phaseErr = errSec
+        phaseErr = errSec; phaseHeld = abs(err) >= 0.25
         var want = 0.0
         if abs(err) < 0.25 && abs(errSec) > 0.0015 { want = clamp(-errSec / 1.5, -0.006, 0.006) }
         let trim = syncTrim + (want - syncTrim) * 0.2
@@ -490,7 +497,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         guard loaded else { return }
         let d = beats * spb
         if loop.on, let a = loop.a, let b = loop.b { loop.a = a + d; loop.b = b + d; sendLoop() }
-        seek(now() + d)
+        seek(playhead() + d)
     }
     // hold LOOP IN for half a second: 4-beat loop
     public func loopInPress(_ on: Bool) {
@@ -513,15 +520,17 @@ public final class DeckModel: ObservableObject, Identifiable {
         if let next { seek(next); if !playing { cue = next } }
     }
     func saveCues() { if let t = track { core.cues.save(t.id, cue: cue, hot: hot) } }
+    /// the PAD FX bank each held pad was pressed in: its release goes there even if the pad mode changed meanwhile
+    private var padHeld = [Int: PadMode]()
     public func padPress(_ p: Int, shift: Bool = false) {
         switch padMode {
-        case .padfx, .padfx2: core.fx.padDown(i, padMode, p)
+        case .padfx, .padfx2: padHeld[p] = padMode; core.fx.padDown(i, padMode, p)
         case .hotcue: shift ? clearHot(p) : hotcue(p)
         case .beatloop: beatLoop(LOOP_SIZES[p])
         case .beatjump: beatJump(JUMPS[p])
         }
     }
-    public func padRelease(_ p: Int) { if padMode == .padfx || padMode == .padfx2 { core.fx.padUp(i, padMode, p) } }
+    public func padRelease(_ p: Int) { if let b = padHeld.removeValue(forKey: p) { core.fx.padUp(i, b, p) } }
     /// for the screen: refresh @Published values that follow the playhead
     public func objectChanged() { objectWillChange.send() }
 }
@@ -558,6 +567,8 @@ public final class Core: ObservableObject {
     public lazy var fx = FxController(core: self)
     /// the audio clock now (seconds): the app works it out from the last report and the host clock
     public var clock: () -> Double = { 0 }
+    /// how far what you hear is behind `clock` (the output's latency); the app sets it, tests can
+    public var lag: () -> Double = { 0 }
     public var wallMs: () -> Double = { hostSeconds() * 1000 }
     public var status: (String, Double) -> Void = { _, _ in }
     public var trackChanged: (TrackInfo) -> Void = { _ in }

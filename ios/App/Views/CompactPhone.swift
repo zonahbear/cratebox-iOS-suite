@@ -202,7 +202,7 @@ struct CompactDeck: View {
     func loopBtn(_ s: String, _ on: Bool, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
             Text(s).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: c.btn)
-                .foregroundStyle(on ? Color.white : Theme.fg)
+                .foregroundStyle(on ? Color.black : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.loop : Theme.raise))
         }.buttonStyle(.plain)
     }
@@ -271,9 +271,7 @@ struct CompactMixer: View {
             }
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { d in
-                core.mixer.xfader = min(1, max(0, Double((d.location.x - 8) / (g.size.width - 16))))
-            })
+            .faderDrag(core.mixer.xfader, span: g.size.width - 16) { core.mixer.xfader = $0 }
             .onTapGesture(count: 2) { core.mixer.xfader = 0.5 }
         }.frame(height: 30)
     }
@@ -295,9 +293,9 @@ struct CompactEQ: View {
                 HStack(spacing: 18) {
                     Text("\(i + 1)").font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.deck[i]).frame(width: 24)
                     Knob(label: "TRIM", value: core.mixer.trim[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("trim", i, $0) }
-                    Knob(label: "HI", value: core.mixer.hi[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("hi", i, $0) }
-                    Knob(label: "MID", value: core.mixer.mid[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("mid", i, $0) }
-                    Knob(label: "LOW", value: core.mixer.low[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("low", i, $0) }
+                    Knob(label: "HI", value: core.mixer.hi[i], color: Theme.deck[i], size: 40, bipolar: true, tap: MixerCurves.eqTap) { core.setMixer("hi", i, $0) }
+                    Knob(label: "MID", value: core.mixer.mid[i], color: Theme.deck[i], size: 40, bipolar: true, tap: MixerCurves.eqTap) { core.setMixer("mid", i, $0) }
+                    Knob(label: "LOW", value: core.mixer.low[i], color: Theme.deck[i], size: 40, bipolar: true, tap: MixerCurves.eqTap) { core.setMixer("low", i, $0) }
                     Knob(label: "CFX", value: core.mixer.cfx[i], color: Theme.loop, size: 40, bipolar: true) { core.setMixer("cfx", i, $0) }
                 }
             }

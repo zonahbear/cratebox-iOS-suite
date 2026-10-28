@@ -76,6 +76,48 @@ final class CoreTests: XCTestCase {
         XCTAssertFalse(d.playing); XCTAssertFalse(d.loaded); XCTAssertNil(d.track)
         XCTAssertNil(c.engine.decks[0].track)        // the engine let go of the audio too
     }
+    /// Bluetooth: what you hear is `lag` behind the engine. A 4-beat jump still moves the music exactly 4 beats,
+    /// and a synced deck pressed into play starts in phase with what the master is playing, not what you hear.
+    func testJumpsAndSyncStartFromThePlayheadWithOutputLag() {
+        let (c, e) = makeCore()
+        c.clock = { e.time - 0.25 }; c.lag = { 0.25 }
+        load(c, 0, bpm: 120); load(c, 1, bpm: 120)
+        let d = c.decks[0]
+        d.togglePlay(); render(e, c, secs: 3)
+        let heard = d.now()
+        d.beatJump(4); render(e, c, secs: 1)               // 4 beats at 120 = 2 s, then 1 s of playing
+        XCTAssertEqual(d.now(), heard + 2 + 1, accuracy: 0.02)
+        let b = c.decks[1]
+        b.setSync(true); b.togglePlay(); render(e, c, secs: 0.5)
+        var err = b.beatAt(b.now()) - d.beatAt(d.now()); err -= err.rounded()
+        XCTAssertEqual(err, 0, accuracy: 0.02)              // in phase (a quarter-second lag is half a beat here)
+    }
+    /// two jumps before the engine has reported the first: the second starts where the first landed (the guess
+    /// made at the jump is stamped on the audio clock, like the reports), not a lag further on
+    func testTwoJumpsBeforeAReportWithOutputLag() {
+        let (c, e) = makeCore()
+        c.clock = { e.time - 0.25 }; c.lag = { 0.25 }
+        load(c, 0, bpm: 120)
+        let d = c.decks[0]
+        d.togglePlay(); render(e, c, secs: 3)
+        let start = d.playhead()
+        d.beatJump(4); d.beatJump(4)                        // 2 s each at 120, no render or tick between
+        XCTAssertEqual(d.playhead(), start + 4, accuracy: 0.005)
+        render(e, c, secs: 0.5)
+        XCTAssertEqual(e.decks[0].pos / SR, start + 4.5, accuracy: 0.02)
+        XCTAssertEqual(d.playhead(), start + 4.5, accuracy: 0.02)
+    }
+    /// hold a PAD FX pad, switch the pads to hot cues, let go: the effect still turns off
+    func testPadFxLetsGoAfterThePadModeChanges() {
+        let (c, _) = makeCore(); load(c, 0, bpm: 120)
+        let d = c.decks[0]
+        d.padMode = .padfx; d.padPress(0)
+        XCTAssertNotNil(c.fx.pad[0])
+        d.padMode = .hotcue; d.padRelease(0)
+        XCTAssertNil(c.fx.pad[0])
+        d.padRelease(0)                                     // a second release does nothing
+        XCTAssertNil(d.hot[0])                              // and the release didn't set a hot cue
+    }
     func testSyncHalftimeAndBeatLock() {
         let (c, e) = makeCore(); load(c, 0, bpm: 140); load(c, 1, bpm: 70.5)
         render(e, c, secs: 0.1)
@@ -88,6 +130,11 @@ final class CoreTests: XCTestCase {
         d.togglePlay(); render(e, c, secs: 4)
         XCTAssertNotNil(d.phaseErr)
         XCTAssertLessThan(abs(d.phaseErr ?? 1), 0.005, "beat lock holds the phase")
+        XCTAssertFalse(d.phaseHeld)
+        // nudged 0.4 beat off: SYNC keeps the tempo, leaves the offset, and says so
+        d.seek(d.playhead() + 0.4 * d.spb); render(e, c, secs: 1)
+        XCTAssertTrue(d.phaseHeld, "a deliberate offset is shown as tempo-only")
+        XCTAssertGreaterThan(abs(d.phaseErr ?? 0), 0.1)
     }
     // Jonah's bug (2026-10-23): a synced deck playing at 72.5 dropped to 36.25 when a 72.5 was loaded on the other
     // deck. It followed the freshly loaded (stopped) deck, with the halftime it had picked against the old 145 there.

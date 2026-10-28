@@ -119,7 +119,11 @@ struct PhoneTopBar: View {
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
             LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
             DriveEjectButton()
-            Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
+            // drawn at 16 pt, touched at about 44 × 44 (HIG minimum) without making the bar any wider: the padded
+            // view takes the touches, the negative padding gives the room back to the layout (a contentShape alone
+            // can't reach past the view's frame)
+            Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)).padding(14).contentShape(Rectangle()) }
+                .buttonStyle(.plain).padding(-14)
         }
     }
 }
@@ -225,7 +229,8 @@ struct PhoneDeck: View {
                             Text("DECK \(d + 1)").font(.system(size: 10, weight: .bold)).frame(maxWidth: .infinity, minHeight: 18)
                                 .foregroundStyle(on ? Color.black : Theme.deck[d])
                                 .background(RoundedRectangle(cornerRadius: 4).fill(on ? Theme.deck[d] : Theme.raise))
-                        }.buttonStyle(.plain)
+                                .padding(.vertical, 6).contentShape(Rectangle())     // an 18 pt chip, touched at 30 pt
+                        }.buttonStyle(.plain).padding(.vertical, -6)
                     }
                 }
             }
@@ -276,7 +281,7 @@ struct PhoneDeck: View {
     func loopBtn(_ s: String, _ on: Bool, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
             Text(s).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: m.loopH)
-                .foregroundStyle(on ? Color.white : Theme.fg)
+                .foregroundStyle(on ? Color.black : Theme.fg)
                 .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.loop : Theme.raise))
         }.buttonStyle(.plain)
     }
@@ -306,18 +311,16 @@ struct TempoFader: View {
                 }
                 .frame(width: w, height: h, alignment: .top)
                 .contentShape(Rectangle())
-                .gesture(DragGesture(minimumDistance: 0).onChanged { d in
-                    let y = min(max(0, d.location.y - 9), h - 18)
-                    deck.setPitch(Double(y / (h - 18)) * 2 - 1)
-                })
+                .faderDrag(v, span: h - 18, vertical: true) { deck.setPitch($0 * 2 - 1) }
                 .onTapGesture(count: 2) { deck.setPitch(0) }
             }
         }
     }
 }
 
-/// The phone layout's sizes, worked out from the room between the edge strips, so the same screen fits an SE
-/// (587 pt between 40 pt strips) and a Pro Max (808 pt). The defaults are the Pro Max sizes the layout was drawn at.
+/// The phone layout's sizes, worked out from the room between the edge strips (docs/device-sizes.md: from the 16e,
+/// 844 − 2 × 47 = 750 pt, to the 16/17 Pro Max, 956 − 2 × 62 = 832 pt; the SE gets the compact layout instead). The
+/// defaults are the Pro Max sizes the layout was drawn at.
 /// Compact (under 640 pt, the SE): smaller fader, mixer and pads. The jog and the CUE / PLAY and loop columns
 /// share what's left of each deck's width in both.
 struct PhoneMetrics {

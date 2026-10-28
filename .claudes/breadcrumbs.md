@@ -65,3 +65,44 @@
   (not run: no Swift here; ios.yml is the compiler). Web: Cratebox tests/test_sync.py 14/14 with the new checks.
 - Not changed: SYNC off still jumps to the tempo fader's position (old behaviour).
 - personal/heat still needs the same commit (Core.swift applies cleanly there; push to it uploads TestFlight).
+
+## 2026-10-27 22:40: code review of the shipping app + personal/heat (PR #27, branch claude/project-thread-p0805m)
+
+- Report: project files `ios-review/index.html` (published as an artifact). Findings F1-F9 fixed, P1-P9 proposed.
+- Key fix: `DeckModel.playhead()` = now() + core.lag() x speed. `now()` is the HEARD position (AppModel.smoothClock
+  subtracts audio.latency); relative jumps and phase matching must use playhead() or they land short on Bluetooth.
+- Engine `.unload` now trashes the track (was freed on the audio thread). Library background analysis passes Settings.bpmRange.
+- Merging PR #27 = TestFlight upload (testflight.yml on preview/truecurve-usb). Waiting on Jonah's go.
+- personal/heat port: 3 patches in project files `ios-review/personal-heat-port/` (PR #26 BPM range, the review fixes,
+  HEAT wording). Not pushed: pushing personal/heat uploads Cratebox HEAT to TestFlight.
+- Open proposals needing Jonah: relative-drag tempo/cross faders (P1), streaming decode (P2), 44 pt targets (P3).
+
+## 2026-10-27 23:55: ChatGPT + Gemini cross-review of PR #27 (commit a864304)
+
+- Table of every claim (confirmed / rejected, with file:line) is in the report, section "Cross-review results".
+- Engine track hand-off: `retired` (audio thread only) → swap into `trash` under the try-lock → snapshot swaps it
+  out and frees after unlocking. Never append to `trash` from apply() (that raced snapshot()).
+- USB backups are named by the flattened full path + ms stamp + random tail (every ANLZ file is ANLZ0000.DAT).
+- Recorder tap is lock-free on the audio thread (try-lock publish, drop-and-count when full); stop reports errors.
+- Load task must not write TrackInfo: Devices.readAnalysis(at:) → RBRead value, Devices.apply on main.
+- Staged USB playlist edits persist in Application Support/Cratebox/usb/<stick>.playlists.json with the db hashes.
+- Rejected: Gemini's auto-loop/hot-cue lag concern (loops wrap by modulo; hot cues are absolute), contentShape-only
+  44 pt targets (can't exceed the frame), "SYNC still locks" wording (shared lag cancels).
+- New proposals P10-P13 (group write journal, re-analyse on BPM range change, SYNC phase-offset indicator, async REC stop).
+- HEAT port: 5 patches now (0004 = this commit, 0005 = HEAT recorder note). Still not pushed.
+
+## 2026-10-28 01:20: second cross-review round (R1-R4), proposals, EQ tap (PR #27)
+
+- R1: DeckModel's optimistic pos/posT are stamped with the AUDIO clock (`audioNow = core.clock() + core.lag()`),
+  like the engine's reports; speed changes go through `rebase(speed:)`. Test: two jumps before a report, 250 ms lag.
+- R2: USB backups carry `.nNNNNNNNN.` sequence numbers (order); pruning keeps backups a journal points at.
+- R3: RecordRing (CrateboxKit) + Engine.tapChanges: Recorder.stop waits off-main until the tap is gone, then finish().
+- R4: RequestTokens: USBSession reload/scan results are dropped after eject/reopen/newer request; per-scan Cancel.
+- USBSafeWrite.group: multi-file writes (playlists to both libraries, USBTrackWrite.apply) have a group journal;
+  recover() puts every finished member back. swapFailed keeps the journal for the next open.
+- EQ: tap LOW/MID/HI = centre → kill, else → centre (MixerCurves.eqTap), in CompactPhone always, else only with
+  no controller. Faders use `.faderDrag` (relative). SYNC phaseHeld → "TEMPO ±ms".
+- ios.yml now fails the run if the tests or the app build fail (last step). Still read the log.
+- Open: P2 (streaming/mono decode: changes analysis input, parity risk), P9 (measure new devices).
+- HEAT (personal/heat only): Engine.recordAfterMix + recordMixed → REC includes the watch mic; slot-4 backup kept in
+  UserDefaults `cb.tc.restore.<id>` and restored on the next connect after the device's own cycle.

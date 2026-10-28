@@ -1,9 +1,8 @@
-// Set recording: the master output after the limiter (exactly what the speakers get), to a WAV (16-bit,
+// Set recording: Performance Mode's master output after the limiter (the decks, not Cratebox USB's preview), to a WAV (16-bit,
 // lossless) or an AAC .m4a (256 kbps; the web app's MP3 encoder isn't on iOS), in Cratebox's folder in the Files
 // app. A tracklist is kept while recording: every track that could be heard, with the time it came in.
 import AVFoundation
 import Foundation
-import os
 import CrateboxKit
 
 final class Recorder: ObservableObject {
@@ -14,42 +13,39 @@ final class Recorder: ObservableObject {
     var format: String { UserDefaults.standard.string(forKey: "cb.recFmt") ?? "wav" }
     private var file: AVAudioFile?
     private var url: URL?
-    // the audio thread copies blocks in here; a writer thread empties it into the file
-    private let cap = 48000 * 8
-    private let ringL: UnsafeMutablePointer<Float>, ringR: UnsafeMutablePointer<Float>
-    private var w = 0, r = 0
-    private var lock = os_unfair_lock()
+    // the audio thread copies blocks in here (never waiting); a writer thread empties it into the file
+    private let ring = RecordRing(capacity: 48000 * 8)
     private var writer: Thread?
-    private var stopFlag = false
+    private var stopFlag = false                // set by stop's worker, read by the writer (both after `lock`)
+    private let lock = NSLock()
+    private var writeError: String?             // the writer thread's, read after it's finished
+    private var tapsPosted = 0                  // .recordTap commands sent: the engine's tapChanges catches up
+    private var stopping = false
     private var noted = Set<String>()
     weak var app: AppModel?
 
-    init() {
-        ringL = .allocate(capacity: cap); ringR = .allocate(capacity: cap)
-        ringL.initialize(repeating: 0, count: cap); ringR.initialize(repeating: 0, count: cap)
-    }
-
     static var folder: URL { FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0] }
+    /// the app's folder name in Files (On My iPhone / iPad): the app's display name, e.g. "Cratebox Suite"
+    static var filesName: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "Cratebox" }
 
     func start(_ engine: Engine) {
-        guard !recording else { return }
+        guard !recording, !stopping else { return }
         let df = DateFormatter(); df.dateFormat = "yyyy-MM-dd HH.mm"
         let ext = format == "aac" ? "m4a" : "wav"
-        let u = Recorder.folder.appendingPathComponent("Cratebox set \(df.string(from: Date())).\(ext)")
+        // never over an earlier set: two recordings started in the same minute get "(2)", "(3)"...
+        let stem = "Cratebox set \(df.string(from: Date()))"
+        var u = Recorder.folder.appendingPathComponent("\(stem).\(ext)"), k = 2
+        while FileManager.default.fileExists(atPath: u.path) { u = Recorder.folder.appendingPathComponent("\(stem) (\(k)).\(ext)"); k += 1 }
         let settings: [String: Any] = format == "aac"
             ? [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: AudioHost.sampleRate, AVNumberOfChannelsKey: 2, AVEncoderBitRateKey: 256_000]
             : [AVFormatIDKey: kAudioFormatLinearPCM, AVSampleRateKey: AudioHost.sampleRate, AVNumberOfChannelsKey: 2, AVLinearPCMBitDepthKey: 16, AVLinearPCMIsFloatKey: false, AVLinearPCMIsBigEndianKey: false]
         guard let f = try? AVAudioFile(forWriting: u, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false) else { app?.status("Couldn't start recording"); return }
-        file = f; url = u; w = 0; r = 0; seconds = 0; tracklist = []; noted = []
-        stopFlag = false; recording = true
-        let L = ringL, R = ringR, cap = self.cap
-        engine.post(.recordTap { [unowned self] l, rr, n in
-            os_unfair_lock_lock(&self.lock)
-            var wi = self.w
-            for j in 0..<n { L[wi] = l[j]; R[wi] = rr[j]; wi += 1; if wi == cap { wi = 0 } }
-            self.w = wi
-            os_unfair_lock_unlock(&self.lock)
-        })
+        file = f; url = u; writeError = nil; seconds = 0; tracklist = []; noted = []
+        ring.reset()
+        lock.lock(); stopFlag = false; lock.unlock()
+        recording = true
+        let ring = self.ring
+        engine.post(.recordTap { l, r, n in ring.write(l, r, n) }); tapsPosted += 1
         let th = Thread { [weak self] in self?.drainLoop() }
         th.qualityOfService = .userInitiated
         writer = th; th.start()
@@ -60,14 +56,14 @@ final class Recorder: ObservableObject {
         let buf = AVAudioPCMBuffer(pcmFormat: fmt, frameCapacity: 48000)!
         var total = 0
         while true {
-            os_unfair_lock_lock(&lock); let wi = w, done = stopFlag; os_unfair_lock_unlock(&lock)
-            var n = (wi - r + cap) % cap
-            while n > 0 {
-                let m = min(n, Int(buf.frameCapacity))
-                for j in 0..<m { let k = (r + j) % cap; buf.floatChannelData![0][j] = ringL[k]; buf.floatChannelData![1][j] = ringR[k] }
+            lock.lock(); let done = stopFlag; lock.unlock()
+            // after stopFlag, one more pass picks up the tail `finish` published
+            while true {
+                let m = ring.read(into: buf.floatChannelData![0], buf.floatChannelData![1], max: Int(buf.frameCapacity))
+                if m == 0 { break }
                 buf.frameLength = AVAudioFrameCount(m)
-                try? file?.write(from: buf)
-                r = (r + m) % cap; n -= m; total += m
+                do { try file?.write(from: buf) } catch { if writeError == nil { writeError = error.localizedDescription } }
+                total += m
             }
             let secs = Double(total) / AudioHost.sampleRate
             DispatchQueue.main.async { self.seconds = secs }
@@ -75,17 +71,33 @@ final class Recorder: ObservableObject {
             Thread.sleep(forTimeInterval: 0.1)
         }
     }
+    /// Stops in the background: waits until the audio thread has dropped the tap (so its last block is in), hands
+    /// that block over, lets the writer finish, then closes the file. The screen never waits.
     func stop(_ engine: Engine) {
-        guard recording else { return }
-        engine.post(.recordTap(nil))
-        Thread.sleep(forTimeInterval: 0.05)          // the audio thread drops the tap at its next block
-        os_unfair_lock_lock(&lock); stopFlag = true; os_unfair_lock_unlock(&lock)
-        while writer?.isFinished == false { Thread.sleep(forTimeInterval: 0.02) }
+        guard recording, !stopping else { return }
+        stopping = true
+        engine.post(.recordTap(nil)); tapsPosted += 1
+        let want = tapsPosted, ring = self.ring, w = writer
+        DispatchQueue.global(qos: .userInitiated).async {
+            // the engine applies commands before it renders, so once it's past ours the tap won't run again; if the
+            // audio is stopped (an interruption) nothing calls the tap either, so give up waiting after a second
+            let until = Date().addingTimeInterval(1)
+            while engine.tapChanges < want && Date() < until { Thread.sleep(forTimeInterval: 0.005) }
+            ring.finish()
+            self.lock.lock(); self.stopFlag = true; self.lock.unlock()
+            while w?.isFinished == false { Thread.sleep(forTimeInterval: 0.01) }
+            DispatchQueue.main.async { self.finishStop(lost: Double(ring.droppedFrames) / AudioHost.sampleRate) }
+        }
+    }
+    private func finishStop(lost: Double) {
         file = nil                                  // closes it
-        recording = false
+        recording = false; stopping = false
         lastFile = url
         saveTracklist()
-        app?.status("Saved \(url?.lastPathComponent ?? "the recording") (Files → On My iPhone/iPad → Cratebox)", 8)
+        let name = url?.lastPathComponent ?? "the recording"
+        if let e = writeError { app?.status("\(name) is incomplete: writing it failed (\(e)). Is the phone's storage full?", 12) }
+        else if lost > 0 { app?.status("Saved \(name), but \(String(format: "%.1f", lost)) s are missing: the phone's storage fell behind", 12) }
+        else { app?.status("Saved \(name) (Files → On My iPhone/iPad → \(Recorder.filesName))", 8) }
     }
     /// call about once a second while recording
     func noteAudible(_ core: Core) {

@@ -39,16 +39,22 @@ struct HoldButton<Label: View>: View {
     let up: () -> Void
     @ViewBuilder let label: () -> Label
     @State private var held = false
+    /// true while the finger is down; SwiftUI resets it when the gesture is cancelled too (a system gesture, an
+    /// alert, the app leaving the screen), which never calls onEnded: then the release is sent from here, so a
+    /// CUE preview or a PAD FX can't stay stuck on
+    @GestureState private var pressing = false
     var body: some View {
         label()
             .opacity(held ? 0.75 : 1)
             .gesture(DragGesture(minimumDistance: 0)
+                .updating($pressing) { _, s, _ in s = true }
                 .onChanged { _ in if !held { held = true; down() } }
-                .onEnded { _ in held = false; up() })
+                .onEnded { _ in if held { held = false; up() } })     // either path may come first: one release
+            .onChange(of: pressing) { _, p in if !p && held { held = false; up() } }
     }
 }
 
-/// A knob: drag up/down; double-tap goes back to the centre
+/// A knob: drag up/down; double-tap goes back to the centre, or with `tap` set (EQ kill) one tap does `tap`
 struct Knob: View {
     let label: String
     let value: Double
@@ -56,6 +62,7 @@ struct Knob: View {
     var size: CGFloat = 30
     var center = 0.5
     var bipolar = false                  // TRIM, EQ, CFX: lit only when turned away from the centre
+    var tap: ((Double) -> Double)? = nil  // one tap sets tap(value) instead of double-tap → centre
     let set: (Double) -> Void
     @State private var start: Double?
     var body: some View {
@@ -77,7 +84,30 @@ struct Knob: View {
         .gesture(DragGesture(minimumDistance: 1)
             .onChanged { g in let s = start ?? value; start = s; set(min(1, max(0, s - Double(g.translation.height) / 160))) }
             .onEnded { _ in start = nil })
-        .onTapGesture(count: 2) { set(center) }
+        .onTapGesture(count: tap == nil ? 2 : 1) { set(tap?(value) ?? center) }
+    }
+}
+
+/// Faders follow the finger from where the cap is, like hardware: a touch on the track doesn't make the cap jump
+/// to it. `value` and `set` are 0...1 along the drag (`vertical`: 0 at the top, so down is up the scale).
+/// The start is GestureState, so a drag the system cancels can't leave a stale start for the next one.
+struct FaderDrag: ViewModifier {
+    let value: Double
+    let span: CGFloat
+    var vertical = false
+    let set: (Double) -> Void
+    @GestureState private var start: Double?
+    func body(content: Content) -> some View {
+        content.gesture(DragGesture(minimumDistance: 0).updating($start) { d, s, _ in
+            if s == nil { s = value }
+            let t = Double(vertical ? d.translation.height : d.translation.width) / Double(max(1, span))
+            set(min(1, max(0, s! + t)))
+        })
+    }
+}
+extension View {
+    func faderDrag(_ value: Double, span: CGFloat, vertical: Bool = false, set: @escaping (Double) -> Void) -> some View {
+        modifier(FaderDrag(value: value, span: span, vertical: vertical, set: set))
     }
 }
 
@@ -97,11 +127,8 @@ struct VFader: View {
                     .offset(y: -CGFloat(v) * (h - 14))
             }
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { d in
-                let y = min(max(0, d.location.y - 7), h - 14)
-                let nv = 1 - Double(y / (h - 14))
-                set(inverted ? 1 - nv : nv)
-            })
+            // 0 at the top for the drag: the shown value is 1 − that
+            .faderDrag(1 - v, span: h - 14, vertical: true) { y in set(inverted ? y : 1 - y) }
         }.frame(width: 34, height: height)
     }
 }

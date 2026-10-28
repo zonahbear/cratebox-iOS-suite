@@ -1,12 +1,14 @@
 import SwiftUI
 import CrateboxKit
 
-/// how far a synced deck's beats are from the master's, like the desktop: green within 6 ms, amber within 20
+/// how far a synced deck's beats are from the master's, like the desktop: green within 6 ms, amber within 20.
+/// An offset SYNC is leaving alone (a quarter beat or more, so taken as on purpose) says so: TEMPO only, in the muted colour.
 @ViewBuilder func phaseTag(_ d: DeckModel, size: CGFloat = 11) -> some View {
     if d.sync, let pe = d.phaseErr {
         let ms = Int(jsRoundUI(abs(pe) * 1000))
-        Text("\(pe >= 0 ? "+" : "−")\(ms) ms").font(.system(size: size, weight: .bold, design: .monospaced))
-            .foregroundStyle(abs(pe) < 0.006 ? Theme.ok : abs(pe) < 0.02 ? Theme.hex(0xffb020) : Theme.hex(0xff3b55))
+        Text("\(d.phaseHeld ? "TEMPO " : "")\(pe >= 0 ? "+" : "−")\(ms) ms").font(.system(size: size, weight: .bold, design: .monospaced))
+            .foregroundStyle(d.phaseHeld ? Theme.muted : abs(pe) < 0.006 ? Theme.ok : abs(pe) < 0.02 ? Theme.hex(0xffb020) : Theme.hex(0xff3b55))
+            .lineLimit(1).minimumScaleFactor(0.7)
     }
 }
 func jsRoundUI(_ x: Double) -> Double { (x + 0.5).rounded(.down) }
@@ -253,6 +255,9 @@ struct JogView: View {
     @ObservedObject var deck: DeckModel
     let color: Color
     @State private var last: Double?
+    /// reset by SwiftUI when the drag is cancelled (onEnded isn't called then): lets go of the platter, so a
+    /// playing deck isn't left held still under a finger that's gone
+    @GestureState private var touching = false
     var body: some View {
         GeometryReader { g in
             let c = CGPoint(x: g.size.width / 2, y: g.size.height / 2)
@@ -264,6 +269,7 @@ struct JogView: View {
             }
             .contentShape(Circle())
             .gesture(DragGesture(minimumDistance: 0)
+                .updating($touching) { _, s, _ in s = true }
                 .onChanged { v in
                     let a = atan2(Double(v.location.y - c.y), Double(v.location.x - c.x))
                     if let l = last {
@@ -274,7 +280,8 @@ struct JogView: View {
                     } else { deck.jogTouch(true) }
                     last = a
                 }
-                .onEnded { _ in last = nil; deck.jogTouch(false) })
+                .onEnded { _ in if last != nil { last = nil; deck.jogTouch(false) } })
+            .onChange(of: touching) { _, t in if !t && last != nil { last = nil; deck.jogTouch(false) } }
         }
     }
 }
@@ -340,13 +347,17 @@ struct WaveformView: View {
     @ObservedObject var deck: DeckModel
     let color: Color
     @State private var dragX: CGFloat?
+    @GestureState private var dragging = false          // reset on a cancelled drag (see JogView)
     var body: some View {
         GeometryReader { g in
-            TimelineView(.animation) { _ in
+            // capped at 60 a second (ProMotion would draw every lane 120 times), and still while nothing's loaded
+            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !deck.loaded)) { _ in
                 Canvas { ctx, size in draw(ctx, size) }
             }
+            .id(deck.loaded)                // a new canvas on load/eject, so a paused one can't keep the old track
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
+                .updating($dragging) { _, s, _ in s = true }
                 .onChanged { v in
                     guard deck.loaded else { return }
                     if let x = dragX {
@@ -357,7 +368,8 @@ struct WaveformView: View {
                     } else { deck.jogTouch(true, noCoast: true) }
                     dragX = v.location.x
                 }
-                .onEnded { _ in dragX = nil; deck.jogTouch(false, noCoast: true) })
+                .onEnded { _ in if dragX != nil { dragX = nil; deck.jogTouch(false, noCoast: true) } })
+            .onChange(of: dragging) { _, d in if !d && dragX != nil { dragX = nil; deck.jogTouch(false, noCoast: true) } }
         }
         .background(Theme.bg)
         .clipShape(RoundedRectangle(cornerRadius: 6))

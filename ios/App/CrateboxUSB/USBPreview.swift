@@ -36,6 +36,7 @@ final class USBPreview: ObservableObject {
         var m = MixerState(); m.master = 0.8
         core.mixer = m
         core.clock = { [unowned self] in self.smoothClock() }
+        core.lag = { [unowned audio] in audio.latency }          // jumps start from the playhead, as on the decks
         core.status = { [weak self] s, _ in self?.session?.message = s }
         // the grid tools edit the track's grid: record it as the staged edit
         core.trackChanged = { [weak self] t in
@@ -78,9 +79,11 @@ final class USBPreview: ObservableObject {
         return t - audio.latency
     }
 
+    /// takes the track off the preview deck and frees its audio; a load still decoding is dropped when it
+    /// finishes (finishLoad only takes the track the deck is waiting for)
     func unload() {
-        if deck.playing { deck.setPlaying(false) }
-        key = nil
+        deck.unload()
+        key = nil; loadingKey = nil
     }
 
     /// what rekordbox's analysis files say about a track: grid (beat by beat when it changes tempo), phrases,
@@ -133,18 +136,21 @@ final class USBPreview: ObservableObject {
                     a = DeckAnalysis(bpm: bpm, firstBeat: fb, key: info.key >= 0 ? info.key : Analysis.detectKey(m.x, m.fs).key,
                                      phrases: rb.phrases.isEmpty ? Analysis.phraseAnalysis(m.x, m.fs, bpm, fb) : rb.phrases, wave: wave, duration: dur)
                     if edit?.bpm == nil && edit?.firstBeat == nil, let b = rb.beats, b.count >= 2 { a.beats = b; a.beat0 = rb.beat0 }
-                    info.rbGrid = rb.bpm != nil
                 } else {
                     // not analysed by rekordbox: Cratebox's own analysis, so the grid tools have something to work on
                     let w = AudioDecoder.mono(pcm, 22050)
                     let r = Analysis.analyze(m.x, fs: m.fs, range: Settings.bpmRange, waveSource: w)
                     a = DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: info.key >= 0 ? info.key : r.key, phrases: r.phrases, wave: rb.wave ?? r.wave, duration: dur)
                 }
-                info.autoBpm = rb.bpm ?? a.bpm; info.autoFirst = rb.firstBeat ?? a.firstBeat
-                info.rbCues = (rb.cue, rb.hot)
-                let memory = rb.memory
+                let memory = rb.memory, rbGrid = rb.bpm != nil && (edit?.bpm ?? rb.bpm) != nil && (edit?.firstBeat ?? rb.firstBeat) != nil
+                let autoBpm = rb.bpm ?? a.bpm, autoFirst = rb.firstBeat ?? a.firstBeat, analysis = a
                 await MainActor.run {
-                    d.finishLoad(info, pcm: pcm, analysis: a, mono: m)
+                    guard d.track === info else { return }        // unloaded or replaced meanwhile
+                    // the TrackInfo is the UI's: it's only changed here, on the main thread
+                    if rbGrid { info.rbGrid = true }
+                    info.autoBpm = autoBpm; info.autoFirst = autoFirst
+                    info.rbCues = (rb.cue, rb.hot)
+                    d.finishLoad(info, pcm: pcm, analysis: analysis, mono: m)
                     // the memory cues start as rekordbox's, unless you've edited them
                     if s.edits[t.key]?.memory == nil && !memory.isEmpty { s.rbMemory[t.key] = memory }
                     if self.loadingKey == t.key { self.loadingKey = nil }
