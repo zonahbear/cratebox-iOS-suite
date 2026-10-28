@@ -1,0 +1,33 @@
+run 40656737235 sha faaf702fac724efc4f716acc351b0466be0a095f build 45.1 at Wed Oct 28 08:30:04 UTC 2026
+     1 valid identities found
+PROFILE 'Cratebox HEAT App Store' 074669a2-f500-4964-ae24-1b9b78e4252c team 369KQMGQW6 app 369KQMGQW6.com.zonahbear.cratebox.heat expires Fri Oct 22 05:33:14 UTC 2027
+PROFILE (watch) 'Cratebox Mic App Store' c0f96965-a315-443b-afc9-710330be8105 app 369KQMGQW6.com.zonahbear.cratebox.heat.watchkitapp
+** ARCHIVE SUCCEEDED **
+** EXPORT SUCCEEDED **
+UPLOADED build 45.1 from faaf702
+---- tail
+Xcode 26.3
+Build version 17C529
+  1) 558B71ABDA92ABBF9DC23066817FC569002E0ABA "Apple Distribution: Jonah Snead (369KQMGQW6)"
+     1 valid identities found
+PROFILE 'Cratebox HEAT App Store' 074669a2-f500-4964-ae24-1b9b78e4252c team 369KQMGQW6 app 369KQMGQW6.com.zonahbear.cratebox.heat expires Fri Oct 22 05:33:14 UTC 2027
+PROFILE (watch) 'Cratebox Mic App Store' c0f96965-a315-443b-afc9-710330be8105 app 369KQMGQW6.com.zonahbear.cratebox.heat.watchkitapp
+⚙️  Generating project...
+⚙️  Writing project...
+Created project at /Users/runner/work/cratebox-iOS-suite/cratebox-iOS-suite/ios/Cratebox.xcodeproj
+** ARCHIVE SUCCEEDED **
+2026-10-28 08:29:25.325 xcodebuild[8094:27785] [MT] IDEDistribution: -[IDEDistributionLogging _createLoggingBundleAtPath:]: Created bundle at path "/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/Cratebox_2026-10-28_08-29-25.319.xcdistributionlogs".
+Exported Cratebox to: /Users/runner/work/_temp/export
+** EXPORT SUCCEEDED **
+
+-rw-r--r--  1 runner  staff  4539184 Oct 28 08:29 /Users/runner/work/_temp/export/Cratebox.ipa
+Running altool at path '/Applications/Xcode_26.3.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-10-28 08:30:03.252  INFO: [ContentDelivery.Uploader.60000231C4C0] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: 3f50d4f7-a290-4a21-b82d-425f6bed93f9
+Transferred 4539184 bytes in 0.068 seconds (66.7MB/s, 533.515Mbps)
+==========================================
+No errors uploading archive at '/Users/runner/work/_temp/export/Cratebox.ipa'.
+UPLOADED build 45.1 from faaf702
