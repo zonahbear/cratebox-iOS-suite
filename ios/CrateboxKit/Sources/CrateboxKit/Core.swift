@@ -575,29 +575,44 @@ public final class Core: ObservableObject {
     public var reanalyse: (TrackInfo) -> Void = { _ in }
     public var playStarted: () -> Void = {}
     @Published public var mixer = MixerState() { didSet { engine.post(.mixer(mixer)) } }
+    /// more than two decks (3 or 4); `three`: three decks, 1 and 3 sharing the controller's left side, 2 alone on the right
     @Published public private(set) var four: Bool
+    @Published public private(set) var three: Bool
     @Published public var loadLock: Bool { didSet { prefs.set("cb.loadLock", loadLock) } }
     public var jogSens: Double { didSet { prefs.set("cb.jogSens", jogSens) } }
     public var spinSecs: Double { didSet { prefs.set("cb.spin", spinSecs); engine.post(decks.indices.map { .deck($0, .spin(spinSecs)) }) } }
 
     public init(engine: Engine, prefs: Prefs = MemoryPrefs(), cues: CueStore = MemoryCueStore()) {
         self.engine = engine; self.prefs = prefs; self.cues = cues
-        four = prefs.bool("cb.four", false)
+        let f = prefs.bool("cb.four", false)
+        four = f; three = f && prefs.bool("cb.three", false)
         loadLock = prefs.bool("cb.loadLock", true)
         jogSens = prefs.double("cb.jogSens", 1)
         spinSecs = prefs.double("cb.spin", 2.5)
         decks = (0..<4).map { DeckModel($0, core: self) }
-        mixer.active = [true, true, four, four]
+        mixer.active = [true, true, four, four && !three]
         engine.post(.mixer(mixer))
         for d in decks { engine.post(.deck(d.i, .mt(d.mt))) }
     }
     public func status(_ s: String, _ secs: Double = 4) { status(s, secs) }
-    public func deckActive(_ i: Int) -> Bool { i < 2 || four }
-    public func setFour(_ on: Bool) {
-        four = on; prefs.set("cb.four", on)
-        mixer.active = [true, true, on, on]
-        if !on { for d in decks[2...] where d.playing { d.setPlaying(false) } }
+    /// 2, 3 or 4
+    public var deckCount: Int { four ? (three ? 3 : 4) : 2 }
+    /// the decks in play, in order (0, 1, then 2 and 3)
+    public var activeDecks: [Int] { Array(0..<deckCount) }
+    public func deckActive(_ i: Int) -> Bool { i < deckCount }
+    public func setFour(_ on: Bool) { setDecks(on ? 4 : 2) }
+    /// 2, 3 (decks 1 and 3 on the left, the left layer button switches them; 2 alone on the right) or 4 decks.
+    /// Decks that go are stopped, and the BEAT FX moves off a channel that's gone.
+    public func setDecks(_ n0: Int) {
+        let n = min(4, max(2, n0))
+        four = n >= 3; three = n == 3
+        prefs.set("cb.four", four); prefs.set("cb.three", three)
+        mixer.active = [true, true, n >= 3, n >= 4]
+        for d in decks[n...] where d.playing { d.setPlaying(false) }
+        if fx.ch >= n && fx.ch < 4 { fx.channel(fx.ch - 2) }
     }
+    /// the header's DECKS button: 2 → 3 → 4 → 2
+    public func cycleDecks() { setDecks(deckCount == 4 ? 2 : deckCount + 1) }
 
     /// Call often (the app does ~60 times a second): reads the engine's reports, keeps sync locked and the FX clocks fresh.
     public func tick() {

@@ -54,6 +54,8 @@ struct BrowserOverlay: View {
                 HStack {
                     heading("\(app.browseTitle.uppercased()) · \(tracks.count)", on: !app.browseFocusTree)
                     Spacer()
+                    // sort this list by BPM or key (again: the other way round, tap the lit one's ✕ for the list's own order)
+                    sortChip("BPM", .bpm); sortChip("KEY", .key)
                     Button { app.hideBrowser() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).frame(width: 30, height: 24) }.buttonStyle(.plain)
                 }
                 ScrollViewReader { proxy in
@@ -78,10 +80,26 @@ struct BrowserOverlay: View {
             .foregroundStyle(on ? Theme.loop : Theme.muted).padding(.vertical, 4).padding(.horizontal, 6)
     }
 
+    func sortChip(_ label: String, _ k: SortKey) -> some View {
+        let (cur, desc) = LibraryPane.storedSort(app.view), on = cur == k
+        return HStack(spacing: 0) {
+            Button { LibraryPane.setStoredSort(app.view, k); app.showBrowser(); app.objectWillChange.send() } label: {
+                Text(label + (on ? (desc ? " ▾" : " ▴") : "")).font(.system(size: 10, weight: .heavy))
+                    .frame(minWidth: 44, minHeight: 24).foregroundStyle(on ? Color.black : Theme.fg)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(on ? Theme.loop : Theme.raise))
+            }.buttonStyle(.plain)
+            if on {
+                Button { LibraryPane.setStoredSort(app.view, .none); app.showBrowser(); app.objectWillChange.send() } label: {
+                    Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).frame(width: 22, height: 24).foregroundStyle(Theme.muted)
+                }.buttonStyle(.plain).accessibilityLabel("Unsort")
+            }
+        }.padding(.leading, 4)
+    }
+
     func row(_ t: LibTrack, _ ref: Int) -> some View {
         let sel = app.selection == t.id
         let deckOn = core.decks.firstIndex { $0.track === t.info }
-        let decks = core.four ? [app.midi.side[0], app.midi.side[1]] : [0, 1]
+        let decks = core.activeDecks
         return HStack(spacing: 8) {
             if let d = deckOn { Text("\(d + 1)").font(.system(size: 10, weight: .heavy)).foregroundStyle(Color.black).frame(width: 16, height: 16).background(RoundedRectangle(cornerRadius: 3).fill(Theme.deck[d])) }
             else { Color.clear.frame(width: 16, height: 16) }
@@ -99,7 +117,8 @@ struct BrowserOverlay: View {
             if sel {
                 ForEach(decks, id: \.self) { d in
                     Button { app.load(t, deck: d); app.hideBrowser() } label: {
-                        Text("LOAD \(d + 1)").font(.system(size: 10, weight: .bold)).frame(width: 54, height: 24).foregroundStyle(Color.black)
+                        Text(decks.count > 2 ? "\(d + 1)" : "LOAD \(d + 1)").font(.system(size: decks.count > 2 ? 12 : 10, weight: .bold))
+                            .frame(width: decks.count > 2 ? 34 : 54, height: 24).foregroundStyle(Color.black)
                             .background(RoundedRectangle(cornerRadius: 4).fill(Theme.deck[d]))
                     }.buttonStyle(.plain)
                 }

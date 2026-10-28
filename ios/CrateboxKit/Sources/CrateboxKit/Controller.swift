@@ -59,7 +59,8 @@ public enum Profiles {
                 m.append(MapEntry(pn, 0x50 + p, "pfx2:\(p)", d, 0)); m.append(MapEntry(ps, 0x50 + p, "pfx2:\(p)", d, 0))
             }
         }
-        m += [MapEntry(0x96, 0x46, "load", 0, 0), MapEntry(0x96, 0x47, "load", 1, 0), MapEntry(0x96, 0x48, "load", 0, 0), MapEntry(0x96, 0x49, "load", 1, 0),
+        // LOAD 1 / 2, and with SHIFT (0x48 / 0x49): straight onto decks 3 / 4
+        m += [MapEntry(0x96, 0x46, "load", 0, 0), MapEntry(0x96, 0x47, "load", 1, 0), MapEntry(0x96, 0x48, "loadShift", 0, 0), MapEntry(0x96, 0x49, "loadShift", 1, 0),
               MapEntry(0x96, 0x41, "browsePress", -1, 0), MapEntry(0x96, 0x42, "browseShift", -1, 0),
               MapEntry(0xb6, 0x40, "browse", -1, 0), MapEntry(0xb6, 0x64, "zoom", -1, 0),
               MapEntry(0xb6, 0x1f, "xfader", -1, 0x3f), MapEntry(0xb6, 0x17, "cfx", 0, 0x37), MapEntry(0xb6, 0x18, "cfx", 1, 0x38), MapEntry(0xb6, 0x0c, "headMix", -1, 0x2c),
@@ -124,6 +125,8 @@ public enum Profiles {
 /// What the controller drives (the app's Core plus the library and screen).
 public protocol ControlTarget: AnyObject {
     var fourDecks: Bool { get }
+    /// 2, 3 or 4 (3: the right side stays on deck 2)
+    var deckCount: Int { get }
     func absValue(_ name: String, deck: Int) -> Double?
     func setAbs(_ name: String, deck: Int, _ v: Double)
     func press(_ name: String, arg: String, deck: Int, on: Bool)
@@ -134,6 +137,8 @@ public protocol ControlTarget: AnyObject {
     func controllerStatus(_ s: String)
 }
 
+public extension ControlTarget { var deckCount: Int { fourDecks ? 4 : 2 } }
+
 let ABS_ACTIONS: Set<String> = ["tempo", "fader", "trim", "hi", "mid", "low", "cfx", "xfader", "headMix", "master", "fxDepth", "micVol"]
 let REL_ACTIONS: Set<String> = ["jogTop", "jogSide", "jogSearch", "browse", "zoom"]
 let LED_RE = try! NSRegularExpression(pattern: "^(play|cue|sync|pfl|loopIn|loopOut|reloop|keylock|quant|mode:|hot:|loop:|pfx:|pfx2:|fxOn|layer)")
@@ -142,7 +147,7 @@ public let LEARN_LABEL: [String: String] = ["play": "Play", "cue": "Cue", "sync"
     "tempo": "Tempo fader", "jog": "Jog wheel", "pfl": "Headphone cue", "masterCue": "Master cue", "fxOn": "Beat FX on/off", "fxSelect": "Beat FX select",
     "fxBeatDown": "Beat FX beat ◀", "fxBeatUp": "Beat FX beat ▶", "fxDepth": "Beat FX level/depth", "fader": "Channel fader", "trim": "Trim", "hi": "EQ high",
     "mid": "EQ mid", "low": "EQ low", "cfx": "Filter (CFX)", "xfader": "Crossfader", "headMix": "Cue/master mix", "master": "Master level",
-    "browse": "Browse knob", "browsePress": "Browse knob press", "load": "Load", "keylock": "Master tempo", "quant": "Quantize", "jogSide": "Jog side (nudge)", "layer": "Deck layer (1⇄3 / 2⇄4)", "micVol": "Watch mic volume"]
+    "browse": "Browse knob", "browsePress": "Browse knob press", "load": "Load", "loadShift": "Load on deck 3 / 4", "keylock": "Master tempo", "quant": "Quantize", "jogSide": "Jog side (nudge)", "layer": "Deck layer (1⇄3 / 2⇄4)", "micVol": "Watch mic volume"]
 
 public final class MIDIEngine {
     public weak var target: ControlTarget?
@@ -213,7 +218,8 @@ public final class MIDIEngine {
         let a = e.action
         let name: String, arg: String
         if let c = a.firstIndex(of: ":") { name = String(a[..<c]); arg = String(a[a.index(after: c)...]) } else { name = a; arg = "" }
-        let deck = name == "layer" ? e.deck : hwDeck(e.deck)
+        // layer buttons name a side; SHIFT+LOAD names deck 3 / 4 whatever the layers are on
+        let deck = name == "layer" ? e.deck : name == "loadShift" ? e.deck + 2 : hwDeck(e.deck)
         if type == 0xb0 && ABS_ACTIONS.contains(name) {
             let val: Double
             if e.lsb == 0 { val = Double(v) / 127 }
@@ -249,7 +255,7 @@ public final class MIDIEngine {
         return false
     }
     public func setSide(_ s: Int, _ deck: Int) {
-        if deck == side[s] || (!(target?.fourDecks ?? false) && deck >= 2) { return }
+        if deck == side[s] || deck >= (target?.deckCount ?? 2) { return }
         target?.press("touch", arg: "", deck: side[s], on: false)          // let go of the platter on the deck being left
         side[s] = deck
         for n in PICKUP { pickup["\(n)/\(deck)"] = .some(nil) }

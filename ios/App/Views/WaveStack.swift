@@ -8,7 +8,7 @@ struct WaveStack: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var core: Core
     var body: some View {
-        let decks = core.four ? [0, 1, 2, 3] : [0, 1]
+        let decks = core.activeDecks
         let driven: Set<Int> = core.four ? [app.midi.side[0], app.midi.side[1]] : [0, 1]
         VStack(spacing: 4) {
             ForEach(decks, id: \.self) { i in

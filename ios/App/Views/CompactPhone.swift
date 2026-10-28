@@ -32,7 +32,7 @@ struct CompactScreen: View {
                             VStack(spacing: 3) {
                                 PhoneLane(deck: core.decks[l]); PhoneLane(deck: core.decks[r])
                                 if core.four {
-                                    HStack(spacing: 4) { ForEach([0, 1, 2, 3].filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
+                                    HStack(spacing: 4) { ForEach(core.activeDecks.filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
                                 }
                             }.frame(minHeight: 40, maxHeight: .infinity)
                             HStack(alignment: .top, spacing: 4) {
@@ -86,7 +86,9 @@ struct CompactTopBar: View {
             DriveEjectButton()
             Menu {
                 Toggle("Waveforms (WAVE)", isOn: Binding(get: { app.waveMode }, set: { v in withAnimation(.easeInOut(duration: 0.2)) { app.waveMode = v } }))
-                Toggle("4 decks", isOn: Binding(get: { core.four }, set: { core.setFour($0); if !$0 { app.midi.resetSides() } }))
+                Picker("Decks", selection: Binding(get: { core.deckCount }, set: { app.setDecks($0) })) {
+                    Text("2 decks").tag(2); Text("3 decks").tag(3); Text("4 decks").tag(4)
+                }
                 Button { fxSheet = true } label: { Label("Beat FX: \(fx.fx.rawValue)\(fx.on ? " (on)" : "")", systemImage: "sparkles") }
                 Button { rec.recording ? rec.stop(app.audio.engine) : rec.start(app.audio.engine) } label: {
                     Label(rec.recording ? "Stop recording" : "Record the mix", systemImage: rec.recording ? "stop.circle" : "record.circle")
@@ -115,8 +117,8 @@ struct CompactDeck: View {
     var body: some View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
-                if app.core.four {
-                    // 4 decks: the number swaps this side between its two decks (1 ⇄ 3, 2 ⇄ 4)
+                if app.core.four && (side == 0 || app.core.deckCount == 4) {
+                    // 4 decks: the number swaps this side between its two decks (1 ⇄ 3, 2 ⇄ 4); 3 decks: the left side only
                     Button { let o = deck.i < 2 ? deck.i + 2 : deck.i - 2; app.midi.setSide(side, o); app.objectWillChange.send() } label: {
                         Text("\(deck.i + 1)⇄\(deck.i < 2 ? deck.i + 3 : deck.i - 1)").font(.system(size: 12, weight: .heavy)).frame(width: 44, height: c.header)
                             .foregroundStyle(Color.black).background(RoundedRectangle(cornerRadius: 6).fill(color))

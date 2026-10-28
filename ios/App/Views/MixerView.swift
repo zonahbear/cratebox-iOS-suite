@@ -13,7 +13,7 @@ struct MixerView: View {
     @State private var fxSheet = false
     @Environment(\.phoneMetrics) var m
 
-    var order: [Int] { core.four ? [2, 0, 1, 3] : [0, 1] }
+    var order: [Int] { [[0, 1], [2, 0, 1], [2, 0, 1, 3]][core.deckCount - 2] }
 
     var body: some View {
         if masterBar { phoneMaster } else if phone { phoneBody } else { fullBody }
@@ -211,7 +211,7 @@ struct BeatFXView: View {
                 }
             }
             HStack(spacing: 4) {
-                ForEach(0..<(core.four ? 4 : 2), id: \.self) { c in LitButton(label: "\(c + 1)", on: fx.ch == c, color: Theme.deck[c]) { fx.channel(c) } }
+                ForEach(core.activeDecks, id: \.self) { c in LitButton(label: "\(c + 1)", on: fx.ch == c, color: Theme.deck[c]) { fx.channel(c) } }
                 LitButton(label: "M", on: fx.ch == 4, color: Theme.fg) { fx.channel(4) }
             }
             HStack(spacing: 8) {

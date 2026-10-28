@@ -35,7 +35,7 @@ struct DeckView: View {
             if app.core.four && chips {
                 // which deck this side plays: 1 or 3 on the left, 2 or 4 on the right
                 HStack(spacing: 4) {
-                    ForEach([deck.i % 2, deck.i % 2 + 2], id: \.self) { d in
+                    ForEach([deck.i % 2, deck.i % 2 + 2].filter { app.core.deckActive($0) }, id: \.self) { d in
                         let on = d == deck.i
                         Button { app.midi.setSide(d % 2, d); app.objectWillChange.send() } label: {
                             Text("DECK \(d + 1)").font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 20)
