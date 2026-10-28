@@ -81,7 +81,8 @@ struct BrowserOverlay: View {
     }
 
     func sortChip(_ label: String, _ k: SortKey) -> some View {
-        let (cur, desc) = LibraryPane.storedSort(app.view), on = cur == k
+        let (cur, desc) = LibraryPane.storedSort(app.view)
+        let on = cur == k
         return HStack(spacing: 0) {
             Button { LibraryPane.setStoredSort(app.view, k); app.showBrowser(); app.objectWillChange.send() } label: {
                 Text(label + (on ? (desc ? " ▾" : " ▴") : "")).font(.system(size: 10, weight: .heavy))

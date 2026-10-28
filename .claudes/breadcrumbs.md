@@ -142,3 +142,20 @@
 - Open: P2 (streaming/mono decode: changes analysis input, parity risk), P9 (measure new devices).
 - HEAT (personal/heat only): Engine.recordAfterMix + recordMixed → REC includes the watch mic; slot-4 backup kept in
   UserDefaults `cb.tc.restore.<id>` and restored on the next connect after the device's own cycle.
+## 2026-10-28 06:20-07:00: theremin, GLOW, 3 decks, quick library (personal/heat, thread "Add theremin, GLOW and 3 decks to Cratebox HEAT")
+
+- PUFF (FxUnit.swift) is now Cratebox OS's theremin: voice 220→880 Hz with the hit (150 ms glide, 5.5 Hz vibrato,
+  0.18 2nd harmonic, ×0.22×hit) over the tape warble. Same maths in Cratebox-Linux src/fx.rs and web cratebox.html (#11).
+- GLOW: TrueCurve.Glow (rainbow + music envelope, FX depth knob = brightness/speed/sensitivity/nothing) +
+  Lorax.Path.lanternCmd/lanternColor (HA-Puff paths, untested on a Proxy). HeatController.glowLoop: ≤5 writes/s,
+  never while a curve/HOLD runs, 3 refusals = paused. UserDefaults cb.tc.glow / cb.tc.glowKnob. UI: GlowRow in HeatPanel.
+- 3 decks: Core.three + deckCount/activeDecks/setDecks/cycleDecks (prefs cb.three); AppModel.setDecks fixes the
+  controller sides; MIDIEngine.setSide refuses decks ≥ deckCount, so the right layer stays on 2. DECKS button
+  label "N DECKS", Settings/compact menu = Picker 2/3/4.
+- FLX4 0x96 0x48/0x49 (SHIFT+LOAD) → "loadShift" deck 3/4 (assumed from the old map, which sent them to load 1/2;
+  not checked on hardware). Quick library (BrowserOverlay): BPM / KEY sort chips (LibraryPane.setStoredSort, shared
+  with the library's own sort via a notification) and a load button per active deck.
+- Tests: TrueCurveTests testPuffSingsHigherTheHarderTheHit / testGlowBreathesWithTheMusic, CoreTests testThreeDecks /
+  testShiftLoadGoesToDecks3And4. ios.yml app build still fails on the empty WatchMic AppIcon (known), so app-target
+  code is only compiled by testflight.yml.
+- Only the HEAT build got these (Jonah: one TestFlight build). The shipping app (preview/truecurve-usb) has none of it.
