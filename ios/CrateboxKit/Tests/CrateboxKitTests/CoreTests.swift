@@ -159,12 +159,13 @@ final class CoreTests: XCTestCase {
         a.setPitch(0.5); render(e, c, secs: 0.5)
         XCTAssertEqual(a.effBpm(), 124, accuracy: 0.1, "a follower's fader does nothing")
         a.setPitch(0)
-        a.makeMaster(); render(e, c, secs: 0.5)
+        a.makeMaster()
+        a.syncPressed(); XCTAssertTrue(a.sync, "the release that ends the hold doesn't turn SYNC off")
+        render(e, c, secs: 0.5)
         XCTAssertTrue(a.sync && b.sync)
         a.setPitch(0.5); render(e, c, secs: 1)                     // now deck 1 leads: its fader moves both
         XCTAssertEqual(a.effBpm(), 124 * 1.03, accuracy: 0.1)
         XCTAssertEqual(b.effBpm(), 124 * 1.03, accuracy: 0.1)
-        a.syncPressed(); XCTAssertTrue(a.sync, "the release that ends the hold doesn't turn SYNC off")
     }
     func testSyncMultipliersStayInTheTempoRange() {
         XCTAssertEqual(DeckModel.pickMult(96.0 / 92, range: 6), 1)                // +4.3%: fine at ±6
