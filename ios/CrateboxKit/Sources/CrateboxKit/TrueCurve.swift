@@ -181,6 +181,65 @@ public enum TrueCurve {
         }
     }
 
+    /// GLOW: a slow rainbow on the Puffco's lantern that breathes with the music (Cratebox OS's heat::Glow).
+    /// `tick` takes the master level (0...1, peak) and the FX knob (0...1) about 20 times a second and returns a
+    /// colour when one is worth sending (at most 5 a second, and only when it has moved: a BLE write takes
+    /// ~50-100 ms). The knob sets one of brightness / speed / sensitivity, eased so a twist never jumps.
+    public struct Glow {
+        public enum Knob: String, CaseIterable { case intensity, speed, sensitivity, off }
+        public private(set) var hue = 0.0, env = 0.0
+        var knob = 0.5, sent: [UInt8]? = nil, at = -10.0, last: Double? = nil
+        public init() {}
+        /// the colour for this moment, given seconds since the last call
+        public mutating func color(_ dt: Double, level: Double, knob k0: Double, what: Knob) -> [UInt8] {
+            let dt = min(max(dt, 0), 0.5)
+            knob += (min(max(k0, 0), 1) - knob) * (1 - exp(-dt / 0.4))
+            let k = knob
+            var intensity = 0.6, speed = 0.04, sens = 1.0
+            switch what {
+            case .intensity: intensity = 0.1 + 0.9 * k
+            case .speed: speed = 0.005 + 0.3 * k * k
+            case .sensitivity: sens = 0.3 + 2.7 * k
+            case .off: break
+            }
+            // the music's envelope: quick to rise, slow to fall (smooth, not a strobe)
+            let x = pow(min(max(level, 0) * sens, 1), 0.7)
+            env += (x - env) * (1 - exp(-dt / (x > env ? 0.12 : 0.8)))
+            hue = (hue + 360 * speed * dt * (1 + 0.6 * env)).truncatingRemainder(dividingBy: 360)
+            return Glow.hsv(hue, 0.85, intensity * (0.2 + 0.8 * env))
+        }
+        /// call often with the time in seconds; a colour when it's time to send one
+        public mutating func tick(_ now: Double, level: Double, knob: Double, what: Knob) -> [UInt8]? {
+            let dt = last.map { now - $0 } ?? 0
+            last = now
+            let c = color(dt, level: level, knob: knob, what: what)
+            if now - at < 0.2 { return nil }
+            let moved = sent.map { p in (0..<3).contains { abs(Int(p[$0]) - Int(c[$0])) >= 3 } } ?? true
+            if !moved && now - at < 3 { return nil }
+            sent = c; at = now
+            return c
+        }
+        /// the colour sent last (for the panel's swatch)
+        public var shown: [UInt8] { sent ?? [0, 0, 0] }
+        /// forget what was sent (after GLOW was off or the Puffco reconnected)
+        public mutating func reset() { sent = nil }
+        static func hsv(_ h: Double, _ s: Double, _ v: Double) -> [UInt8] {
+            let c = v * s, hp = h / 60
+            let x = c * (1 - abs(hp.truncatingRemainder(dividingBy: 2) - 1))
+            let rgb: [Double]
+            switch Int(hp) {
+            case 0: rgb = [c, x, 0]
+            case 1: rgb = [x, c, 0]
+            case 2: rgb = [0, c, x]
+            case 3: rgb = [0, x, c]
+            case 4: rgb = [x, 0, c]
+            default: rgb = [c, 0, x]
+            }
+            let m = v - c
+            return rgb.map { UInt8(min(255, max(0, (($0 + m) * 255).rounded()))) }
+        }
+    }
+
     /// the simulator's heater (the app's Simulator device and the tests): a "truth" model that differs from the
     /// driver's default, a dead time on live targets, and a device that ends its own cycle after the slot's time
     public struct SimHeater {
@@ -238,11 +297,16 @@ public enum Lorax {
     public enum Path {
         public static let mode = "/p/app/mc", state = "/p/app/stat/id", temp = "/p/app/htr/temp", tempAlt = "/p/htr/temp"
         public static let live = "/p/app/thc/temp", slot = "/p/app/hcs", soc = "/p/bat/soc"
+        /// the lantern (mood light): on/off (1 byte) and its colour (`lanternColor`). From community reverse
+        /// engineering (HA-Puff puffco_ble, MIT), checked on a Peak Pro there, not on a Proxy
+        public static let lanternCmd = "/p/app/ltrn/cmd", lanternColor = "/p/app/ltrn/colr"
         public static func pTemp(_ s: UInt8) -> String { "/u/app/hc/\(s)/temp" }
         public static func pTime(_ s: UInt8) -> String { "/u/app/hc/\(s)/time" }
     }
     public enum Fmt { case f32, i10 }
 
+    /// the lantern colour bytes: r, g, b, 0, mode (1 = static), 0, 0, 0
+    public static func lanternColor(_ c: [UInt8]) -> [UInt8] { [c[0], c[1], c[2], 0, 1, 0, 0, 0] }
     public static func frame(seq: UInt16, op: UInt8, _ payload: [UInt8]) -> [UInt8] { [UInt8(seq & 0xff), UInt8(seq >> 8), op] + payload }
     public static func readPayload(_ path: String, max: UInt16) -> [UInt8] { [0, 0, UInt8(max & 0xff), UInt8(max >> 8)] + Array(path.utf8) }
     public static func writePayload(_ path: String, _ bytes: [UInt8]) -> [UInt8] { [0, 0, 0] + Array(path.utf8) + [0] + bytes }

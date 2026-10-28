@@ -34,6 +34,9 @@ enum HeatError: LocalizedError {
     func stop() async -> Bool
     func probeLiveFormat() async
     func setLiveTarget(_ f: Double) async -> Bool
+    /// GLOW: the lantern on/off and its colour (the simulator just takes them)
+    func lantern(_ on: Bool) async -> Bool
+    func lanternColor(_ c: [UInt8]) async -> Bool
 }
 
 private let SVC = CBUUID(string: Lorax.service), SVC_LEGACY = CBUUID(string: Lorax.serviceLegacy)
@@ -247,6 +250,8 @@ final class PuffcoBle: NSObject, HeatDevice {
         guard let r = await read(P.pTime(s), max: 4), r.count >= 4 else { return true }
         return abs(Lorax.f32(r) - secs) <= 1
     }
+    func lantern(_ on: Bool) async -> Bool { await write(P.lanternCmd, [on ? 1 : 0]) }
+    func lanternColor(_ c: [UInt8]) async -> Bool { await write(P.lanternColor, Lorax.lanternColor(c)) }
     func start() async -> Bool { await write(P.mode, [7]) }
     func stop() async -> Bool {
         var ok = false
@@ -322,4 +327,6 @@ final class SimPuffco: HeatDevice {
     func stop() async -> Bool { await io(); h.stop(); return true }
     func probeLiveFormat() async {}
     func setLiveTarget(_ f: Double) async -> Bool { await io(); h.setLiveTarget(f); return true }
+    func lantern(_ on: Bool) async -> Bool { await io(); return true }
+    func lanternColor(_ c: [UInt8]) async -> Bool { await io(); return true }
 }

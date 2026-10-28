@@ -28,6 +28,12 @@ struct HeatButton: View {
             // PUFF in Beat FX: on offer while a Puffco is connected, played by HOLD's temperature drop
             heat.onConnected = { [weak a] c in a?.core.fx.puffReady = c }
             heat.onPuff = { [weak a] v in a?.core.fx.setPuff(v) }
+            // GLOW: the lantern follows the master level; the Beat FX LEVEL/DEPTH knob is its knob too
+            heat.glowInput = { [weak a] in
+                guard let a else { return (0, 0.5) }
+                let p = a.core.lastSnapshot.masterPeak
+                return (Double(max(p.0, p.1)), a.core.fx.depth)
+            }
             heat.demo()
         }
     }
@@ -81,6 +87,7 @@ struct HeatPanel: View {
             .buttonStyle(.borderedProminent).tint(heat.running ? Theme.hot : Theme.cue).foregroundStyle(Color.black)
             .disabled(!heat.connected || heat.phase == .prep || heat.phase == .hold)
             PuffHold(heat: heat, close: close)
+            GlowRow(heat: heat)
             if !heat.msg.isEmpty { Text(heat.msg).font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
             Button("Paste curves from TrueCurve") { heat.paste() }.buttonStyle(.bordered).controlSize(.small)
             Text("Uses profile slot 4 while it runs and puts it back after. Close this and keep mixing: the button shows the bowl temperature.")
@@ -137,8 +144,37 @@ struct PuffHold: View {
                         .onLongPressGesture(minimumDuration: 30, maximumDistance: 60, perform: {}, onPressingChanged: { p in hitting = p; heat.simHit(p ? 1 : 0) })
                 }
             }
-            Text("Beat FX → PUFF (shows while a Puffco is connected). A harder hit drops the bowl temperature further, and the warble gets deeper and faster. LEVEL caps it.")
+            Text("Beat FX → PUFF (shows while a Puffco is connected). It plays like a theremin: a harder hit drops the bowl temperature further, and the voice glides higher (up to two octaves) and louder over a tape warble. LEVEL caps it.")
                 .font(.system(size: 11)).foregroundStyle(Theme.muted).fixedSize(horizontal: false, vertical: true)
+        }
+    }
+}
+
+/// GLOW: the Puffco's lantern as a slow rainbow that breathes with the music; the FX knob sets one thing about it
+struct GlowRow: View {
+    @ObservedObject var heat: HeatController
+    var body: some View {
+        HStack(spacing: 6) {
+            Toggle("GLOW", isOn: $heat.glowOn).font(.system(size: 12, weight: .bold)).fixedSize()
+                .accessibilityHint("The Puffco's lantern drifts through the rainbow and brightens with the music. Paused during a heat run")
+            Text("FX knob sets").font(.system(size: 11)).foregroundStyle(Theme.muted)
+            Picker("FX knob sets", selection: $heat.glowKnob) {
+                ForEach(TrueCurve.Glow.Knob.allCases, id: \.self) { k in Text(GlowRow.name(k)).tag(k) }
+            }.pickerStyle(.menu).controlSize(.small)
+            Spacer(minLength: 0)
+            if heat.glowOn && heat.connected {
+                let c = heat.glowShown
+                Circle().fill(Color(red: Double(c[0]) / 255, green: Double(c[1]) / 255, blue: Double(c[2]) / 255))
+                    .frame(width: 14, height: 14).overlay(Circle().stroke(Theme.line2, lineWidth: 1))
+            }
+        }
+    }
+    static func name(_ k: TrueCurve.Glow.Knob) -> String {
+        switch k {
+        case .intensity: return "brightness"
+        case .speed: return "speed"
+        case .sensitivity: return "sensitivity"
+        case .off: return "nothing"
         }
     }
 }

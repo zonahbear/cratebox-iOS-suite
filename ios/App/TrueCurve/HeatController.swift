@@ -45,6 +45,15 @@ final class HeatController: NSObject, ObservableObject {
     /// the panel's readout while holding: dip now, biggest dip lately, full-warble dip, readings a second
     @Published private(set) var puffInfo = ""
     private var drop = 0.0
+    /// GLOW: the lantern drifts through the rainbow and brightens with the music (Cratebox OS's GLOW); the FX
+    /// LEVEL/DEPTH knob also sets its brightness, speed or sensitivity. Sent between heat runs only.
+    @Published var glowOn: Bool { didSet { UserDefaults.standard.set(glowOn, forKey: "cb.tc.glow"); glowFails = 0 } }
+    @Published var glowKnob: TrueCurve.Glow.Knob { didSet { UserDefaults.standard.set(glowKnob.rawValue, forKey: "cb.tc.glowKnob") } }
+    /// the colour sent last, for the panel's swatch
+    @Published private(set) var glowShown: [UInt8] = [0, 0, 0]
+    /// the master level (0...1) and the FX knob (0...1), read ~20 times a second while GLOW is on
+    var glowInput: (() -> (level: Double, knob: Double))?
+    private var glow = TrueCurve.Glow(), glowTask: Task<Void, Never>?, lanternOn = false, glowFails = 0
 
     private var live: Double?, target: Double?, t: Double?, end = 0.0, battery: Int?
     private var abort = false
@@ -60,6 +69,8 @@ final class HeatController: NSObject, ObservableObject {
         let hf = UserDefaults.standard.double(forKey: "cb.tc.holdF"), pf = UserDefaults.standard.double(forKey: "cb.tc.puffFull2")
         holdF = hf > 0 ? min(TrueCurve.maxF, max(TrueCurve.minF, hf)) : 500
         puffFull = pf
+        glowOn = UserDefaults.standard.bool(forKey: "cb.tc.glow")
+        glowKnob = TrueCurve.Glow.Knob(rawValue: UserDefaults.standard.string(forKey: "cb.tc.glowKnob") ?? "") ?? .intensity
         super.init()
         if !curveNames.contains(name) { name = TrueCurve.defaultName }
     }
@@ -146,6 +157,7 @@ final class HeatController: NSObject, ObservableObject {
                 found = []
                 say("Connected to \(d.name).")
                 idle()
+                glowLoop(d)
                 await restoreLeftover(d)
             } catch {
                 ble = nil
@@ -167,6 +179,32 @@ final class HeatController: NSObject, ObservableObject {
                 }
                 n += 1
                 try? await Task.sleep(for: .seconds(self.panelOpen ? 1 : 3))
+            }
+        }
+    }
+
+    /// GLOW while this device is connected: a colour at most 5 times a second, only when no curve or HOLD runs
+    /// (heat comes first; the BLE link is one request at a time); the lantern off again when GLOW goes off.
+    /// A Puffco that refuses three writes in a row is left alone until GLOW is switched off and on.
+    private func glowLoop(_ d: HeatDevice) {
+        glowTask?.cancel()
+        lanternOn = false; glowFails = 0; glow.reset()
+        glowTask = Task { [weak self] in
+            while let self, self.dev === d, d.connected, !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(50))
+                guard !self.running else { continue }
+                if !self.glowOn {
+                    if self.lanternOn { self.lanternOn = false; _ = await d.lantern(false); self.glow.reset() }
+                    continue
+                }
+                guard self.glowFails < 3, let inp = self.glowInput?(),
+                      let c = self.glow.tick(CACurrentMediaTime(), level: inp.level, knob: inp.knob, what: self.glowKnob) else { continue }
+                if !self.lanternOn { self.lanternOn = await d.lantern(true) }
+                if self.lanternOn, await d.lanternColor(c) { self.glowFails = 0; self.glowShown = c }
+                else {
+                    self.glowFails += 1
+                    if self.glowFails == 3 { self.say("This Puffco didn't take lantern colours, so GLOW is paused (turn GLOW off and on to try again).") }
+                }
             }
         }
     }

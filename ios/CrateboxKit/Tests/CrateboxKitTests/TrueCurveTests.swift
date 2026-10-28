@@ -146,8 +146,53 @@ final class TrueCurveTests: XCTestCase {
         for b in 0..<400 {
             for i in 0..<n { let v = Float(sin(Double(k) * 2 * .pi * 440 / sr)) * 0.5; l[i] = v; r[i] = v; k += 1 }
             fx.process(l, r, n, time: Double(b * n) / sr)
-            for i in 0..<n { XCTAssertTrue(l[i].isFinite && abs(l[i]) <= 0.51); energy += Double(l[i] * l[i]) }
+            // the tone (0.5) plus the theremin voice (at most 0.22 × 1.18)
+            for i in 0..<n { XCTAssertTrue(l[i].isFinite && abs(l[i]) <= 0.78); energy += Double(l[i] * l[i]) }
         }
         XCTAssertGreaterThan(energy, 1000, "the tone still comes through")
+    }
+
+    /// PUFF is a theremin: silence in, its voice is the only sound; a hard hit sings ≈ 880 Hz (A5), a light one
+    /// lower and quieter, no hit nothing (same check as Cratebox OS's puff_sings_higher_the_harder_the_hit)
+    func testPuffSingsHigherTheHarderTheHit() {
+        func pitch(_ hit: Double) -> (Double, Float) {
+            let sr = 48000.0, fx = FxUnit(sampleRate: sr), n = 128
+            let l = UnsafeMutablePointer<Float>.allocate(capacity: n), r = UnsafeMutablePointer<Float>.allocate(capacity: n)
+            defer { l.deallocate(); r.deallocate() }
+            fx.beat.set(fx: .puff, depth: 1, on: true, mod: hit)
+            var last: [Float] = []
+            for b in 0..<(4 * 375) {         // 4 s; keep the last second
+                for i in 0..<n { l[i] = 0; r[i] = 0 }
+                fx.process(l, r, n, time: Double(b * n) / sr)
+                if b >= 3 * 375 { last += (0..<n).map { l[$0] } }
+            }
+            let peak = last.map { abs($0) }.max() ?? 0
+            let up = zip(last, last.dropFirst()).filter { $0.0 < 0 && $0.1 >= 0 }.count
+            return (Double(up), peak)
+        }
+        let (soft, softPeak) = pitch(0.2), (hard, hardPeak) = pitch(1)
+        XCTAssertTrue((780.0..<980.0).contains(hard), "hard hit ≈ 880 Hz: \(hard)")
+        XCTAssertTrue(soft < hard * 0.6 && softPeak < hardPeak, "soft \(soft) Hz / \(softPeak), hard \(hard) Hz / \(hardPeak)")
+        XCTAssertLessThan(pitch(0).1, 1e-4, "no hit, no voice")
+    }
+
+    /// GLOW: louder is brighter, the rainbow moves, the knob down dims it; the lantern bytes
+    func testGlowBreathesWithTheMusic() {
+        var g = TC.Glow()
+        var quiet: [UInt8] = [0, 0, 0], loud: [UInt8] = [0, 0, 0], low: [UInt8] = [0, 0, 0]
+        for _ in 0..<100 { quiet = g.color(0.05, level: 0, knob: 0.5, what: .intensity) }
+        for _ in 0..<20 { loud = g.color(0.05, level: 0.9, knob: 0.5, what: .intensity) }
+        XCTAssertGreaterThan(Int(loud.max()!), Int(quiet.max()!) * 2, "louder is brighter: \(quiet) \(loud)")
+        let h0 = g.hue
+        for _ in 0..<100 { _ = g.color(0.05, level: 0.5, knob: 0.5, what: .intensity) }
+        XCTAssertNotEqual(g.hue, h0, "the rainbow moves")
+        for _ in 0..<100 { low = g.color(0.05, level: 1, knob: 0, what: .intensity) }
+        XCTAssertLessThan(low.max()!, 60, "knob down = dim: \(low)")
+        XCTAssertEqual(Lorax.lanternColor([1, 2, 3]), [1, 2, 3, 0, 1, 0, 0, 0])
+        // at most 5 a second
+        var t = TC.Glow(), sent = 0
+        for i in 0..<100 { if t.tick(Double(i) * 0.05, level: Double(i % 7) / 7, knob: 1, what: .speed) != nil { sent += 1 } }
+        XCTAssertLessThanOrEqual(sent, 26)
+        XCTAssertGreaterThan(sent, 3)
     }
 }
