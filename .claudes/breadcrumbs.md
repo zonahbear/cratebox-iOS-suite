@@ -138,3 +138,6 @@
   The UI calls `syncPressed()`, which ignores the release that ends a hold. The FLX4's SYNC (MIDI) still just toggles.
 - Tests: testSyncFlipFlop140And92EndsOnTheBeat, testSyncMultipliersStayInTheTempoRange, testHoldSyncMakesTheMaster.
   The web app and Linux still have the old ¼-beat deadband and no range limit (parity gap).
+- CI (ios.yml run 40655884784): 78/78 kit tests pass and the app builds. Catch-up from 0.4 beat at 184 BPM takes about 21 s
+  (2% nudge down to ¼ beat, then 0.6% max) and settles at 1.5 ms. Swift needs explicit `[Double]` types in pickMult and
+  syncOutOfRange, or it times out on the type-check. Shipped as Suite 4662e1d (preview/truecurve-usb) and HEAT faaf702 (personal/heat).
