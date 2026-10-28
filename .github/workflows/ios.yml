@@ -32,12 +32,16 @@ jobs:
           "$RUNNER_TEMP/venv/bin/python" tests/make_tracks.py "$RUNNER_TEMP/music" 2>&1 | tail -5 | tee -a ci.log
           (cd "$RUNNER_TEMP/music" && md5 -r *.wav | sed 's/ /  /') | tee md5.txt
           diff <(sort md5.txt) <(sort ios/CrateboxKit/Tests/CrateboxKitTests/Fixtures/music.md5) | tee -a ci.log || echo "TRACKS DIFFER from the fixtures' (numpy?)" | tee -a ci.log
+      # the test and build steps carry on past a failure (so the screenshots and the log still happen) but the last
+      # step fails the run if either of them failed: a green run means the tests passed and the app built
       - name: Core tests (swift test, optimised)
+        id: tests
         continue-on-error: true
         run: |
           set -o pipefail
           cd ios/CrateboxKit && CRATEBOX_MUSIC="$RUNNER_TEMP/music" swift test -c release -Xswiftc -enable-testing 2>&1 | tee -a ../../ci.log
       - name: Launch in the simulators (screenshots)
+        id: app
         continue-on-error: true
         timeout-minutes: 45
         env: { DEVICES: "${{ inputs.devices || 'iPhone 16 Pro Max,iPad Pro 13-inch (M4)' }}" }
@@ -47,6 +51,7 @@ jobs:
           xcodegen generate 2>&1 | tail -3 | tee -a ../ci.log
           xcodebuild -project Cratebox.xcodeproj -scheme Cratebox -configuration Release -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$RUNNER_TEMP/dds" CODE_SIGNING_ALLOWED=NO build 2>&1 | grep -E "error:|BUILD" | tee -a ../ci.log
+          [ "${PIPESTATUS[0]}" = 0 ] || { echo "APP BUILD FAILED" | tee -a ../ci.log; exit 1; }
           APP=$(ls -d "$RUNNER_TEMP"/dds/Build/Products/Release-iphonesimulator/*.app | head -1)
           echo "APP=$APP" >> "$GITHUB_ENV"
           [ "$DEVICES" = none ] && exit 0      # measurement run only
@@ -170,3 +175,8 @@ jobs:
           cp summary.txt ios-latest.txt
           mkdir -p shots && cp "$RUNNER_TEMP"/shots/*.png "$RUNNER_TEMP"/shots/*.txt "$RUNNER_TEMP"/shots/*.html shots/ 2>/dev/null || true
           git add -f ios-latest.txt shots && git commit -qm "ios ci ${{ github.run_id }}" && git push -qf origin "HEAD:$LOGS"
+      - name: Fail the run if the tests or the app build failed
+        if: always()
+        run: |
+          echo "tests: ${{ steps.tests.outcome }} · app: ${{ steps.app.outcome }}"
+          [ "${{ steps.tests.outcome }}" = success ] && [ "${{ steps.app.outcome }}" = success ]

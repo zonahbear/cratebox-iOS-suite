@@ -228,6 +228,31 @@ final class USBTests: XCTestCase {
         XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: relA), bA2)
         XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: relB), bB)
     }
+    /// backups are ordered by their sequence number, not their time: a clock tie or a clock set back can't make an
+    /// older backup look newer, and pruning never removes one a journal still points at
+    func testBackupOrderIgnoresTheClockAndKeepsJournalledOnes() throws {
+        let root = try tempStick(oneLibrary: nil)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let rel = "PIONEER/USBANLZ/P001/0000AAAA/ANLZ0000.DAT", flat = "PIONEER_USBANLZ_P001_0000AAAA_ANLZ0000.DAT"
+        try fm.createDirectory(at: root.appendingPathComponent(rel).deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([0]).write(to: root.appendingPathComponent(rel))
+        let dir = root.appendingPathComponent(USBSafeWrite.dirName + "/backups")
+        try fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        // an earlier backup whose time and tail sort after anything made now (a clock that was ahead)
+        let early = "\(flat).n00000001.2099-12-31T23-59-59.999Z-FFFFFF.bak"
+        try Data([9]).write(to: dir.appendingPathComponent(early))
+        // a journal of an unfinished write that still points at it
+        let j = USBJournal(target: rel, backup: USBSafeWrite.dirName + "/backups/" + early, oldHash: "a", newHash: "b", oldSize: 1, newSize: 1, state: "staged", when: Date())
+        try JSONEncoder().encode(j).write(to: USBSafeWrite.journalURL(root, "PIONEER/other.pdb"))
+        var made = [URL]()
+        for k in 1...7 { made.append(try USBSafeWrite.write([UInt8(k)], root: root, rel: rel, expectedHash: nil, appBackupDir: nil, keepBackups: 3) { _ in }) }
+        XCTAssertEqual(USBSafeWrite.latestBackup(root: root, rel: rel), made.last)
+        XCTAssertTrue(made.last!.lastPathComponent.contains(".n00000008."))
+        let left = Set(try fm.contentsOfDirectory(atPath: dir.path))
+        XCTAssertTrue(left.contains(early), "journalled: kept")
+        XCTAssertEqual(left.subtracting([early]), Set(made.suffix(3).map { $0.lastPathComponent }))
+    }
     func testWriteGate() {
         let none = USBWriteGate(proven: [])
         XCTAssertNotNil(none.playlistWriteBlocker(deviceLibrary: true, oneLibrary: false))

@@ -45,7 +45,8 @@ public final class Engine {
     let mL: UnsafeMutablePointer<Float>, mR: UnsafeMutablePointer<Float>, cL: UnsafeMutablePointer<Float>, cR: UnsafeMutablePointer<Float>
     let hL: UnsafeMutablePointer<Float>, hR: UnsafeMutablePointer<Float>
     // commands in, reports out (the audio thread never waits: it tries the lock and skips if it's busy)
-    var lock = os_unfair_lock()
+    // on the heap: a lock needs an address that never moves, which a Swift stored property doesn't promise
+    let lock: UnsafeMutablePointer<os_unfair_lock> = { let p = UnsafeMutablePointer<os_unfair_lock>.allocate(capacity: 1); p.initialize(to: os_unfair_lock()); return p }()
     var pending = [EngineCommand]()
     var inbox = [EngineCommand]()
     // written by the audio thread in place (no array copy-on-write there)
@@ -53,9 +54,15 @@ public final class Engine {
     var reportTime = 0.0, reportHost = 0.0, reportMaster: (Float, Float) = (0, 0)
     // replaced tracks, freed off the audio thread: `retired` belongs to the audio thread alone; it hands them to
     // `trash` (shared, under the lock) and the main thread takes them from there and lets go after unlocking
+    // (room for 16 kept in each: only a 17th track replaced before the main thread's next snapshot, which comes
+    // every frame, would make the audio thread grow `retired`, so that's an allocation, not a free, and in practice never)
     var retired = [PCMTrack](), trash = [PCMTrack]()
     /// a copy of the master output (after the limiter) for recording; set by the recorder
     var recordTap: ((UnsafePointer<Float>, UnsafePointer<Float>, Int) -> Void)?
+    /// how many .recordTap commands the audio thread has applied (reported under the lock): once it's past the one
+    /// that removed a tap, that tap will never be called again
+    var tapApplied = 0, reportTapApplied = 0
+    public var tapChanges: Int { os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }; return reportTapApplied }
 
     public init(sampleRate: Double) {
         self.sampleRate = sampleRate
@@ -73,17 +80,17 @@ public final class Engine {
     }
 
     /// From any thread.
-    public func post(_ c: EngineCommand) { os_unfair_lock_lock(&lock); pending.append(c); os_unfair_lock_unlock(&lock) }
-    public func post(_ cs: [EngineCommand]) { os_unfair_lock_lock(&lock); pending.append(contentsOf: cs); os_unfair_lock_unlock(&lock) }
+    public func post(_ c: EngineCommand) { os_unfair_lock_lock(lock); pending.append(c); os_unfair_lock_unlock(lock) }
+    public func post(_ cs: [EngineCommand]) { os_unfair_lock_lock(lock); pending.append(contentsOf: cs); os_unfair_lock_unlock(lock) }
     /// What the audio thread last reported, and the tracks it's done with (drop them here).
     public func snapshot() -> EngineSnapshot {
         var s = EngineSnapshot()
         var done = [PCMTrack]()
-        os_unfair_lock_lock(&lock)
+        os_unfair_lock_lock(lock)
         s.time = reportTime; s.host = reportHost; s.masterPeak = reportMaster
         for i in 0..<4 { s.decks[i] = reports[i] }
         if !trash.isEmpty { done.reserveCapacity(trash.capacity); swap(&trash, &done) }   // trash keeps an empty buffer
-        os_unfair_lock_unlock(&lock)
+        os_unfair_lock_unlock(lock)
         withExtendedLifetime(done) {}           // freed after this, outside the lock
         return s
     }
@@ -105,7 +112,7 @@ public final class Engine {
         case .clock(let u, let c): (u < 4 ? strips[u].fx : masterFx).clock = c
         case .fxMod(let u, let m): (u < 4 ? strips[u].fx : masterFx).beat.set(mod: m)
         case .output(let o): output = o
-        case .recordTap(let f): recordTap = f
+        case .recordTap(let f): recordTap = f; tapApplied += 1
         case .testCue: beepLeft = Int(1.05 * sampleRate); beepPhase = 0; beepMaster = false
         case .testMaster: beepLeft = Int(1.05 * sampleRate); beepPhase = 0; beepMaster = true
         }
@@ -113,9 +120,9 @@ public final class Engine {
 
     /// The audio callback: `outs` are the output channels (2, or 4 for master on 1/2 and headphones on 3/4).
     public func render(_ outs: [UnsafeMutablePointer<Float>], _ n: Int) {
-        if os_unfair_lock_trylock(&lock) {
+        if os_unfair_lock_trylock(lock) {
             swap(&pending, &inbox)
-            os_unfair_lock_unlock(&lock)
+            os_unfair_lock_unlock(lock)
             for c in inbox { apply(c) }
             inbox.removeAll(keepingCapacity: true)
         }
@@ -171,17 +178,17 @@ public final class Engine {
             }
             frames += Int64(m); done += m
         }
-        if os_unfair_lock_trylock(&lock) {
+        if os_unfair_lock_trylock(lock) {
             reportTime = Double(frames) / sampleRate; reportHost = hostSeconds()
             for i in 0..<4 {
                 let d = decks[i]
                 reports[i] = DeckReport(pos: d.pos, speed: d.speed, playing: d.playing, ended: d.ended, coast: d.coast, peakL: strips[i].peakL, peakR: strips[i].peakR, seq: d.seq)
             }
-            reportMaster = (mpl, mpr)
+            reportMaster = (mpl, mpr); reportTapApplied = tapApplied
             // hand retired tracks over (a swap of two buffers: nothing allocated or freed here); if the main
             // thread hasn't taken the last lot yet, they wait for the next block
             if !retired.isEmpty && trash.isEmpty { swap(&retired, &trash) }
-            os_unfair_lock_unlock(&lock)
+            os_unfair_lock_unlock(lock)
         }
     }
     public var time: Double { Double(frames) / sampleRate }

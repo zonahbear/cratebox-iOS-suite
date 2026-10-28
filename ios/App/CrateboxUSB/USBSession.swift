@@ -48,6 +48,10 @@ final class USBSession: ObservableObject {
     @Published var message = "" // the last thing that happened, for the status line
     private(set) var pdbBytes: [UInt8]?, olBytes: [UInt8]?
     var stickId: String { root.map { "usb-" + $0.lastPathComponent } ?? "" }
+    // background reads and scans check theirs before they change anything: a newer one, an eject or a reopen (even
+    // of the same stick at the same URL) makes the old result stale
+    private var tokens = RequestTokens()
+    private var recoveryNotes: [String] = []      // what open() put right, shown with the reload's own line
 
     // ---- the scan ----
     @Published var players: [String] { didSet { UserDefaults.standard.set(players, forKey: "cb.usb.players") } }
@@ -59,7 +63,10 @@ final class USBSession: ObservableObject {
     @Published private(set) var scanText = ""
     @Published var skipped: Set<String> = [] { didSet { UserDefaults.standard.set(Array(skipped), forKey: "cb.usb.skipped.\(stickId)") } }
     @Published var fixList: [String] = []           // track keys to sort out in rekordbox
-    private var cancelScan = false
+    // one per scan, so a new scan can't un-cancel the one an eject stopped
+    private final class Cancel { private let l = NSLock(); private var v = false
+        var on: Bool { get { l.lock(); defer { l.unlock() }; return v } set { l.lock(); v = newValue; l.unlock() } } }
+    private var cancelScan = Cancel()
     var readiness: Readiness {
         guard let r = report else { return .unknown }
         if r.pdbHash != pdbBytes.map(USBSafeWrite.hash) || r.olHash != olBytes.map(USBSafeWrite.hash) { return .unknown }   // the stick changed since
@@ -118,6 +125,7 @@ final class USBSession: ObservableObject {
         _ = url.startAccessingSecurityScopedResource()
         if remember, let bm = try? url.bookmarkData(options: [], includingResourceValuesForKeys: nil, relativeTo: nil) { UserDefaults.standard.set(bm, forKey: "cb.usb.bookmark") }
         if let r = root, r != url { r.stopAccessingSecurityScopedResource() }
+        cancelScan.on = true; tokens.newSession(); scanning = false; loading = false; recoveryNotes = []
         root = url; ejected = false
         name = Devices.label(url)
         let v = try? url.resourceValues(forKeys: [.volumeLocalizedFormatDescriptionKey, .volumeTypeNameKey])
@@ -129,11 +137,12 @@ final class USBSession: ObservableObject {
         let rec = USBSafeWrite.recover(root: url)
         for r in rec {
             switch r {
-            case .restored(let m), .cleanedUp(let m): note(m)
-            case .needsAttention(let m): note("Needs attention: \(m)")
+            case .restored(let m), .cleanedUp(let m): recoveryNotes.append(m)
+            case .needsAttention(let m): recoveryNotes.append("Needs attention: \(m)")
             case .nothing: break
             }
         }
+        if !recoveryNotes.isEmpty { note(recoveryNotes.joined(separator: " · ")) }
         reload()
     }
 
@@ -141,6 +150,7 @@ final class USBSession: ObservableObject {
     func reload(keepNodes: Bool = false) {
         guard let root else { return }
         loading = true
+        let tok = tokens.begin("reload")
         let pdbURL = root.appendingPathComponent("PIONEER/rekordbox/export.pdb"), olURL = root.appendingPathComponent("PIONEER/rekordbox/exportLibrary.db")
         DispatchQueue.global(qos: .userInitiated).async {
             let pdb = (try? Data(contentsOf: pdbURL)).map { [UInt8]($0) }
@@ -150,7 +160,7 @@ final class USBSession: ObservableObject {
             var lib = USBLibrary(pdb: pdb.map(PDB.parse), one: one, oneError: oneErr)
             if let pdb { lib.setFormats(PDB.trackFormats(pdb)) }
             DispatchQueue.main.async {
-                guard self.root == root else { return }      // ejected (or another stick opened) while reading
+                guard self.tokens.isCurrent(tok) else { return }      // ejected, reopened or reloaded again while reading
                 self.pdbBytes = pdb; self.olBytes = ol
                 self.library = lib
                 self.loading = false
@@ -159,8 +169,11 @@ final class USBSession: ObservableObject {
                 if !keepNodes || self.nodes.isEmpty { self.restoringPlaylists = true; self.nodes = fresh; self.restoringPlaylists = false; self.restoreStagedPlaylists() }
                 else { self.saveStagedPlaylists() }          // kept: they now go with this version of the libraries
                 if self.setPlaylist != nil && lib.playlist(self.setPlaylist!) == nil { self.setPlaylist = nil }
-                if pdb == nil && ol == nil { self.note("\(self.name) has no rekordbox library (no PIONEER/rekordbox/export.pdb or exportLibrary.db)") }
-                else { self.note("\(self.name): \(lib.tracks.count) tracks, \(lib.playlists.filter { !$0.folder }.count) playlists · \(lib.hasDeviceLibrary ? "Device Library" : "")\(lib.hasDeviceLibrary && lib.hasOneLibrary ? " + " : "")\(lib.hasOneLibrary ? "OneLibrary" : "")\(oneErr != nil ? " (OneLibrary unreadable)" : "")") }
+                // what open() recovered stays in the line instead of being written over by it
+                let rec = self.recoveryNotes.isEmpty ? "" : " · " + self.recoveryNotes.joined(separator: " · ")
+                self.recoveryNotes = []
+                if pdb == nil && ol == nil { self.note("\(self.name) has no rekordbox library (no PIONEER/rekordbox/export.pdb or exportLibrary.db)" + rec) }
+                else { self.note("\(self.name): \(lib.tracks.count) tracks, \(lib.playlists.filter { !$0.folder }.count) playlists · \(lib.hasDeviceLibrary ? "Device Library" : "")\(lib.hasDeviceLibrary && lib.hasOneLibrary ? " + " : "")\(lib.hasOneLibrary ? "OneLibrary" : "")\(oneErr != nil ? " (OneLibrary unreadable)" : "")" + rec) }
             }
         }
     }
@@ -176,22 +189,23 @@ final class USBSession: ObservableObject {
     func scan(_ m: ScanMode? = nil) {
         guard let lib = library, let root, !scanning else { return }
         let opts = ScanOptions(mode: m ?? mode, players: players, setPlaylist: setPlaylist, fileSystem: fileSystem)
-        scanning = true; cancelScan = false; scanProgress = 0; scanText = "Starting…"
+        scanning = true; cancelScan = Cancel(); scanProgress = 0; scanText = "Starting…"
         let pdb = pdbBytes, ol = olBytes
+        let tok = tokens.begin("scan"), cancel = cancelScan
         DispatchQueue.global(qos: .userInitiated).async {
             let r = Preflight.run(lib, root: root, options: opts, pdbBytes: pdb, olBytes: ol,
-                                  progress: { p, t in DispatchQueue.main.async { self.scanProgress = p; self.scanText = t } },
-                                  cancelled: { self.cancelScan },
+                                  progress: { p, t in DispatchQueue.main.async { guard self.tokens.isCurrent(tok) else { return }; self.scanProgress = p; self.scanText = t } },
+                                  cancelled: { cancel.on },
                                   decode: opts.mode == .deep ? USBPreview.decodeCheck : nil)
             DispatchQueue.main.async {
+                guard self.tokens.isCurrent(tok) else { return }      // ejected or reopened mid-scan: eject already cleared `scanning`
                 self.scanning = false
-                guard self.root == root else { return }      // ejected mid-scan: the result is for a stick that's gone
                 self.report = r
                 self.note("\(opts.mode.title) scan: \(r.tracksChecked) tracks · \(self.readiness.label)")
             }
         }
     }
-    func stopScan() { cancelScan = true }
+    func stopScan() { cancelScan.on = true }
 
     // ---- quick fixes ----
     /// the fixes that can be run in one go, with how many issues each covers
@@ -350,7 +364,8 @@ final class USBSession: ObservableObject {
         guard !restoringPlaylists, library != nil, let u = stagedURL else { return }
         if nodes == originalNodes && !syncPending { try? FileManager.default.removeItem(at: u); return }
         let st = StagedPlaylists(pdbHash: pdbBytes.map(USBSafeWrite.hash), olHash: olBytes.map(USBSafeWrite.hash), nodes: nodes, sync: syncPending)
-        try? JSONEncoder().encode(st).write(to: u)
+        do { try JSONEncoder().encode(st).write(to: u, options: .atomic) }
+        catch { note("Couldn't save the staged playlist changes (\(error.localizedDescription)): they're kept until you close the app") }
     }
     private func clearStagedPlaylists() { if let u = stagedURL { try? FileManager.default.removeItem(at: u) } }
     private func restoreStagedPlaylists() {
@@ -364,7 +379,11 @@ final class USBSession: ObservableObject {
         restoringPlaylists = false
         if playlistsChanged { note("Staged playlist changes from last time are back (Staged changes)") }
     }
-    private func saveEdits() { if !loadingEdits, let u = editsURL { try? JSONEncoder().encode(edits).write(to: u) } }
+    private func saveEdits() {
+        guard !loadingEdits, let u = editsURL else { return }
+        do { try JSONEncoder().encode(edits).write(to: u, options: .atomic) }
+        catch { note("Couldn't save the track edits (\(error.localizedDescription)): they're kept until you close the app") }
+    }
     private func loadEdits() {
         loadingEdits = true
         edits = editsURL.flatMap { try? Data(contentsOf: $0) }.flatMap { try? JSONDecoder().decode([String: USBTrackEdit].self, from: $0) } ?? [:]
@@ -587,6 +606,7 @@ final class USBSession: ObservableObject {
         }
         root.stopAccessingSecurityScopedResource()
         let n = name
+        tokens.newSession(); scanning = false; loading = false; recoveryNotes = []
         self.root = nil; library = nil; report = nil; pdbBytes = nil; olBytes = nil; nodes = []; originalNodes = []; syncPending = false
         UserDefaults.standard.removeObject(forKey: "cb.usb.bookmark")
         ejected = true
