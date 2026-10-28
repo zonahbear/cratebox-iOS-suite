@@ -220,7 +220,19 @@ struct PhoneDeck: View {
     let side: Int
     @Environment(\.phoneMetrics) var m
     var color: Color { Theme.deck[deck.i] }
+    /// the deck's height without SCRATCH (DECK chips, jog row, pad tabs, two pad rows), so SCRATCH doesn't move anything
+    var faceH: CGFloat { (app.core.four ? 23 : 0) + m.deckRow + 5 + m.tabH + 5 + 2 * (app.core.four ? m.pad - 3 : m.pad) + 4 }
     var body: some View {
+        Group {
+            if app.scratch.contains(deck.i) {
+                ScratchView(deck: deck, side: side, height: faceH, colW: m.cap + 16)
+            } else { player }
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
+    }
+    var player: some View {
         VStack(spacing: 5) {
             if app.core.four {
                 HStack(spacing: 4) {
@@ -250,15 +262,16 @@ struct PhoneDeck: View {
                             .background(RoundedRectangle(cornerRadius: 6).fill(deck.padMode == mode ? Theme.line2 : Theme.raise))
                     }.buttonStyle(.plain)
                 }
+                Button { _ = app.scratch.insert(deck.i) } label: {
+                    Text("SCR").font(.system(size: 11, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: m.tabH)
+                        .foregroundStyle(color).background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
+                }.buttonStyle(.plain).accessibilityLabel("Scratch deck \(deck.i + 1)")
             }
             VStack(spacing: 4) {
                 HStack(spacing: 4) { ForEach(0..<4, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? m.pad - 3 : m.pad) } }
                 HStack(spacing: 4) { ForEach(4..<8, id: \.self) { p in PadCell(deck: deck, p: p, height: app.core.four ? m.pad - 3 : m.pad) } }
             }
         }
-        .padding(6)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
     }
     var transport: some View {
         VStack(spacing: 6) {
@@ -370,5 +383,64 @@ struct MasterButton: View {
             .popover(isPresented: $open, arrowEdge: .top) {
                 MixerView(masterBar: true).padding(12).presentationCompactAdaptation(.popover)
             }
+    }
+}
+
+/// SCRATCH (phones, both layouts): in place of one deck's player, its platter as big as the deck allows, with only
+/// CUE and PLAY beside it (inside edge) and SCRATCH (lit) to go back; the mixer and the other deck don't change.
+/// `height` is the player's own height, so turning it on or off moves nothing else.
+struct ScratchView: View {
+    @EnvironmentObject var app: AppModel
+    @ObservedObject var deck: DeckModel
+    let side: Int
+    let height: CGFloat
+    let colW: CGFloat
+    var stacked = false                  // Touch mode: a narrow deck, so SCRATCH / CUE / PLAY go in a row under the platter
+    var color: Color { Theme.deck[deck.i] }
+    var body: some View {
+        if stacked {
+            VStack(spacing: 4) {
+                JogView(deck: deck, color: color).aspectRatio(1, contentMode: .fit).frame(maxWidth: .infinity, maxHeight: .infinity)
+                HStack(spacing: 4) {
+                    off.frame(maxWidth: .infinity)
+                    cue.frame(maxWidth: .infinity)
+                    play.frame(maxWidth: .infinity)
+                }.frame(height: 44)
+            }.frame(height: height)
+        } else {
+            HStack(spacing: 6) {
+                if side == 1 { controls }
+                JogView(deck: deck, color: color).aspectRatio(1, contentMode: .fit).frame(maxWidth: .infinity, maxHeight: height)
+                if side == 0 { controls }
+            }.frame(height: height)
+        }
+    }
+    var off: some View {
+        Button { _ = app.scratch.remove(deck.i) } label: {
+            Text(stacked ? "SCR" : "SCRATCH").font(.system(size: 11, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.7)
+                .frame(maxWidth: stacked ? .infinity : colW, minHeight: 44, maxHeight: 44)
+                .foregroundStyle(Color.black).background(RoundedRectangle(cornerRadius: 8).fill(color))
+        }.buttonStyle(.plain).accessibilityLabel("Scratch off, back to deck \(deck.i + 1)'s controls")
+    }
+    var cue: some View {
+        HoldButton(down: { deck.cueDown() }, up: { deck.cueUp() }) {
+            Text("CUE").font(.system(size: 14, weight: .bold)).frame(maxWidth: stacked ? .infinity : colW, minHeight: bh, maxHeight: bh)
+                .background(Capsule().fill(Theme.raise)).overlay(Capsule().stroke(Theme.cue, lineWidth: 2))
+        }
+    }
+    var play: some View {
+        Button { deck.togglePlay() } label: {
+            Image(systemName: deck.playing ? "pause.fill" : "play.fill").font(.system(size: 20)).frame(maxWidth: stacked ? .infinity : colW, minHeight: bh, maxHeight: bh)
+                .background(Capsule().fill(deck.playing ? Theme.ok.opacity(0.25) : Theme.raise)).overlay(Capsule().stroke(Theme.ok, lineWidth: 2))
+        }.buttonStyle(.plain)
+    }
+    var bh: CGFloat { stacked ? 44 : min(64, max(44, (height - 44 - 12) / 2)) }
+    var controls: some View {
+        VStack(spacing: 6) {
+            off
+            Spacer(minLength: 0)
+            cue
+            play
+        }.frame(height: height)
     }
 }

@@ -127,6 +127,18 @@ struct CompactDeck: View {
     @State private var tools = false
     var color: Color { Theme.deck[deck.i] }
     var body: some View {
+        Group {
+            if app.scratch.contains(deck.i) {
+                ScratchView(deck: deck, side: side, height: c.header + 5 + c.face, colW: 64, stacked: true)
+            } else { player }
+        }
+        .padding(6)
+        .frame(width: c.deckW)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
+        .onAppear { if side == 1 && CommandLine.arguments.contains("-pads") { pads = true } }   // CI screenshots of the PADS face
+    }
+    var player: some View {
         VStack(spacing: 5) {
             HStack(spacing: 4) {
                 if app.core.four && (side == 0 || app.core.deckCount == 4) {
@@ -138,6 +150,13 @@ struct CompactDeck: View {
                 }
                 face("PLAY", !pads) { pads = false }
                 face("PADS", pads) { pads = true }
+                // SCRATCH: here when there's room (no 1⇄3 button), always in the ⋯ tools
+                if !(app.core.four && (side == 0 || app.core.deckCount == 4)) {
+                    Button { _ = app.scratch.insert(deck.i) } label: {
+                        Text("SCR").font(.system(size: 11, weight: .heavy)).frame(width: 40, height: c.header).foregroundStyle(color)
+                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
+                    }.buttonStyle(.plain).accessibilityLabel("Scratch deck \(deck.i + 1)")
+                }
                 Button { tools = true } label: {
                     Image(systemName: "ellipsis").font(.system(size: 15, weight: .bold)).frame(width: 40, height: c.header)
                         .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
@@ -146,11 +165,6 @@ struct CompactDeck: View {
             }
             Group { if pads { padFace } else { playFace } }.frame(height: c.face)
         }
-        .padding(6)
-        .frame(width: c.deckW)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
-        .onAppear { if side == 1 && CommandLine.arguments.contains("-pads") { pads = true } }   // CI screenshots of the PADS face
     }
     func face(_ s: String, _ on: Bool, _ act: @escaping () -> Void) -> some View {
         Button(action: act) {
@@ -234,6 +248,9 @@ struct CompactDeck: View {
                 tool("MT", deck.mt) { deck.setMT(!deck.mt) }
                 tool("Q", deck.quant) { deck.quant.toggle() }
                 tool("BEAT GRID…", false) { tools = false; app.gridDeck = deck.i }
+            }
+            HStack(spacing: 8) {
+                tool("SCRATCH", false) { tools = false; _ = app.scratch.insert(deck.i) }
             }
         }.padding(10)
     }

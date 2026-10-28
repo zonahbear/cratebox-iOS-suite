@@ -172,3 +172,11 @@
 - Setting label: Settings → Look → Touch mode (key still `cb.compact`). Same change on personal/heat.
 - Unverified: no simulator screenshots of the new layout yet (ios.yml's app build still fails on the WatchMic icon);
   TestFlight is the first compile.
+
+## 2026-10-28: touch EQ reverted, SCRATCH added
+
+- Jonah: "revert last fixes. looks like shit". The TouchBandEQ phone mixer is reverted on both branches. Don't bring it back unless he asks.
+- SCRATCH (phones, both layouts): `AppModel.scratch` (Set of deck indexes). `ScratchView` (PhoneLayout.swift) replaces only that
+  deck's player at the same height, showing a big platter with SCRATCH (lit, tap to go back), CUE and PLAY. The mixer and the other deck stay as they are.
+  Standard layout: an SCR tab after FX2, with the controls in a column on the inside edge. Touch mode: an SCR button in the deck header (when
+  there's no 1⇄3 button) and SCRATCH in the deck's ⋯, with SCR / CUE / PLAY in a row under the platter.
