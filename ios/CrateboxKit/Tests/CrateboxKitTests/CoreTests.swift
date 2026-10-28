@@ -9,10 +9,13 @@ final class CoreTests: XCTestCase {
         var sent = [[UInt8]]()
         init(_ core: Core) { self.core = core; midi.target = self; midi.send = { [unowned self] in self.sent.append($0) }; midi.use(Profiles.byId("ddj-flx4")!) }
         var fourDecks: Bool { core.four }
+        var deckCount: Int { core.deckCount }
+        var pressed = [(String, Int)]()
         func absValue(_ name: String, deck: Int) -> Double? { core.mixerValue(name, deck) }
         func setAbs(_ name: String, deck: Int, _ v: Double) { if name == "tempo" { core.decks[deck].setPitch(v * 2 - 1) } else { core.setMixer(name, deck, v) } }
         func press(_ name: String, arg: String, deck: Int, on: Bool) {
             let d = deck >= 0 ? core.decks[deck] : nil
+            if on { pressed.append((name, deck)) }
             switch name {
             case "play": if on { d?.togglePlay() }
             case "cue": on ? d?.cueDown() : d?.cueUp()
@@ -197,6 +200,33 @@ final class CoreTests: XCTestCase {
         rig.midi.receive([0xb0, 0x13, 0x30]); rig.midi.receive([0xb0, 0x13, 0x26])    // moved down past 0.3: takes over
         XCTAssertEqual(c.mixer.fader[2], Double(0x26) / 127, accuracy: 0.01)
         XCTAssertEqual(c.mixer.fader[0], 1, accuracy: 0.01, "deck 1 left alone")
+    }
+    /// 3 decks: 1 and 3 share the left side, 2 stays alone on the right; deck 4 is off; the DECKS button cycles 2 → 3 → 4 → 2
+    func testThreeDecks() {
+        let (c, _) = makeCore(); c.setDecks(3)
+        let rig = Rig(c)
+        XCTAssertEqual(c.deckCount, 3); XCTAssertEqual(c.activeDecks, [0, 1, 2])
+        XCTAssertEqual(c.mixer.active, [true, true, true, false])
+        XCTAssertTrue(c.deckActive(2)); XCTAssertFalse(c.deckActive(3))
+        rig.midi.toggleSide(0); XCTAssertEqual(rig.midi.side, [2, 1], "left side → deck 3")
+        rig.midi.toggleSide(1); XCTAssertEqual(rig.midi.side, [2, 1], "right side stays on deck 2")
+        rig.midi.toggleSide(0); XCTAssertEqual(rig.midi.side, [0, 1])
+        c.cycleDecks(); XCTAssertEqual(c.deckCount, 4); XCTAssertFalse(c.three)
+        c.cycleDecks(); XCTAssertEqual(c.deckCount, 2); XCTAssertFalse(c.four)
+        c.cycleDecks(); XCTAssertEqual(c.deckCount, 3)
+        // remembered
+        let p = MemoryPrefs(); let c2 = Core(engine: Engine(sampleRate: SR), prefs: p); c2.setDecks(3)
+        XCTAssertEqual(Core(engine: Engine(sampleRate: SR), prefs: p).deckCount, 3)
+    }
+    /// FLX4: SHIFT + LOAD 1 / 2 name decks 3 / 4, whichever decks the sides are on; plain LOAD follows the side
+    func testShiftLoadGoesToDecks3And4() {
+        let (c, _) = makeCore(); c.setFour(true)
+        let rig = Rig(c)
+        rig.midi.receive([0x96, 0x48, 0x7f]); rig.midi.receive([0x96, 0x49, 0x7f])
+        XCTAssertEqual(rig.pressed.filter { $0.0 == "loadShift" }.map { $0.1 }, [2, 3])
+        rig.midi.toggleSide(0)
+        rig.midi.receive([0x96, 0x46, 0x7f])
+        XCTAssertEqual(rig.pressed.last.map { [$0.0] + ["\($0.1)"] }, ["load", "2"], "LOAD 1 follows the left side (deck 3)")
     }
     func testProfilesAndKeys() {
         XCTAssertEqual(Profiles.profile(for: "DDJ-FLX4").id, "ddj-flx4")

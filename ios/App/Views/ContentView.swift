@@ -37,7 +37,7 @@ struct ContentView: View {
             // decks the controller is on (DECK 1 / 3, 2 / 4 switch on each) around their two channels
             let l = app.midi.side[0], r = app.midi.side[1]
             VStack(spacing: 6) {
-                VStack(spacing: 3) { ForEach(0..<4, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: 54) } }
+                VStack(spacing: 3) { ForEach(core.activeDecks, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: 54) } }
                 HStack(alignment: .top, spacing: 6) {
                     DeckView(deck: core.decks[l], phone: true).id(l)
                     MixerView(phone: true)
@@ -47,11 +47,11 @@ struct ContentView: View {
         } else if core.four {
             // 4 decks on an iPad: all four waveforms across the top, the decks' controls in two columns
             VStack(spacing: 6) {
-                VStack(spacing: 3) { ForEach(0..<4, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: compact ? 54 : 70) } }
+                VStack(spacing: 3) { ForEach(core.activeDecks, id: \.self) { i in PhoneLane(deck: core.decks[i]).frame(height: compact ? 54 : 70) } }
                 HStack(alignment: .top, spacing: 6) {
                     VStack(spacing: 6) { DeckView(deck: core.decks[0], phone: true, chips: false); DeckView(deck: core.decks[2], phone: true, chips: false) }
                     MixerView(compact: true, short: short)
-                    VStack(spacing: 6) { DeckView(deck: core.decks[1], phone: true, chips: false); DeckView(deck: core.decks[3], phone: true, chips: false) }
+                    VStack(spacing: 6) { DeckView(deck: core.decks[1], phone: true, chips: false); if core.deckCount == 4 { DeckView(deck: core.decks[3], phone: true, chips: false) } }
                 }
             }
         } else { mix2(compact: compact, short: short) }
@@ -60,7 +60,7 @@ struct ContentView: View {
         HStack(alignment: .top, spacing: 6) {
             VStack(spacing: 6) { DeckView(deck: core.decks[0], compact: compact || core.four); if core.four { DeckView(deck: core.decks[2], compact: true) } }
             MixerView(compact: compact || core.four, short: short)
-            VStack(spacing: 6) { DeckView(deck: core.decks[1], compact: compact || core.four); if core.four { DeckView(deck: core.decks[3], compact: true) } }
+            VStack(spacing: 6) { DeckView(deck: core.decks[1], compact: compact || core.four); if core.deckCount == 4 { DeckView(deck: core.decks[3], compact: true) } }
         }
     }
 
@@ -76,7 +76,7 @@ struct ContentView: View {
             Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
             RecButton()
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
-            LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
+            LitButton(label: "\(core.deckCount) DECKS", on: core.four, color: Theme.fg) { app.cycleDecks() }
             DriveEjectButton()
             Button { settings = true } label: { Image(systemName: "gearshape").font(.system(size: 16)) }.buttonStyle(.plain)
         }.padding(.horizontal, 4).zIndex(1)
@@ -177,7 +177,9 @@ struct SettingsView: View {
                     Text("Recordings and their tracklists go to Files → On My iPhone/iPad → \(Recorder.filesName).").font(.caption).foregroundStyle(Theme.muted)
                 }
                 Section("Decks") {
-                    Toggle("4 decks", isOn: Binding(get: { core.four }, set: { core.setFour($0); if !$0 { app.midi.resetSides() } }))
+                    Picker("Decks", selection: Binding(get: { core.deckCount }, set: { app.setDecks($0) })) {
+                    Text("2 decks").tag(2); Text("3 decks (1 and 3 on the left)").tag(3); Text("4 decks").tag(4)
+                }
                     Toggle("Load lock (a playing deck can't be loaded)", isOn: $core.loadLock)
                     Picker("BPM range (where half/double-time tracks land)", selection: $bpmRange) {
                         ForEach(["58-115", "68-135", "78-155", "88-175", "70-180"], id: \.self) { Text($0) }

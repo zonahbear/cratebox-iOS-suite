@@ -87,7 +87,7 @@ struct PhoneScreen: View {
             VStack(spacing: 3) {
                 PhoneLane(deck: core.decks[l]); PhoneLane(deck: core.decks[r])
                 if core.four {
-                    HStack(spacing: 4) { ForEach([0, 1, 2, 3].filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
+                    HStack(spacing: 4) { ForEach(core.activeDecks.filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
                 }
             }.frame(minHeight: m.wavesMin, maxHeight: .infinity)
             HStack(alignment: .top, spacing: 4) {
@@ -117,7 +117,7 @@ struct PhoneTopBar: View {
             // a narrow phone: CUE/MST, MST and MASTER in a popover behind one button
             if m.narrowBar { MasterButton() } else { MixerView(masterBar: true) }
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
-            LitButton(label: "4 DECKS", on: core.four, color: Theme.fg) { core.setFour(!core.four); if !core.four { app.midi.resetSides() } }
+            LitButton(label: "\(core.deckCount) DECKS", on: core.four, color: Theme.fg) { app.cycleDecks() }
             DriveEjectButton()
             // drawn at 16 pt, touched at about 44 × 44 (HIG minimum) without making the bar any wider: the padded
             // view takes the touches, the negative padding gives the room back to the layout (a contentShape alone
@@ -223,7 +223,7 @@ struct PhoneDeck: View {
         VStack(spacing: 5) {
             if app.core.four {
                 HStack(spacing: 4) {
-                    ForEach([deck.i % 2, deck.i % 2 + 2], id: \.self) { d in
+                    ForEach([deck.i % 2, deck.i % 2 + 2].filter { app.core.deckActive($0) }, id: \.self) { d in
                         let on = d == deck.i
                         Button { app.midi.setSide(d % 2, d); app.objectWillChange.send() } label: {
                             Text("DECK \(d + 1)").font(.system(size: 10, weight: .bold)).frame(maxWidth: .infinity, minHeight: 18)

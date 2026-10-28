@@ -46,6 +46,15 @@ struct LibraryPane: View {
         if k == .none { sorts[viewKey] = nil } else { sorts[viewKey] = [k.rawValue, cur == k && !desc ? "desc" : "asc"] }
         UserDefaults.standard.set(sorts, forKey: "cb.sorts")
     }
+    static let sortsChanged = Notification.Name("cb.sortsChanged")
+    /// the quick library (browse overlay) sorts the same list: same key twice flips it, a new key starts ascending
+    static func setStoredSort(_ v: AppModel.LibraryView, _ k: SortKey) {
+        var all = (UserDefaults.standard.dictionary(forKey: "cb.sorts") as? [String: [String]]) ?? [:]
+        let (cur, desc) = storedSort(v)
+        if k == .none { all[key(v)] = nil } else { all[key(v)] = [k.rawValue, cur == k && !desc ? "desc" : "asc"] }
+        UserDefaults.standard.set(all, forKey: "cb.sorts")
+        NotificationCenter.default.post(name: sortsChanged, object: nil)
+    }
     struct Row: Identifiable { let id: String; let pos: Int; let t: LibTrack? ; let title: String; let artist: String }
     var rows: [Row] { LibraryPane.build(app.view, library, playlists, devices, query: query, sort: sort) }
     /// the list for a view: also what the controller's browse knob walks when the library isn't on screen
@@ -156,7 +165,7 @@ struct LibraryPane: View {
             col("BPM", .bpm, 54)
             col("Key", .key, 40)
             col("Time", .time, 46)
-            Text("Load").frame(width: core.four ? 132 : 70).font(.system(size: 10)).foregroundStyle(Theme.muted)
+            Text("Load").frame(width: CGFloat(core.deckCount) * 31 + 8).font(.system(size: 10)).foregroundStyle(Theme.muted)
         }.padding(.horizontal, 6).frame(height: 22).background(Theme.raise)
     }
     func col(_ label: String, _ k: SortKey, _ w: CGFloat?) -> some View {
@@ -171,7 +180,12 @@ struct LibraryPane: View {
     var list: some View {
         let rs = rows
         DispatchQueue.main.async { app.visibleTrackIds = rs.compactMap { $0.t?.id } }
-        return ScrollViewReader { proxy in List(selection: Binding(get: { app.selection.map { Set([$0]) } ?? [] }, set: { app.selection = $0.first })) {
+        return listBody(rs).onReceive(NotificationCenter.default.publisher(for: LibraryPane.sortsChanged)) { _ in
+            sorts = (UserDefaults.standard.dictionary(forKey: "cb.sorts") as? [String: [String]]) ?? [:]
+        }
+    }
+    func listBody(_ rs: [Row]) -> some View {
+        ScrollViewReader { proxy in List(selection: Binding(get: { app.selection.map { Set([$0]) } ?? [] }, set: { app.selection = $0.first })) {
             ForEach(rs) { r in row(r).tag(r.t?.id ?? r.id).listRowInsets(EdgeInsets(top: 0, leading: 6, bottom: 0, trailing: 6)).listRowBackground(Theme.panel) }
                 .onMove(perform: editable ? { from, to in move(from, to) } : nil)
                 .onDelete(perform: editable ? { del($0) } : nil)
@@ -206,13 +220,13 @@ struct LibraryPane: View {
             keyCell(t, ref).frame(width: 40, alignment: .leading)
             Text(t.map { $0.info.duration > 0 ? clockShort($0.info.duration) : "" } ?? "").frame(width: 46, alignment: .leading).font(Theme.mono).foregroundStyle(Theme.muted)
             HStack(spacing: 3) {
-                ForEach(0..<(core.four ? 4 : 2), id: \.self) { d in
+                ForEach(core.activeDecks, id: \.self) { d in
                     Button { if let t { app.load(t, deck: d) } } label: {
                         Text("\(d + 1)").font(.system(size: 11, weight: .bold)).frame(width: 28, height: 22)
                             .background(RoundedRectangle(cornerRadius: 4).fill(onDeck(t) == d ? Theme.deck[d] : Theme.raise)).foregroundStyle(onDeck(t) == d ? Color.black : Theme.deck[d])
                     }.buttonStyle(.borderless)
                 }
-            }.frame(width: core.four ? 132 : 70)
+            }.frame(width: CGFloat(core.deckCount) * 31 + 8)
         }
         .font(.system(size: 12)).frame(height: 30)
         .contentShape(Rectangle())

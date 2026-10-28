@@ -343,6 +343,14 @@ final class AppModel: ObservableObject, ControlTarget {
 
     // ---- ControlTarget: what the controller's actions do ----
     var fourDecks: Bool { core.four }
+    var deckCount: Int { core.deckCount }
+    /// 2, 3 or 4 decks; a controller side on a deck that's gone goes back to its own
+    func setDecks(_ n: Int) {
+        core.setDecks(n)
+        for s in 0..<2 where midi.side[s] >= core.deckCount { midi.setSide(s, s) }
+        if !core.four { midi.resetSides() }
+    }
+    func cycleDecks() { setDecks(core.deckCount == 4 ? 2 : core.deckCount + 1) }
     func absValue(_ name: String, deck: Int) -> Double? { core.mixerValue(name, deck) }
     func setAbs(_ name: String, deck: Int, _ v: Double) {
         switch name {
@@ -400,6 +408,13 @@ final class AppModel: ObservableObject, ControlTarget {
         case "loop": if on, let b = Double(arg) { d?.beatLoop(b) }
         case "load":
             if on, deck >= 0 {
+                if browseFocusTree { browseFocusTree = false; treeCursor = nil; showBrowser(); status("Pick a track, then LOAD"); return }
+                loadSelected(deck); hideBrowser()
+            }
+        case "loadShift":
+            // SHIFT + LOAD 1 / 2: decks 3 / 4 (only while they're on)
+            if on, deck >= 2 {
+                guard core.deckActive(deck) else { status("Deck \(deck + 1) isn't on: press DECKS for \(deck == 2 ? "3" : "4") decks"); return }
                 if browseFocusTree { browseFocusTree = false; treeCursor = nil; showBrowser(); status("Pick a track, then LOAD"); return }
                 loadSelected(deck); hideBrowser()
             }
