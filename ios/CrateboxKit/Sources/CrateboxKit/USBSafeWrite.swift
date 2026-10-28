@@ -55,6 +55,34 @@ public enum USBSafeWrite {
         f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return f.string(from: Date()).replacingOccurrences(of: ":", with: "-")
     }
+    /// a file's backups in `dir`, oldest first. New names carry a sequence number (n00000012), so the order never
+    /// depends on the clock (two saves in one millisecond, or a clock set back); names from before that (a time
+    /// stamp only, and for the databases the file name alone) count as older than any numbered one.
+    static func backupList(in dir: URL, rel: String) -> [(seq: Int, name: String)] {
+        let flat = backupName(rel) + ".", base = (rel as NSString).lastPathComponent + "."
+        let dbDir = "PIONEER/rekordbox/", legacy = rel.hasPrefix(dbDir) && !rel.dropFirst(dbDir.count).contains("/")
+        var out = [(seq: Int, key: String, name: String)]()
+        for n in (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [] where n.hasSuffix(".bak") {
+            if n.hasPrefix(flat) {
+                let rest = n.dropFirst(flat.count)
+                if rest.first == "n", let dot = rest.firstIndex(of: "."), let k = Int(rest[rest.index(after: rest.startIndex)..<dot]) {
+                    out.append((k, String(rest), n))
+                } else { out.append((-1, String(rest), n)) }
+            } else if legacy && n.hasPrefix(base) { out.append((-1, String(n.dropFirst(base.count)), n)) }
+        }
+        return out.sorted { ($0.seq, $0.key) < ($1.seq, $1.key) }.map { ($0.seq, $0.name) }
+    }
+    /// backups an unfinished write's journal still points at: never pruned, recovery may need them
+    static func journalled(_ root: URL) -> Set<String> {
+        let dir = root.appendingPathComponent(dirName)
+        var out = Set<String>()
+        for n in (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? [] where n.hasPrefix("journal-") && n.hasSuffix(".json") {
+            if let d = try? Data(contentsOf: dir.appendingPathComponent(n)), let j = try? JSONDecoder().decode(USBJournal.self, from: d) {
+                out.insert((j.backup as NSString).lastPathComponent)
+            }
+        }
+        return out
+    }
     static func journalURL(_ root: URL, _ rel: String) -> URL {
         root.appendingPathComponent(dirName).appendingPathComponent("journal-" + rel.replacingOccurrences(of: "/", with: "_") + ".json")
     }
@@ -82,9 +110,11 @@ public enum USBSafeWrite {
         let dir = root.appendingPathComponent(dirName)
         let backups = dir.appendingPathComponent("backups")
         let base = (rel as NSString).lastPathComponent
-        // named by the whole path (every track's analysis file is called ANLZ0000.DAT), to the millisecond, plus a
-        // random tail: two saves never share a backup, and one file's history never prunes another's
-        let name = backupName(rel) + "." + backupStamp() + "-" + String(UUID().uuidString.prefix(6)) + ".bak"
+        // named by the whole path (every track's analysis file is called ANLZ0000.DAT), then the next sequence number
+        // for that file (the order), the time (for people) and a random tail (two apps, one stick): two saves never
+        // share a backup, and one file's history never prunes another's
+        let next = (backupList(in: backups, rel: rel).map { $0.seq }.max() ?? 0) + 1
+        let name = backupName(rel) + ".n" + String(format: "%08d", max(1, next)) + "." + backupStamp() + "-" + String(UUID().uuidString.prefix(6)) + ".bak"
         let backupRel = dirName + "/backups/" + name
         do {
             try fm.createDirectory(at: backups, withIntermediateDirectories: true)
@@ -96,9 +126,11 @@ public enum USBSafeWrite {
                 try fm.createDirectory(at: a, withIntermediateDirectories: true)
                 try Data(cur).write(to: a.appendingPathComponent(name))
             }
-            // keep the newest few
-            let mine = (try? fm.contentsOfDirectory(atPath: backups.path))?.filter { $0.hasPrefix(backupName(rel) + ".") && $0.hasSuffix(".bak") }.sorted() ?? []
-            for old in mine.dropLast(keepBackups) { try? fm.removeItem(at: backups.appendingPathComponent(old)) }
+            // keep the newest few, and any an unfinished write still needs
+            let keep = journalled(root)
+            for old in backupList(in: backups, rel: rel).dropLast(keepBackups) where !keep.contains(old.name) {
+                try? fm.removeItem(at: backups.appendingPathComponent(old.name))
+            }
         } catch let e as USBWriteError { throw e } catch { throw USBWriteError.backupFailed(error.localizedDescription) }
         // 3
         var j = USBJournal(target: rel, backup: backupRel, oldHash: oldHash, newHash: hash(new), oldSize: cur.count, newSize: new.count, state: "staged", when: Date())
@@ -172,16 +204,8 @@ public enum USBSafeWrite {
 
     /// the newest backup of a file on the stick, if any
     public static func latestBackup(root: URL, rel: String) -> URL? {
-        let backups = root.appendingPathComponent(dirName).appendingPathComponent("backups")
-        // older builds named backups by the file name alone: still found for the databases (their names are unique)
-        let dbDir = "PIONEER/rekordbox/", legacy = rel.hasPrefix(dbDir) && !rel.dropFirst(dbDir.count).contains("/")
-        let prefixes = [backupName(rel) + "."] + (legacy ? [(rel as NSString).lastPathComponent + "."] : [])
-        // newest by the time stamp in the name (FAT32 keeps file times to 2 s only)
-        var mine = [(stamp: String, name: String)]()
-        for n in (try? FileManager.default.contentsOfDirectory(atPath: backups.path)) ?? [] where n.hasSuffix(".bak") {
-            if let p = prefixes.first(where: { n.hasPrefix($0) }) { mine.append((String(n.dropFirst(p.count)), n)) }
-        }
-        return mine.max { $0.stamp < $1.stamp }.map { backups.appendingPathComponent($0.name) }
+        let dir = root.appendingPathComponent(dirName).appendingPathComponent("backups")
+        return backupList(in: dir, rel: rel).last.map { dir.appendingPathComponent($0.name) }
     }
 }
 

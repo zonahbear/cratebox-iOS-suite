@@ -136,19 +136,21 @@ final class USBPreview: ObservableObject {
                     a = DeckAnalysis(bpm: bpm, firstBeat: fb, key: info.key >= 0 ? info.key : Analysis.detectKey(m.x, m.fs).key,
                                      phrases: rb.phrases.isEmpty ? Analysis.phraseAnalysis(m.x, m.fs, bpm, fb) : rb.phrases, wave: wave, duration: dur)
                     if edit?.bpm == nil && edit?.firstBeat == nil, let b = rb.beats, b.count >= 2 { a.beats = b; a.beat0 = rb.beat0 }
-                    info.rbGrid = rb.bpm != nil
                 } else {
                     // not analysed by rekordbox: Cratebox's own analysis, so the grid tools have something to work on
                     let w = AudioDecoder.mono(pcm, 22050)
                     let r = Analysis.analyze(m.x, fs: m.fs, range: Settings.bpmRange, waveSource: w)
                     a = DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: info.key >= 0 ? info.key : r.key, phrases: r.phrases, wave: rb.wave ?? r.wave, duration: dur)
                 }
-                info.autoBpm = rb.bpm ?? a.bpm; info.autoFirst = rb.firstBeat ?? a.firstBeat
-                info.rbCues = (rb.cue, rb.hot)
-                let memory = rb.memory
+                let memory = rb.memory, rbGrid = rb.bpm != nil && (edit?.bpm ?? rb.bpm) != nil && (edit?.firstBeat ?? rb.firstBeat) != nil
+                let autoBpm = rb.bpm ?? a.bpm, autoFirst = rb.firstBeat ?? a.firstBeat, analysis = a
                 await MainActor.run {
                     guard d.track === info else { return }        // unloaded or replaced meanwhile
-                    d.finishLoad(info, pcm: pcm, analysis: a, mono: m)
+                    // the TrackInfo is the UI's: it's only changed here, on the main thread
+                    if rbGrid { info.rbGrid = true }
+                    info.autoBpm = autoBpm; info.autoFirst = autoFirst
+                    info.rbCues = (rb.cue, rb.hot)
+                    d.finishLoad(info, pcm: pcm, analysis: analysis, mono: m)
                     // the memory cues start as rekordbox's, unless you've edited them
                     if s.edits[t.key]?.memory == nil && !memory.isEmpty { s.rbMemory[t.key] = memory }
                     if self.loadingKey == t.key { self.loadingKey = nil }

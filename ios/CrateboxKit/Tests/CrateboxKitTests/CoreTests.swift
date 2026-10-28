@@ -92,6 +92,21 @@ final class CoreTests: XCTestCase {
         var err = b.beatAt(b.now()) - d.beatAt(d.now()); err -= err.rounded()
         XCTAssertEqual(err, 0, accuracy: 0.02)              // in phase (a quarter-second lag is half a beat here)
     }
+    /// two jumps before the engine has reported the first: the second starts where the first landed (the guess
+    /// made at the jump is stamped on the audio clock, like the reports), not a lag further on
+    func testTwoJumpsBeforeAReportWithOutputLag() {
+        let (c, e) = makeCore()
+        c.clock = { e.time - 0.25 }; c.lag = { 0.25 }
+        load(c, 0, bpm: 120)
+        let d = c.decks[0]
+        d.togglePlay(); render(e, c, secs: 3)
+        let start = d.playhead()
+        d.beatJump(4); d.beatJump(4)                        // 2 s each at 120, no render or tick between
+        XCTAssertEqual(d.playhead(), start + 4, accuracy: 0.005)
+        render(e, c, secs: 0.5)
+        XCTAssertEqual(e.decks[0].pos / SR, start + 4.5, accuracy: 0.02)
+        XCTAssertEqual(d.playhead(), start + 4.5, accuracy: 0.02)
+    }
     /// hold a PAD FX pad, switch the pads to hot cues, let go: the effect still turns off
     func testPadFxLetsGoAfterThePadModeChanges() {
         let (c, _) = makeCore(); load(c, 0, bpm: 120)

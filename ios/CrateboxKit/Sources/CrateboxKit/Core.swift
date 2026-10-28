@@ -65,7 +65,12 @@ public final class DeckModel: ObservableObject, Identifiable {
     public private(set) var duration = 0.0
     var sr = 44100.0
     // position: from the engine's reports, moved on by the clock in between
+    // the engine's position (frames) at audio-clock time posT: reports are stamped with the audio clock, so the
+    // guesses made here between reports are too (core.clock() + core.lag(), not the heard clock)
     var pos = 0.0, posT = 0.0, speed = 0.0
+    var audioNow: Double { core.clock() + core.lag() }
+    /// a new speed from now on: restamp the engine's position first, so the time since the last report isn't lost
+    func rebase(speed v: Double) { pos = (heard() + core.lag() * speed) * sr; posT = audioNow; speed = v }
     @Published public private(set) var playing = false
     @Published public private(set) var pitch = 0.0          // -1...1 from the tempo fader (top = negative, Pioneer style)
     @Published public private(set) var rangeIdx = 0
@@ -292,7 +297,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         guard track === t else { return }
         sr = pcm.sampleRate; duration = Double(pcm.count) / pcm.sampleRate
         core.engine.post([.track(i, pcm), .deck(i, .load(mt: mt, spin: core.spinSecs))])
-        pos = 0; posT = core.clock(); speed = 0
+        pos = 0; posT = audioNow; speed = 0
         loop = Loop(); previewing = false
         self.mono = mono
         ana = a
@@ -321,7 +326,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         let t = clamp(t0, 0, max(0, duration - 0.01))
         seekSeq += 1
         post(.seek(t * sr, seq: seekSeq))
-        pos = t * sr; posT = core.clock()
+        pos = t * sr; posT = audioNow
     }
     public func setPlaying(_ on: Bool) {
         guard loaded else { return }
@@ -332,8 +337,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         previewing = false
         sendRate()
         post(.play(on))
-        speed = on ? rate() : 0
-        posT = core.clock()
+        rebase(speed: on ? rate() : 0)
     }
     public func togglePlay() { setPlaying(!playing) }
 
@@ -344,7 +348,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         if playing { setPlaying(false); seek(cue) }
         else if abs(now() - cue) < 0.02 {
             previewing = true; playing = true
-            sendRate(); post(.play(true)); speed = rate()
+            sendRate(); post(.play(true)); rebase(speed: rate())
         } else {
             cue = snap(now()); seek(cue); saveCues()
         }
