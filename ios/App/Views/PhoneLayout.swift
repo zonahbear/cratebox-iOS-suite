@@ -175,7 +175,8 @@ struct EdgeStrip: View {
                 EdgeRec(rec: app.recorder)
                 Spacer(minLength: 4)
             }
-            edge("SYNC", deck.sync, color) { deck.setSync(!deck.sync) }
+            edge("SYNC", deck.sync, color) { deck.syncPressed() }
+                .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in deck.makeMaster() })
             edge("MT", deck.mt, color) { deck.setMT(!deck.mt) }
             edge("Q", deck.quant, color) { deck.quant.toggle() }
             Color.clear.frame(height: bottom)

@@ -180,3 +180,15 @@
   deck's player at the same height, showing a big platter with SCRATCH (lit, tap to go back), CUE and PLAY. The mixer and the other deck stay as they are.
   Standard layout: an SCR tab after FX2, with the controls in a column on the inside edge. Touch mode: an SCR button in the deck header (when
   there's no 1⇄3 button) and SCRATCH in the deck's ⋯, with SCR / CUE / PLAY in a row under the platter.
+
+## 2026-10-28: SYNC fixes (Jonah's 140/92 runaway report)
+
+- Report cause 1 (master flip-flop snapping to the fader) is outdated, fixed in #23. Cause 2 (−24% / +31% jumps): Jonah chose
+  "limit to range": `pickMult(r, range:)` only offers ½×/1×/2× when the change fits ±6/10/16%; WIDE allows any.
+  If none fits, SYNC stays off and the status says why (`syncOutOfRange`). Cause 3 is real: an offset over ¼ beat used to be
+  left alone. Now it's only left alone when the user made it with the platter (`phaseFree`, set by jogTouch and bend nudges, cleared on SYNC or once
+  back within 2 ms). Any other offset is pulled back at up to 2%.
+- Hold SYNC (0.5 s) = `makeMaster()`: that deck leads (it gets the oldest syncSince and no syncWith) and the other synced decks follow it.
+  The UI calls `syncPressed()`, which ignores the release that ends a hold. The FLX4's SYNC (MIDI) still just toggles.
+- Tests: testSyncFlipFlop140And92EndsOnTheBeat, testSyncMultipliersStayInTheTempoRange, testHoldSyncMakesTheMaster.
+  The web app and Linux still have the old ¼-beat deadband and no range limit (parity gap).
