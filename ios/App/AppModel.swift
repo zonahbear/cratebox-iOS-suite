@@ -60,6 +60,7 @@ final class AppModel: ObservableObject, ControlTarget {
     var visibleTrackIds: [String] = []           // the library list as shown (for the browse knob)
     var libraryShown = false                     // the library list is on screen (then the knob follows it, search included)
     @Published var browserShown = false          // the controller's browser over the decks (phones)
+    @Published var scratch: Set<Int> = []        // phones: decks on SCRATCH (ScratchView in place of the player)
     private var browserUntil = 0.0
     private var statusUntil = 0.0
     private var timer: CADisplayLink?
