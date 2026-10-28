@@ -172,3 +172,13 @@
 - Setting label: Settings → Look → Touch mode (key still `cb.compact`). Same change on personal/heat.
 - Unverified: no simulator screenshots of the new layout yet (ios.yml's app build still fails on the WatchMic icon);
   TestFlight is the first compile.
+
+## 2026-10-28: Touch EQ in the standard phone mixer (Jonah's spec)
+
+- MixerView.phoneBody now has two channel columns. Each one has CUE, TRIM and CFX on top, then three `TouchBandEQ` rows (HI 2.5k+, MID
+  250–2.5k, LOW <250, matching Mixer.swift's crossovers), then the fader; the crossfader runs under both. TouchBandEQ = KILL (44 × 44,
+  restores the last value) + a 44 pt scrub bar (sideways drag from where it is, dB readout via MixerCurves.eqGain,
+  tap = 0 dB, magnetic snap 0.47–0.53, light haptics). Departures from the spec: the 0 dB button is a tap on the scrub
+  bar, since a separate button didn't fit the height. Mixer is 200 pt wide (220 when the room between the strips is
+  over 800 pt) instead of 160/200, because KILL + a usable scrub bar needs about 94 pt per channel.
+- PhoneMetrics.make: mixFader is whatever height is left after wavesMin (40–70 pt). DSP untouched.
