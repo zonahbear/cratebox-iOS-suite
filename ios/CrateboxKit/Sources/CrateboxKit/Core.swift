@@ -365,11 +365,15 @@ public final class DeckModel: ObservableObject, Identifiable {
     /// of ½×, 1× and 2× the master's tempo (r = master / ours), the one nearest our own that our tempo range allows
     /// (WIDE: any of them); nil when none fits. Ties go to 1×.
     static func pickMult(_ r: Double, range: Double = 100) -> Double? {
-        [1, 0.5, 2].filter { range >= 100 || abs(r * $0 - 1) <= range / 100 + 1e-9 }.min { abs(log(r * $0)) < abs(log(r * $1)) }
+        let mults: [Double] = [1, 0.5, 2]
+        let fits = mults.filter { (k: Double) -> Bool in range >= 100 || abs(r * k - 1) <= range / 100 + 1e-9 }
+        return fits.min { (a: Double, b: Double) -> Bool in abs(log(r * a)) < abs(log(r * b)) }
     }
     /// SYNC refused: following `m` needs more than this deck's tempo range
     func syncOutOfRange(_ m: DeckModel, _ r: Double) {
-        let need = [1, 0.5, 2].map { (r * $0 - 1) * 100 }.min { abs($0) < abs($1) } ?? 0
+        let mults: [Double] = [1, 0.5, 2]
+        let needs = mults.map { (k: Double) -> Double in (r * k - 1) * 100 }
+        let need: Double = needs.min { (a: Double, b: Double) -> Bool in abs(a) < abs(b) } ?? 0
         core.status("Deck \(i + 1) can't sync to deck \(m.i + 1): \(String(format: "%.2f", tempoNow())) against \(String(format: "%.2f", m.effBpm())) needs \(String(format: "%+.1f", need))% at best, outside its ±\(Int(range))% range. Tap the range until it says WIDE to allow it.", 8)
     }
     public func setSync(_ on: Bool) {
