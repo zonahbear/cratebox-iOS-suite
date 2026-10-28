@@ -1,6 +1,6 @@
 // Watch mic (personal/heat only, an experiment): listens for the Cratebox Mic watch app's voice over UDP and adds
 // it to the master. A jitter buffer smooths the network; the phone's own Mute and Level always win over the watch.
-// The voice goes straight onto the master outputs after the limiter, so it isn't in recordings and isn't limited.
+// The voice goes straight onto the master outputs after the limiter, so it isn't limited; REC gets it too (Engine.recordMixed).
 // Without shared Wi-Fi the watch falls back to Watch Connectivity (over Bluetooth): same packets, several per message.
 import Accelerate
 import Foundation
@@ -302,7 +302,8 @@ final class WatchMicReceiver: ObservableObject {
     // MARK: audio thread
 
     /// Adds the voice to the master channels. master: 0 = channels 1/2, 2 = channels 3/4, -1 = channel 1 only (split).
-    func mix(_ outs: [UnsafeMutablePointer<Float>], _ frames: Int, master: Int) {
+    /// `rec`: the recording's copy of the master (Engine.recordMixed), which gets the same duck and voice
+    func mix(_ outs: [UnsafeMutablePointer<Float>], _ frames: Int, master: Int, rec: (l: UnsafeMutablePointer<Float>, r: UnsafeMutablePointer<Float>, n: Int)? = nil) {
         let c = ctl.pointee
         guard !outs.isEmpty else { return }
         let lc = master == 2 && outs.count >= 4 ? 2 : 0
@@ -319,6 +320,7 @@ final class WatchMicReceiver: ObservableObject {
                 duckSmooth += (duckTo - duckSmooth) * rate
                 outs[lc][j] *= duckSmooth
                 if rc >= 0 { outs[rc][j] *= duckSmooth }
+                if let rec, j < rec.n { rec.l[j] *= duckSmooth; rec.r[j] *= duckSmooth }
             }
         }
         guard c.on else { return }
@@ -340,6 +342,7 @@ final class WatchMicReceiver: ObservableObject {
                 if a > 0.8 { v = (v < 0 ? -1 : 1) * (0.8 + 0.2 * tanhf((a - 0.8) / 0.2)) }
                 outs[lc][done + j] += v
                 if rc >= 0 { outs[rc][done + j] += v }
+                if let rec, done + j < rec.n { rec.l[done + j] += v; rec.r[done + j] += v }
             }
             done += got
             if got < k { priming = true; underrunCount &+= 1; return }

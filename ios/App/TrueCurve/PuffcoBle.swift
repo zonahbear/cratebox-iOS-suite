@@ -6,7 +6,7 @@ import CoreBluetooth
 import QuartzCore
 import CrateboxKit
 
-struct SlotBackup { var temp: [UInt8]?; var time: [UInt8]? }
+struct SlotBackup: Codable { var temp: [UInt8]?; var time: [UInt8]? }
 
 enum HeatError: LocalizedError {
     case msg(String)

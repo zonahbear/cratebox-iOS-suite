@@ -28,6 +28,7 @@ final class AudioHost {
     var running: Bool { av.isRunning }
 
     func start() {
+        engine.recordAfterMix = true            // REC gets the watch mic too (set before the audio thread starts)
         configureSession()
         build()
         builtFor = routeKey()
@@ -129,7 +130,10 @@ final class AudioHost {
                     done += n
                 }
             }
-            mic.mix(ptrs, Int(frames), master: micAt.pointee)
+            // the recording gets the master with the watch mic and its duck in it, like the speakers
+            var recorded = false
+            eng.recordMixed { l, r, n in mic.mix(ptrs, Int(frames), master: micAt.pointee, rec: (l, r, n)); recorded = true }
+            if !recorded { mic.mix(ptrs, Int(frames), master: micAt.pointee) }
             return noErr
         }
         var started = false

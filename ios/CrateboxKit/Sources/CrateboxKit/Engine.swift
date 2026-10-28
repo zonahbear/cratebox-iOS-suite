@@ -63,6 +63,12 @@ public final class Engine {
     /// that removed a tap, that tap will never be called again
     var tapApplied = 0, reportTapApplied = 0
     public var tapChanges: Int { os_unfair_lock_lock(lock); defer { os_unfair_lock_unlock(lock) }; return reportTapApplied }
+    /// HEAT build: the host mixes things in after the engine (the watch mic, its auto-duck), so with this on the
+    /// record tap gets the master after them: render keeps the callback's master here and `recordMixed` hands it on
+    public var recordAfterMix = false
+    let recCap = 8192
+    let recL: UnsafeMutablePointer<Float>, recR: UnsafeMutablePointer<Float>
+    var recN = 0
 
     public init(sampleRate: Double) {
         self.sampleRate = sampleRate
@@ -74,6 +80,8 @@ public final class Engine {
         func buf() -> UnsafeMutablePointer<Float> { let p = UnsafeMutablePointer<Float>.allocate(capacity: 128); p.initialize(repeating: 0, count: 128); return p }
         dl = (0..<4).map { _ in buf() }; dr = (0..<4).map { _ in buf() }
         mL = buf(); mR = buf(); cL = buf(); cR = buf(); hL = buf(); hR = buf()
+        recL = .allocate(capacity: recCap); recR = .allocate(capacity: recCap)
+        recL.initialize(repeating: 0, count: recCap); recR.initialize(repeating: 0, count: recCap)
         reports.initialize(repeating: DeckReport(), count: 4)
         pending.reserveCapacity(1024); inbox.reserveCapacity(1024); retired.reserveCapacity(16); trash.reserveCapacity(16)
         for i in 0..<4 { strips[i].apply(mixer, i) }
@@ -119,6 +127,14 @@ public final class Engine {
     }
 
     /// The audio callback: `outs` are the output channels (2, or 4 for master on 1/2 and headphones on 3/4).
+    /// audio thread, after the host's own mixing (recordAfterMix): `add` gets this callback's master (stereo, after
+    /// the limiter) to mix the same things into, then the record tap gets it
+    public func recordMixed(_ add: (UnsafeMutablePointer<Float>, UnsafeMutablePointer<Float>, Int) -> Void) {
+        guard recordAfterMix, recN > 0, let tap = recordTap else { return }
+        add(recL, recR, recN)
+        tap(recL, recR, recN)
+        recN = 0
+    }
     public func render(_ outs: [UnsafeMutablePointer<Float>], _ n: Int) {
         if os_unfair_lock_trylock(lock) {
             swap(&pending, &inbox)
@@ -127,6 +143,7 @@ public final class Engine {
             inbox.removeAll(keepingCapacity: true)
         }
         var done = 0
+        recN = 0
         let k = 1 - exp(-1 / (0.008 * sampleRate))
         let tMaster = MixerCurves.masterGain(mixer.master), hm = MixerCurves.headMix(mixer.headMix), tMc = mixer.masterCue ? 1.0 : 0
         var mpl: Float = 0, mpr: Float = 0
@@ -161,7 +178,12 @@ public final class Engine {
                 mL[j] = Float(l) + mb; mR[j] = Float(r) + mb
                 if abs(mL[j]) > mpl { mpl = abs(mL[j]) }; if abs(mR[j]) > mpr { mpr = abs(mR[j]) }
             }
-            if let tap = recordTap { tap(mL, mR, m) }
+            if let tap = recordTap {
+                if recordAfterMix {
+                    let c = min(m, recCap - recN)
+                    recL.advanced(by: recN).update(from: mL, count: c); recR.advanced(by: recN).update(from: mR, count: c); recN += c
+                } else { tap(mL, mR, m) }
+            }
             switch output {
             case .quad where outs.count >= 4:
                 for j in 0..<m { outs[0][done + j] = mL[j]; outs[1][done + j] = mR[j]; outs[2][done + j] = hL[j]; outs[3][done + j] = hR[j] }

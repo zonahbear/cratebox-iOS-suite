@@ -146,6 +146,7 @@ final class HeatController: NSObject, ObservableObject {
                 found = []
                 say("Connected to \(d.name).")
                 idle()
+                await restoreLeftover(d)
             } catch {
                 ble = nil
                 say("Couldn't connect: \(error.localizedDescription)")
@@ -180,6 +181,31 @@ final class HeatController: NSObject, ObservableObject {
 
     private func modelKey(_ d: HeatDevice) -> String { "cb.tc.model." + d.id }
 
+    // slot 4 as it was before a run, kept on the phone until it's back on the device: a link lost mid-run would
+    // otherwise leave the curve's start temperature in the slot. Put back the next time that device connects.
+    private struct PendingRestore: Codable { var backup: SlotBackup; var origSlot: UInt8? }
+    private func restoreKey(_ d: HeatDevice) -> String { "cb.tc.restore." + d.id }
+    private func keepBackup(_ d: HeatDevice, _ b: SlotBackup?, _ orig: UInt8?) {
+        guard let b, let data = try? JSONEncoder().encode(PendingRestore(backup: b, origSlot: orig)) else { return }
+        defaults.set(data, forKey: restoreKey(d))
+    }
+    private func backupRestored(_ d: HeatDevice) { defaults.removeObject(forKey: restoreKey(d)) }
+    /// on connect: a run that lost its link left slot 4 changed. Waits out the device's own cycle first (writing
+    /// the slot mid-cycle could change it), at most 4 minutes.
+    private func restoreLeftover(_ d: HeatDevice) async {
+        guard let data = defaults.data(forKey: restoreKey(d)), let p = try? JSONDecoder().decode(PendingRestore.self, from: data) else { return }
+        for _ in 0..<120 {
+            guard d.connected, dev === d, !running else { return }
+            if !((await d.readState()).map { TrueCurve.heating.contains($0) } ?? false) { break }
+            try? await Task.sleep(for: .seconds(2))
+        }
+        guard d.connected, dev === d, !running else { return }
+        await d.restoreSlot(TrueCurve.slot, p.backup)
+        if let o = p.origSlot { _ = await d.setActiveSlot(o) }
+        backupRestored(d)
+        say("Profile 4 put back as it was before the run the lost link cut off.")
+    }
+
     private func run(_ name: String) async {
         guard let dev else { phase = .idle; render(); return }
         let def = curveDef(name)
@@ -197,6 +223,7 @@ final class HeatController: NSObject, ObservableObject {
             if heating(await dev.readState()) { _ = await dev.stop(); try? await Task.sleep(for: .milliseconds(1500)) }
             origSlot = await dev.readActiveSlot()
             backup = await dev.backupSlot(slot)
+            keepBackup(dev, backup, origSlot)
             let startF = curve.at(0).rounded()
             guard await dev.writeProfileTemp(slot, startF) else { throw HeatError.msg("the device refused the start temperature") }
             _ = await dev.writeProfileTime(slot, min(120, (curve.end + 10).rounded(.up)))
@@ -249,6 +276,7 @@ final class HeatController: NSObject, ObservableObject {
             _ = await dev.stop()
             if let backup { await dev.restoreSlot(slot, backup) }
             if let origSlot { _ = await dev.setActiveSlot(origSlot) }
+            backupRestored(dev)
         }
         if errN > 10 {
             say("\(completed ? "Done" : "Stopped"): \"\(name)\", \(String(format: "%.1f", errSum / Double(errN)))°F average off the curve.")
@@ -290,6 +318,7 @@ final class HeatController: NSObject, ObservableObject {
             if heating(await dev.readState()) { _ = await dev.stop(); try? await Task.sleep(for: .milliseconds(1500)) }
             origSlot = await dev.readActiveSlot()
             backup = await dev.backupSlot(slot)
+            keepBackup(dev, backup, origSlot)
             guard await dev.writeProfileTemp(slot, f) else { throw HeatError.msg("the device refused the temperature") }
             _ = await dev.writeProfileTime(slot, 120)
             _ = await dev.setActiveSlot(slot)
@@ -328,6 +357,7 @@ final class HeatController: NSObject, ObservableObject {
             _ = await dev.stop()
             if let backup { await dev.restoreSlot(slot, backup) }
             if let origSlot { _ = await dev.setActiveSlot(origSlot) }
+            backupRestored(dev)
         }
         if ended { say("The device ended its heat cycle. Hold again for another round.") }
         else if abort && self.dev != nil { say("Stopped.") }
