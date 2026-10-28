@@ -13,7 +13,7 @@ struct PhoneScreen: View {
     @State private var islandLeft = PhoneScreen.islandOnLeft()
     @AppStorage("cb.compact") private var compactPref = false
 
-    /// the compact layout is the only one on a phone without an island (SE: the strips only cost width) or a
+    /// Touch mode (CompactPhone.swift) is the only layout on a phone without an island (SE: the strips only cost width) or a
     /// screen too small for the full one (Display Zoom); Settings → Look can turn it on anywhere else
     static func autoCompact(size: CGSize, insets ins: UIEdgeInsets) -> Bool {
         let band = max(40, min(ins.left, ins.right))

@@ -43,7 +43,7 @@ safe area. Layout is the one the app picked (`compact` = CompactPhone.swift).
 - **Display Zoom** changes the points the app gets. The reference's "Display Zoom" column is the zoomed size in
   portrait points. The iPhone SE (3rd gen) zooms to 320 × 568, so the app gets 568 × 320 in landscape, which matches the
   tester's screenshot (1136 × 640 px at 2×). CI checks this size with `-screen 568x320`.
-- The SE has no landscape safe-area insets (0 / 0 / 0), so it uses the compact layout (no edge strips). Every measured
+- The SE has no landscape safe-area insets (0 / 0 / 0), so it uses Touch mode (CompactPhone.swift, no edge strips). Every measured
   Face ID or Dynamic Island phone gets 47–68 pt side insets and a 20 pt bottom inset, and uses the standard layout
   unless the setting is on.
 - The rules in `PhoneScreen.autoCompact` (side insets under 30 pt, middle under 640 pt, or height under 360 pt) are

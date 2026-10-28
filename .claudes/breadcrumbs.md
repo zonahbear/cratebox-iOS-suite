@@ -20,7 +20,7 @@
 - Real SE testers run Display Zoom: 568 × 320 pt. The 540 pt deck row pushed the strips off (middle wasn't fixed-width).
 - `Views/CompactPhone.swift`: CompactScreen (no strips; deck faces PLAY | PADS at 44 pt; deck ⋯ = range/TAP/GRID/MT/Q;
   top ⋯ = WAVE/4 DECKS/BEAT FX/REC/Settings; slim mixer + EQ sheet). PhoneScreen picks it via `autoCompact` (no island,
-  middle < 640, height < 360) or `@AppStorage("cb.compact")` (Settings → Look → Compact layout).
+  middle < 640, height < 360) or `@AppStorage("cb.compact")` (Settings → Look → Touch mode, was "Compact layout").
 - PhoneScreen and BridgeScreen middles now `.frame(width: total - 2*band)` so overflow clips instead of shoving strips.
 - CI-only launch args: `-screen 568x320` (ScreenFrame modifier in CrateboxApp), `-metrics YES` (Documents/metrics.txt),
   `-pads` (right deck on PADS face), `-cb.compact YES`. ios.yml input `measure` = measure all sims + save ios-resolution.com.
@@ -106,3 +106,15 @@
 - Open: P2 (streaming/mono decode: changes analysis input, parity risk), P9 (measure new devices).
 - HEAT (personal/heat only): Engine.recordAfterMix + recordMixed → REC includes the watch mic; slot-4 backup kept in
   UserDefaults `cb.tc.restore.<id>` and restored on the next connect after the device's own cycle.
+
+## 2026-10-28: Touch mode (was Compact layout)
+
+- Sketch agreed with Jonah: https://claude.ai/artifact/Hzv1TWAEQPeZSiX1XSPFtb (568 × 320 and 667 × 375 from docs/device-sizes.md).
+- CompactPhone.swift: the mixer has a HI / MID / LOW knob column per channel beside its fader, sized by `CompactMetrics.knob(face:)`:
+  47 pt at 320 tall, 57 pt at 375, at most 60. A tap uses MixerCurves.eqTap, so a centred knob cuts and a turned
+  or cut one goes back to the centre; a cut knob shows a red ring and CUT. The crossfader runs across the bottom.
+  No headphone CUE (Jonah: Touch mode is for playing without a controller). TRIM/CFX: top bar ⋯ → Trim & filter….
+  PLAY face: the platter sits over a CUE / PLAY / SYNC row and the tempo fader (22 pt) is on the outside.
+- Setting label: Settings → Look → Touch mode (key still `cb.compact`). Same change on personal/heat.
+- Unverified: no simulator screenshots of the new layout yet (ios.yml's app build still fails on the WatchMic icon);
+  TestFlight is the first compile.
