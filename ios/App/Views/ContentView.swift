@@ -169,8 +169,8 @@ struct SettingsView: View {
                     Picker("Waveform", selection: $waveStyle) { Text("RGB (red lows, green mids, blue highs)").tag("rgb"); Text("3-band").tag("3band") }
                     if UIDevice.current.userInterfaceIdiom == .phone {
                         let always = PhoneScreen.autoCompactNow()
-                        Toggle("Compact layout (bigger buttons, one deck face at a time)", isOn: always ? .constant(true) : $compact).disabled(always)
-                        Text(always ? "This screen always uses the compact layout: it's too small for the full one, or has no Dynamic Island beside the strips." : "Each deck shows PLAY or PADS, the EQ opens from the mixer, and WAVE, 4 DECKS, FX and REC move into the ⋯ menu.")
+                        Toggle("Touch mode (big EQ and platters, for playing without a controller)", isOn: always ? .constant(true) : $compact).disabled(always)
+                        Text(always ? "This screen always uses Touch mode: it's too small for the full layout, or has no Dynamic Island beside the strips." : "Each deck shows PLAY or PADS, the mixer is a big HI / MID / LOW per channel (tap to cut, tap again to centre), and WAVE, DECKS, FX, REC, TRIM and CFX move into the ⋯ menu.")
                             .font(.caption).foregroundStyle(Theme.muted)
                     }
                 }
