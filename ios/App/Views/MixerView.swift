@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import CrateboxKit
 
 struct MixerView: View {
@@ -17,33 +18,27 @@ struct MixerView: View {
     var body: some View {
         if masterBar { phoneMaster } else if phone { phoneBody } else { fullBody }
     }
-    /// iPhone: a club mixer, straight down: each channel's TRIM, HI, MID, LOW, CFX, CUE and fader in a column,
-    /// the names between the two (4-deck mode: the channels of the decks each side plays). The master
+    /// iPhone: a club mixer in two channel columns (4-deck mode: the channels of the decks each side plays). Each
+    /// column: CUE, TRIM and CFX along the top, then HI / MID / LOW as TouchBandEQ rows (KILL, and a scrub bar
+    /// with the dB readout that a tap puts back at 0 dB), then the fader; the crossfader under both. The master
     /// section (CUE/MST, MST, MASTER, FX) is in the bar along the top.
     var phoneBody: some View {
         let sh = core.four ? [app.midi.side[0], app.midi.side[1]] : [0, 1]
-        let k = m.knob
-        let names: [(String, String)] = [("TRIM", "trim"), ("HI", "hi"), ("MID", "mid"), ("LOW", "low"), ("CFX", "cfx")]
         return VStack(spacing: 4) {
-            // a row per control: channel 1's knob, the name, channel 2's knob
-            VStack(spacing: 1) {
-                ForEach(names, id: \.1) { label, key in
-                    HStack(spacing: 0) {
-                        mixKnob(key, sh[0], k).frame(maxWidth: .infinity)
-                        Text(label).font(.system(size: 8, weight: .semibold)).foregroundStyle(Theme.muted).frame(width: m.mixLabel)
-                        mixKnob(key, sh[1], k).frame(maxWidth: .infinity)
-                    }
+            HStack(spacing: 4) {
+                ForEach(sh, id: \.self) { i in
+                    VStack(spacing: 4) {
+                        HStack(spacing: 4) {
+                            cueBtn(i)
+                            mixKnob("trim", i, m.knob).accessibilityLabel("Channel \(i + 1) trim")
+                            mixKnob("cfx", i, m.knob).accessibilityLabel("Channel \(i + 1) filter")
+                        }.frame(height: max(m.cueH, m.knob))
+                        TouchBandEQ(title: "HI", freq: "2.5k+", value: core.mixer.hi[i], color: Theme.deck[i]) { core.setMixer("hi", i, $0) }
+                        TouchBandEQ(title: "MID", freq: "250–2.5k", value: core.mixer.mid[i], color: Theme.deck[i]) { core.setMixer("mid", i, $0) }
+                        TouchBandEQ(title: "LOW", freq: "<250", value: core.mixer.low[i], color: Theme.deck[i]) { core.setMixer("low", i, $0) }
+                        faderCol(i)
+                    }.frame(maxWidth: .infinity)
                 }
-            }
-            HStack(spacing: 0) {
-                cueBtn(sh[0]).frame(maxWidth: .infinity)
-                Color.clear.frame(width: m.mixLabel, height: 1)
-                cueBtn(sh[1]).frame(maxWidth: .infinity)
-            }
-            HStack(spacing: 0) {
-                faderCol(sh[0]).frame(maxWidth: .infinity)
-                Color.clear.frame(width: m.mixLabel, height: 1)
-                faderCol(sh[1]).frame(maxWidth: .infinity)
             }
             crossfader.frame(height: m.xfH)
         }
@@ -211,5 +206,83 @@ struct BeatFXView: View {
                 LitButton(label: "FX ON", on: fx.on, color: Theme.hot, wide: true) { fx.setOn(!fx.on) }
             }
         }
+    }
+}
+
+/// One EQ band for the phone mixer, big enough for a thumb: KILL (44 × 44) cuts the band and a second tap puts back
+/// what it was; the scrub bar beside it turns it (drag sideways, from where it is, like a fader), shows the band, its
+/// range and the gain, and a tap on it puts the band back at 0 dB. A drag that ends near the centre snaps to it.
+/// Values are the mixer's 0...1 (0.5 = 0 dB, under 0.02 = kill, see MixerCurves.eqGain); the DSP glides every
+/// change, so a cut doesn't click.
+struct TouchBandEQ: View {
+    let title: String          // HI, MID, LOW
+    let freq: String           // the band, from the mixer's crossovers at 250 Hz and 2.5 kHz
+    let value: Double
+    let color: Color
+    let onChange: (Double) -> Void
+    @State private var lastActiveValue = 0.5
+    @GestureState private var start: Double?
+    var killed: Bool { value < 0.02 }
+    var centred: Bool { abs(value - 0.5) < 0.02 }
+    var readout: String {
+        if killed { return "KILL" }
+        let db = 20 * log10(max(1e-6, MixerCurves.eqGain(value)))
+        return abs(db) < 0.05 ? "0.0 dB" : String(format: "%+.1f dB", db)
+    }
+    var body: some View {
+        HStack(spacing: 4) {
+            Button(action: kill) {
+                Text("KILL").font(.system(size: 10, weight: .heavy)).frame(width: 44, height: 44)
+                    .foregroundStyle(killed ? Color.black : Theme.muted)
+                    .background(RoundedRectangle(cornerRadius: 7).fill(killed ? Theme.hot : Theme.raise))
+                    .shadow(color: killed ? Theme.hot.opacity(0.7) : .clear, radius: 6)
+            }.buttonStyle(.plain)
+            .accessibilityLabel("\(title) kill").accessibilityValue(killed ? "on" : "off")
+            GeometryReader { g in
+                let w = g.size.width
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 7).fill(Theme.raise)
+                    // lit from the centre to the value, the centre notch over it
+                    let x = CGFloat(value) * w
+                    Rectangle().fill((killed ? Theme.hot : color).opacity(0.45))
+                        .frame(width: abs(x - w / 2), height: 44).offset(x: min(x, w / 2))
+                    Rectangle().fill(centred ? Theme.ok : Theme.line2).frame(width: 2, height: 44).offset(x: w / 2 - 1)
+                    RoundedRectangle(cornerRadius: 2).fill(Theme.fg).frame(width: 4, height: 30).offset(x: min(w - 4, max(0, x - 2)))
+                    VStack(spacing: 0) {
+                        HStack(spacing: 3) {
+                            Text(title).font(.system(size: 10, weight: .heavy))
+                            Text(freq).font(.system(size: 7, weight: .semibold)).foregroundStyle(Theme.muted)
+                        }
+                        Spacer(minLength: 0)
+                        Text(readout).font(.system(size: 9, weight: .bold).monospacedDigit())
+                            .foregroundStyle(killed ? Theme.hot : centred ? Theme.ok : Theme.fg)
+                    }.padding(.vertical, 3).frame(maxWidth: .infinity).allowsHitTesting(false)
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).stroke(centred ? Theme.ok : .clear, lineWidth: 1.5))
+                .contentShape(Rectangle())
+                .onTapGesture { snap() }
+                .gesture(DragGesture(minimumDistance: 3)
+                    .updating($start) { d, s, _ in
+                        if s == nil { s = value }
+                        onChange(min(1, max(0, s! + Double(d.translation.width / max(1, w)))))
+                    }
+                    .onEnded { _ in if value >= 0.47 && value <= 0.53 && value != 0.5 { snap() } })
+            }
+            .accessibilityElement()
+            .accessibilityLabel("\(title) EQ").accessibilityValue(readout)
+            .accessibilityHint("Tap for 0 dB, drag sideways to turn")
+            .accessibilityAdjustableAction { dir in onChange(min(1, max(0, value + (dir == .increment ? 0.05 : -0.05)))) }
+        }
+        .frame(height: 44)
+    }
+    func kill() {
+        if killed { onChange(lastActiveValue < 0.02 ? 0.5 : lastActiveValue) }
+        else { lastActiveValue = value; onChange(0) }
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+    }
+    func snap() {
+        onChange(0.5)
+        UIImpactFeedbackGenerator(style: .light).impactOccurred()
     }
 }

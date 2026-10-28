@@ -343,6 +343,12 @@ struct PhoneMetrics {
             // the mixer no taller than the decks (it was 236 pt against their 209)
             m.knob = 20; m.mixFader = 56; m.wavesMin = 76
         }
+        // the mixer: two channel columns of 44 pt TouchBandEQ rows (KILL + a scrub bar at least 46 pt wide), wider
+        // where the room between the strips allows (docs/device-sizes.md: 16/17 Pro Max 832 pt, Air 776, 16 Pro 750)
+        m.mixW = w > 800 ? 220 : 200
+        // the faders get what's left of the height after the waveforms' minimum: row = h − top bar, home strip, gaps
+        // and wavesMin; the mixer's other rows take 24 + 3 × 44 + the crossfader + gaps and padding
+        m.mixFader = min(70, max(40, h - 30 - 20 - 16 - m.wavesMin - (24 + 3 * 44 + m.xfH + 6 * 4 + 8)))
         let room = (w - m.mixW - 8) / 2                                     // each deck's share of the row
         let budget = room - 12 - m.fader - m.outer - 2 * m.gap               // jog + CUE/PLAY + loops
         m.jog = min(100, max(64, (budget * 0.42).rounded(.down)))
