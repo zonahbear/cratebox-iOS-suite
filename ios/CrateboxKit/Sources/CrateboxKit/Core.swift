@@ -76,6 +76,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     @Published public private(set) var rangeIdx = 0
     @Published public private(set) var sync = false
     var syncSince = 0.0, syncRate = 1.0
+    var phaseFree = false                // the user moved this synced deck off the beat by hand (jog): beat lock leaves it
     public private(set) var syncMult = 1.0
     var syncTrim = 0.0
     public private(set) var phaseErr: Double?
@@ -382,6 +383,7 @@ public final class DeckModel: ObservableObject, Identifiable {
                 if syncMult != 1 { core.status("Deck \(i + 1) synced at \(syncMult < 1 ? "half" : "double") time: \(String(format: "%.2f", bpm * syncRate)) against \(String(format: "%.2f", m.effBpm()))") }
             } else { core.status(playing ? "Deck \(i + 1) leads: no other deck is playing, so it keeps its tempo and the next deck you sync follows it." : "Deck \(i + 1): load a track on another deck to sync to") }
         } else { syncTrim = 0; phaseErr = nil; phaseHeld = false }
+        phaseFree = false
         sendRate()
     }
     func alignPhase() {
@@ -415,16 +417,20 @@ public final class DeckModel: ObservableObject, Identifiable {
         lockPhase(m)
     }
     // Beat lock: while both decks play, measure how far our beats are from the master's and correct with a
-    // tiny speed change. A deliberate offset of more than a quarter beat is left alone.
+    // tiny speed change (up to 0.6%). An offset of more than a quarter beat is left alone only when the user made
+    // it by hand (jog, phaseFree); any other (a jump, a tempo change, the clock) is pulled back in at up to 2%, so
+    // a synced deck can't drift away while it says SYNC.
     func lockPhase(_ m: DeckModel) {
         let live = playing && m.playing && !touch && !m.touch && !coasting && !m.coasting && !previewing && loaded && m.loaded
         if !live { if syncTrim != 0 { syncTrim = 0; sendRate() }; phaseErr = nil; phaseHeld = false; return }
         var err = beatAt(now()) - m.beatAt(m.now()) * syncMult
         err -= jsRound(err)
         let errSec = err * spb / max(0.05, rate())
-        phaseErr = errSec; phaseHeld = abs(err) >= 0.25
+        if phaseFree && abs(errSec) < 0.002 { phaseFree = false }        // back on the beat: locked again
+        let held = abs(err) >= 0.25 && phaseFree
+        phaseErr = errSec; phaseHeld = held
         var want = 0.0
-        if abs(err) < 0.25 && abs(errSec) > 0.0015 { want = clamp(-errSec / 1.5, -0.006, 0.006) }
+        if !held && abs(errSec) > 0.0015 { let lim = abs(err) < 0.25 ? 0.006 : 0.02; want = clamp(-errSec / 1.5, -lim, lim) }
         let trim = syncTrim + (want - syncTrim) * 0.2
         if abs(trim - syncTrim) > 1e-6 || (want == 0 && syncTrim != 0) { syncTrim = abs(trim) < 1e-5 ? 0 : trim; sendRate() }
     }
@@ -444,6 +450,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     public func jogTouch(_ on: Bool, noCoast: Bool = false) {
         guard loaded else { return }
         touch = on
+        if on && sync && playing { phaseFree = true }
         if !on && !noCoast { coasting = true; coastHold = core.wallMs() + 120 } else { coasting = false }
         post(.scratch(on, noCoast: noCoast))
     }
@@ -455,7 +462,7 @@ public final class DeckModel: ObservableObject, Identifiable {
         if kind == .scratch && touch { post(.jog(ticks * tickSec * sr)) }
         else if coasting { return }
         else if kind == .search { seek(now() + ticks * 0.08) }
-        else if playing { post(.bend(ticks * 0.004)) }
+        else if playing { if sync { phaseFree = true }; post(.bend(ticks * 0.004)) }
         else { seek(now() + ticks * tickSec) }
     }
 

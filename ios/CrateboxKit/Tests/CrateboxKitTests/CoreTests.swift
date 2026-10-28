@@ -134,10 +134,41 @@ final class CoreTests: XCTestCase {
         XCTAssertNotNil(d.phaseErr)
         XCTAssertLessThan(abs(d.phaseErr ?? 1), 0.005, "beat lock holds the phase")
         XCTAssertFalse(d.phaseHeld)
-        // nudged 0.4 beat off: SYNC keeps the tempo, leaves the offset, and says so
-        d.seek(d.playhead() + 0.4 * d.spb); render(e, c, secs: 1)
+        // moved 0.4 beat off by hand (the platter): SYNC keeps the tempo, leaves the offset, and says so
+        d.jogTouch(true); d.seek(d.playhead() + 0.4 * d.spb); d.jogTouch(false); render(e, c, secs: 1)
         XCTAssertTrue(d.phaseHeld, "a deliberate offset is shown as tempo-only")
         XCTAssertGreaterThan(abs(d.phaseErr ?? 0), 0.1)
+    }
+    // Jonah's report (2026-10-28): 140 on deck 1, 92 on deck 2, SYNC pressed on and off on both; the decks ended up
+    // both SYNC, 140 against 70, with the beats drifting apart and the phase readout stuck. Whatever the order,
+    // two synced, playing decks end up on the beat.
+    func longClicks(_ c: Core, _ deck: Int, bpm: Double) {
+        let info = TrackInfo(id: "long\(deck)-\(bpm)", title: "Click \(bpm)")
+        let d = c.decks[deck]
+        d.beginLoad(info)
+        d.finishLoad(info, pcm: clickTrack(bpm: bpm, secs: 90), analysis: DeckAnalysis(bpm: bpm, firstBeat: 0, key: 21, phrases: [], wave: nil, duration: 90), mono: nil)
+    }
+    func testSyncFlipFlop140And92EndsOnTheBeat() {
+        let (c, e) = makeCore(); longClicks(c, 0, bpm: 140); longClicks(c, 1, bpm: 92)
+        render(e, c, secs: 0.1)
+        let a = c.decks[0], b = c.decks[1]
+        a.togglePlay(); render(e, c, secs: 1)
+        b.seek(5); b.setSync(true); b.togglePlay(); render(e, c, secs: 2)          // 92 follows 140 at half time
+        XCTAssertEqual(b.effBpm(), 70, accuracy: 0.1)
+        b.setSync(false); render(e, c, secs: 1)
+        XCTAssertEqual(b.effBpm(), 92, accuracy: 0.1)
+        a.setSync(true); render(e, c, secs: 2)                                    // 140 follows 92 at double time
+        XCTAssertEqual(a.syncMult, 2); XCTAssertEqual(a.effBpm(), 184, accuracy: 0.2)
+        a.setSync(false); render(e, c, secs: 1)
+        b.setSync(true); render(e, c, secs: 1)                                    // 92 → 70 against 140 again
+        a.setSync(true); render(e, c, secs: 1)                                    // and 140 against 70
+        XCTAssertTrue(a.sync && b.sync)
+        // a jump that leaves deck 1 0.4 beat off (not by hand): beat lock pulls it back in
+        a.seek(a.playhead() + 0.4 * a.spb); render(e, c, secs: 15)
+        XCTAssertEqual(a.effBpm(), 2 * b.effBpm(), accuracy: 0.3)
+        XCTAssertNotNil(a.phaseErr)
+        XCTAssertLessThan(abs(a.phaseErr ?? 1), 0.005, "both on SYNC: back on the beat, not drifting")
+        XCTAssertFalse(a.phaseHeld)
     }
     // Jonah's bug (2026-10-23): a synced deck playing at 72.5 dropped to 36.25 when a 72.5 was loaded on the other
     // deck. It followed the freshly loaded (stopped) deck, with the halftime it had picked against the old 145 there.
