@@ -272,9 +272,7 @@ struct CompactMixer: View {
             }
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { d in
-                core.mixer.xfader = min(1, max(0, Double((d.location.x - 8) / (g.size.width - 16))))
-            })
+            .faderDrag(core.mixer.xfader, span: g.size.width - 16) { core.mixer.xfader = $0 }
             .onTapGesture(count: 2) { core.mixer.xfader = 0.5 }
         }.frame(height: 30)
     }

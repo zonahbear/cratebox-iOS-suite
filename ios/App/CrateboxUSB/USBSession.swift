@@ -477,9 +477,8 @@ final class USBSession: ObservableObject {
     }
 
     /// Writes the playlist tree to every library on the stick: Device Library first, then OneLibrary; if the
-    /// second fails, the first is put back. Each file has its own journal, so if the app is stopped between the
-    /// two, recovery puts each file right on its own (not as a pair): the libraries can then differ until the
-    /// next write.
+    /// second fails, the first is put back. The two are one group (USBSafeWrite.group): if the app is stopped
+    /// between them, opening the stick again puts both back as they were, so the libraries never differ.
     func writePlaylists() {
         guard let root, let lib = library, !writing else { return }
         if let b = playlistBlocker { note(b); return }
@@ -492,31 +491,43 @@ final class USBSession: ObservableObject {
         DispatchQueue.global(qos: .userInitiated).async {
             var msg = ""
             var wrotePdb = false
+            let pdbRel = "PIONEER/rekordbox/export.pdb", olRel = "PIONEER/rekordbox/exportLibrary.db"
             do {
-                if let nodes = pn.nodes, let cur = pdb {
-                    let out = try PDB.writePlaylists(cur, nodes)
-                    try USBSafeWrite.write(out, root: root, rel: "PIONEER/rekordbox/export.pdb", expectedHash: USBSafeWrite.hash(cur), appBackupDir: appBackups) { b in
-                        let back = PDB.parse(b)
-                        if back.playlists.count != nodes.count { throw PDBError.readBack("playlists didn't read back") }
-                        if !PDB.problems(b).isEmpty { throw PDBError.readBack(PDB.problems(b)[0]) }
-                    }
-                    wrotePdb = true
-                }
-                if let nodes = on.nodes, let cur = ol {
-                    let out = try OneLibrary.writePlaylists(cur, nodes)
-                    try USBSafeWrite.write(out, root: root, rel: "PIONEER/rekordbox/exportLibrary.db", expectedHash: USBSafeWrite.hash(cur), appBackupDir: appBackups) { b in
-                        let back = try OneLibrary.read(b)
-                        if back.integrity != ["ok"] { throw OneLibraryError.readBack("integrity") }
+                // both new versions first, so the group journal can list them before anything is written
+                var files = [(rel: String, old: [UInt8], new: [UInt8])]()
+                if let nodes = pn.nodes, let cur = pdb { let out = try PDB.writePlaylists(cur, nodes); files.append((pdbRel, cur, out)) }
+                if let nodes = on.nodes, let cur = ol { let out = try OneLibrary.writePlaylists(cur, nodes); files.append((olRel, cur, out)) }
+                try USBSafeWrite.group(root: root, files) { () throws -> Void in
+                    do {
+                        for f in files {
+                            try USBSafeWrite.write(f.new, root: root, rel: f.rel, expectedHash: USBSafeWrite.hash(f.old), appBackupDir: appBackups) { b in
+                                if f.rel == pdbRel {
+                                    let back = PDB.parse(b)
+                                    if back.playlists.count != pn.nodes?.count { throw PDBError.readBack("playlists didn't read back") }
+                                    if !PDB.problems(b).isEmpty { throw PDBError.readBack(PDB.problems(b)[0]) }
+                                } else {
+                                    let back = try OneLibrary.read(b)
+                                    if back.integrity != ["ok"] { throw OneLibraryError.readBack("integrity") }
+                                }
+                            }
+                            if f.rel == pdbRel { wrotePdb = true }
+                        }
+                    } catch {
+                        msg = "Not saved: \(error)"
+                        // all or nothing: the Device Library goes back if OneLibrary couldn't follow
+                        if wrotePdb, let cur = pdb, let now = try? [UInt8](Data(contentsOf: root.appendingPathComponent(pdbRel))) {
+                            do { try USBSafeWrite.write(cur, root: root, rel: pdbRel, expectedHash: USBSafeWrite.hash(now), appBackupDir: appBackups) { _ in }; msg += " The Device Library was put back as it was." }
+                            catch {
+                                msg += " Putting the Device Library back failed too (\(error)): opening the stick again tries once more, or restore it from the backup in Cratebox USB."
+                                throw USBWriteError.swapFailed(msg)        // keeps the group journal for that
+                            }
+                        }
+                        throw error
                     }
                 }
                 msg = "Saved the playlists to \(lib.hasDeviceLibrary && lib.hasOneLibrary ? "both libraries" : lib.hasOneLibrary ? "OneLibrary" : "the Device Library") on the stick. Backups are in PIONEER/rekordbox/.cratebox."
             } catch {
-                msg = "Not saved: \(error)"
-                // all or nothing: the Device Library goes back if OneLibrary couldn't follow
-                if wrotePdb, let cur = pdb, let now = try? [UInt8](Data(contentsOf: root.appendingPathComponent("PIONEER/rekordbox/export.pdb"))) {
-                    do { try USBSafeWrite.write(cur, root: root, rel: "PIONEER/rekordbox/export.pdb", expectedHash: USBSafeWrite.hash(now), appBackupDir: appBackups) { _ in }; msg += " The Device Library was put back as it was." }
-                    catch { msg += " Putting the Device Library back failed too (\(error)): restore it from the backup in Cratebox USB." }
-                }
+                if msg.isEmpty { msg = "Not saved: \(error)" }
             }
             DispatchQueue.main.async {
                 self.writing = false
