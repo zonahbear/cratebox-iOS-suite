@@ -72,4 +72,11 @@ final class DSPTests: XCTestCase {
             XCTAssertLessThan(r.maxErr, 1e-4, "\(name): differs from the web app, first at sample \(r.at)")
         }
     }
+    /// tap on an EQ knob: centre → kill (silent), anywhere else (killed, boosted, a little off) → centre
+    func testEqTapKillsAtTheCentreAndCentresOtherwise() {
+        XCTAssertEqual(MixerCurves.eqTap(0.5), 0)
+        XCTAssertEqual(MixerCurves.eqGain(MixerCurves.eqTap(0.5)), 0)
+        for v in [0.0, 0.2, 0.48, 0.52, 1.0] { XCTAssertEqual(MixerCurves.eqTap(v), 0.5) }
+        XCTAssertEqual(MixerCurves.eqGain(0.5), 1, accuracy: 1e-12)
+    }
 }

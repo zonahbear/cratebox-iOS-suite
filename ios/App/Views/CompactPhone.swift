@@ -295,9 +295,9 @@ struct CompactEQ: View {
                 HStack(spacing: 18) {
                     Text("\(i + 1)").font(.system(size: 16, weight: .heavy)).foregroundStyle(Theme.deck[i]).frame(width: 24)
                     Knob(label: "TRIM", value: core.mixer.trim[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("trim", i, $0) }
-                    Knob(label: "HI", value: core.mixer.hi[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("hi", i, $0) }
-                    Knob(label: "MID", value: core.mixer.mid[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("mid", i, $0) }
-                    Knob(label: "LOW", value: core.mixer.low[i], color: Theme.deck[i], size: 40, bipolar: true) { core.setMixer("low", i, $0) }
+                    Knob(label: "HI", value: core.mixer.hi[i], color: Theme.deck[i], size: 40, bipolar: true, tap: MixerCurves.eqTap) { core.setMixer("hi", i, $0) }
+                    Knob(label: "MID", value: core.mixer.mid[i], color: Theme.deck[i], size: 40, bipolar: true, tap: MixerCurves.eqTap) { core.setMixer("mid", i, $0) }
+                    Knob(label: "LOW", value: core.mixer.low[i], color: Theme.deck[i], size: 40, bipolar: true, tap: MixerCurves.eqTap) { core.setMixer("low", i, $0) }
                     Knob(label: "CFX", value: core.mixer.cfx[i], color: Theme.loop, size: 40, bipolar: true) { core.setMixer("cfx", i, $0) }
                 }
             }

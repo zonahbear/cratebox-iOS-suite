@@ -54,7 +54,7 @@ struct HoldButton<Label: View>: View {
     }
 }
 
-/// A knob: drag up/down; double-tap goes back to the centre
+/// A knob: drag up/down; double-tap goes back to the centre, or with `tap` set (EQ kill) one tap does `tap`
 struct Knob: View {
     let label: String
     let value: Double
@@ -62,6 +62,7 @@ struct Knob: View {
     var size: CGFloat = 30
     var center = 0.5
     var bipolar = false                  // TRIM, EQ, CFX: lit only when turned away from the centre
+    var tap: ((Double) -> Double)? = nil  // one tap sets tap(value) instead of double-tap → centre
     let set: (Double) -> Void
     @State private var start: Double?
     var body: some View {
@@ -83,7 +84,7 @@ struct Knob: View {
         .gesture(DragGesture(minimumDistance: 1)
             .onChanged { g in let s = start ?? value; start = s; set(min(1, max(0, s - Double(g.translation.height) / 160))) }
             .onEnded { _ in start = nil })
-        .onTapGesture(count: 2) { set(center) }
+        .onTapGesture(count: tap == nil ? 2 : 1) { set(tap?(value) ?? center) }
     }
 }
 

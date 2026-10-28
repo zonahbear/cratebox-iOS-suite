@@ -53,7 +53,11 @@ struct MixerView: View {
     }
     func mixKnob(_ key: String, _ i: Int, _ k: CGFloat) -> some View {
         let v: Double = key == "trim" ? core.mixer.trim[i] : key == "hi" ? core.mixer.hi[i] : key == "mid" ? core.mixer.mid[i] : key == "low" ? core.mixer.low[i] : core.mixer.cfx[i]
-        return Knob(label: "", value: v, color: key == "cfx" ? Theme.loop : Theme.deck[i], size: k, bipolar: true) { core.setMixer(key, i, $0) }
+        return Knob(label: "", value: v, color: key == "cfx" ? Theme.loop : Theme.deck[i], size: k, bipolar: true, tap: eqTap(key)) { core.setMixer(key, i, $0) }
+    }
+    /// with no controller plugged in, a tap on an EQ knob cuts the band or puts it back to the centre
+    func eqTap(_ key: String) -> ((Double) -> Double)? {
+        ["hi", "mid", "low"].contains(key) && app.controllerName.isEmpty ? MixerCurves.eqTap : nil
     }
     func cueBtn(_ i: Int) -> some View {
         Button { core.togglePfl(i) } label: {
@@ -134,9 +138,9 @@ struct MixerView: View {
         let c = Theme.deck[i]
         return VStack(spacing: 5) {
             Knob(label: "Trim", value: core.mixer.trim[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("trim", i, $0) }
-            Knob(label: "Hi", value: core.mixer.hi[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("hi", i, $0) }
-            Knob(label: "Mid", value: core.mixer.mid[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("mid", i, $0) }
-            Knob(label: "Low", value: core.mixer.low[i], color: c, size: compact ? 24 : 28, bipolar: true) { core.setMixer("low", i, $0) }
+            Knob(label: "Hi", value: core.mixer.hi[i], color: c, size: compact ? 24 : 28, bipolar: true, tap: eqTap("hi")) { core.setMixer("hi", i, $0) }
+            Knob(label: "Mid", value: core.mixer.mid[i], color: c, size: compact ? 24 : 28, bipolar: true, tap: eqTap("mid")) { core.setMixer("mid", i, $0) }
+            Knob(label: "Low", value: core.mixer.low[i], color: c, size: compact ? 24 : 28, bipolar: true, tap: eqTap("low")) { core.setMixer("low", i, $0) }
             Knob(label: "CFX", value: core.mixer.cfx[i], color: Theme.loop, size: compact ? 24 : 28, bipolar: true) { core.setMixer("cfx", i, $0) }
             LitButton(label: "CUE", on: core.mixer.pfl[i], color: Theme.cue) { core.togglePfl(i) }
             HStack(spacing: 2) {

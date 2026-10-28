@@ -24,6 +24,9 @@ public enum MixerCurves {
         if v < 0.5 { return v < 0.02 ? 0 : pow(v / 0.5, 2.2) }          // left = kill
         return 1 + (v - 0.5) * 2 * (dbToGain(6) - 1)                    // right = +6 dB
     }
+    /// a tap on LOW / MID / HI (compact layout, or no controller): at the centre it cuts the band, anywhere else
+    /// it goes back to the centre
+    public static func eqTap(_ v: Double) -> Double { abs(v - 0.5) < 0.01 ? 0 : 0.5 }
     public static func trimGain(_ v: Double) -> Double { v < 0.5 ? (v < 0.01 ? 0 : dbToGain(-24 + 48 * v)) : dbToGain((v - 0.5) * 18) }
     public static func faderGain(_ v: Double) -> Double { v < 0.005 ? 0 : pow(v, 1.8) }
     /// crossfader: both full at the centre; decks 1 and 3 on the left, 2 and 4 on the right
