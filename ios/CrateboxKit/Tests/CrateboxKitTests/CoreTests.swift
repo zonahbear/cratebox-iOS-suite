@@ -195,7 +195,11 @@ final class CoreTests: XCTestCase {
         a.setSync(true); render(e, c, secs: 1)                                    // and 140 against 70
         XCTAssertTrue(a.sync && b.sync)
         // a jump that leaves deck 1 0.4 beat off (not by hand): beat lock pulls it back in
-        a.seek(a.playhead() + 0.4 * a.spb); render(e, c, secs: 15)
+        // (0.13 s at 184: about 3 s at the 2% nudge down to a quarter beat, then 0.6% at most, so allow 30 s)
+        a.seek(a.playhead() + 0.4 * a.spb)
+        var trace: [String] = []
+        for _ in 0..<30 { render(e, c, secs: 1); trace.append(String(format: "%.1f", 1000 * (a.phaseErr ?? .nan))) }
+        print("SYNC flip-flop catch-up, phase error per s (ms): " + trace.joined(separator: " "))
         XCTAssertEqual(a.effBpm(), 2 * b.effBpm(), accuracy: 0.3)
         XCTAssertNotNil(a.phaseErr)
         XCTAssertLessThan(abs(a.phaseErr ?? 1), 0.005, "both on SYNC: back on the beat, not drifting")
