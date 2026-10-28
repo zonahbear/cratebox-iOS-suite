@@ -130,6 +130,11 @@ final class CoreTests: XCTestCase {
         d.togglePlay(); render(e, c, secs: 4)
         XCTAssertNotNil(d.phaseErr)
         XCTAssertLessThan(abs(d.phaseErr ?? 1), 0.005, "beat lock holds the phase")
+        XCTAssertFalse(d.phaseHeld)
+        // nudged 0.4 beat off: SYNC keeps the tempo, leaves the offset, and says so
+        d.seek(d.playhead() + 0.4 * d.spb); render(e, c, secs: 1)
+        XCTAssertTrue(d.phaseHeld, "a deliberate offset is shown as tempo-only")
+        XCTAssertGreaterThan(abs(d.phaseErr ?? 0), 0.1)
     }
     // Jonah's bug (2026-10-23): a synced deck playing at 72.5 dropped to 36.25 when a 72.5 was loaded on the other
     // deck. It followed the freshly loaded (stopped) deck, with the halftime it had picked against the old 145 there.

@@ -201,6 +201,18 @@ final class Library: ObservableObject {
     }
 
     // ---- analysis in the background (one at a time, paused while the decks play on small devices) ----
+    /// Settings → Decks → BPM range changed (checked when Settings closes, so the steppers don't start a run per
+    /// tap): the tracks Cratebox analysed itself go round again. A grid you set and rekordbox's analysis stay.
+    func bpmRangeChanged() {
+        let now = "\(Settings.bpmRange)", k = "cb.bpmRangeAnalysed"
+        let was = UserDefaults.standard.string(forKey: k)
+        UserDefaults.standard.set(now, forKey: k)
+        guard let was, was != now else { return }          // first run: the library was analysed with this range
+        let again = tracks.filter { $0.device == nil && !$0.rec.gridManual && $0.analysed }
+        for t in again { t.rec.ver = 0; if !queue.contains(where: { $0 === t }) { queue.append(t) } }
+        if !again.isEmpty { status("BPM range changed: analysing \(again.count) track\(again.count == 1 ? "" : "s") again") }
+        save(); runQueue()
+    }
     func enqueue(_ t: LibTrack) { if !queue.contains(where: { $0 === t }) { queue.append(t) }; runQueue() }
     func runQueue() {
         guard !analysing else { return }

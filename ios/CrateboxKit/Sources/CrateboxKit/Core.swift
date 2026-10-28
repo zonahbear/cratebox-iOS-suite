@@ -79,6 +79,8 @@ public final class DeckModel: ObservableObject, Identifiable {
     public private(set) var syncMult = 1.0
     var syncTrim = 0.0
     public private(set) var phaseErr: Double?
+    /// SYNC is matching the tempo but leaving the phase alone: the beats are a quarter beat or more apart, taken as on purpose
+    public private(set) var phaseHeld = false
     @Published public private(set) var cue = 0.0
     @Published public private(set) var hot = [Double?](repeating: nil, count: 8)
     @Published public private(set) var loop = Loop()
@@ -379,7 +381,7 @@ public final class DeckModel: ObservableObject, Identifiable {
                 if playing && m.playing { alignPhase() }
                 if syncMult != 1 { core.status("Deck \(i + 1) synced at \(syncMult < 1 ? "half" : "double") time: \(String(format: "%.2f", bpm * syncRate)) against \(String(format: "%.2f", m.effBpm()))") }
             } else { core.status(playing ? "Deck \(i + 1) leads: no other deck is playing, so it keeps its tempo and the next deck you sync follows it." : "Deck \(i + 1): load a track on another deck to sync to") }
-        } else { syncTrim = 0; phaseErr = nil }
+        } else { syncTrim = 0; phaseErr = nil; phaseHeld = false }
         sendRate()
     }
     func alignPhase() {
@@ -402,7 +404,7 @@ public final class DeckModel: ObservableObject, Identifiable {
                 if playing { syncSince = (core.decks.map(\.syncSince).min() ?? 0) - 1 }
             }
             if syncTrim != 0 { syncTrim = 0; sendRate() }
-            phaseErr = nil
+            phaseErr = nil; phaseHeld = false
             return
         }
         // a different master, or a new track on it: pick half/normal/double time again
@@ -416,11 +418,11 @@ public final class DeckModel: ObservableObject, Identifiable {
     // tiny speed change. A deliberate offset of more than a quarter beat is left alone.
     func lockPhase(_ m: DeckModel) {
         let live = playing && m.playing && !touch && !m.touch && !coasting && !m.coasting && !previewing && loaded && m.loaded
-        if !live { if syncTrim != 0 { syncTrim = 0; sendRate() }; phaseErr = nil; return }
+        if !live { if syncTrim != 0 { syncTrim = 0; sendRate() }; phaseErr = nil; phaseHeld = false; return }
         var err = beatAt(now()) - m.beatAt(m.now()) * syncMult
         err -= jsRound(err)
         let errSec = err * spb / max(0.05, rate())
-        phaseErr = errSec
+        phaseErr = errSec; phaseHeld = abs(err) >= 0.25
         var want = 0.0
         if abs(err) < 0.25 && abs(errSec) > 0.0015 { want = clamp(-errSec / 1.5, -0.006, 0.006) }
         let trim = syncTrim + (want - syncTrim) * 0.2

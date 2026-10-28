@@ -17,18 +17,11 @@ struct ContentView: View {
     }
     var pad: some View {
         GeometryReader { g in
-            let phone = false
             VStack(spacing: 6) {
-                topBar(phone)
-                if phone {
-                    if app.tab == 0 {
-                        phoneMix.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
-                    } else { LibraryPane() }
-                } else {
-                    // a short iPad (mini, ~724 pt): BEAT FX folds into a button and the library can get smaller
-                    if app.waveMode { WaveStack().frame(maxHeight: .infinity) } else { mix(compact: g.size.height < 900, short: g.size.height < 800) }
-                    LibraryPane().frame(minHeight: g.size.height < 800 ? 130 : 180)
-                }
+                topBar
+                // a short iPad (mini, ~724 pt): BEAT FX folds into a button and the library can get smaller
+                if app.waveMode { WaveStack().frame(maxHeight: .infinity) } else { mix(compact: g.size.height < 900, short: g.size.height < 800) }
+                LibraryPane().frame(minHeight: g.size.height < 800 ? 130 : 180)
             }
             .padding(6)
             .background(Theme.bg)
@@ -38,25 +31,6 @@ struct ContentView: View {
     }
     struct GridTarget: Identifiable { let id: Int }
 
-    /// iPhone: the waveforms across the top (all four in 4-deck mode), then the two decks the controller
-    /// plays around a small mixer
-    var phoneMix: some View {
-        let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
-        return VStack(spacing: 4) {
-            VStack(spacing: 3) {
-                PhoneLane(deck: core.decks[l]); PhoneLane(deck: core.decks[r])
-                if core.four {
-                    // the two decks the controller isn't on, side by side in one thin row (tap a number to switch)
-                    HStack(spacing: 4) { ForEach([0, 1, 2, 3].filter { $0 != l && $0 != r }, id: \.self) { i in PhoneLane(deck: core.decks[i], active: false) } }
-                }
-            }.frame(minHeight: 70, maxHeight: .infinity)
-            HStack(alignment: .top, spacing: 4) {
-                DeckView(deck: core.decks[l], phone: true).id(l)
-                MixerView(phone: true)
-                DeckView(deck: core.decks[r], phone: true).id(r)
-            }.fixedSize(horizontal: false, vertical: true)
-        }
-    }
     @ViewBuilder func mix(compact: Bool, short: Bool = false) -> some View {
         if core.four && short {
             // 4 decks on a short iPad (mini): two columns of decks don't fit, so like the iPhone it shows the two
@@ -90,19 +64,15 @@ struct ContentView: View {
         }
     }
 
-    func topBar(_ phone: Bool) -> some View {
+    var topBar: some View {
         HStack(spacing: 8) {
             ModeSwitcher()
-            if !phone { Text("CRATEBOX").font(.system(size: 15, weight: .heavy)).tracking(3) }
+            Text("CRATEBOX").font(.system(size: 15, weight: .heavy)).tracking(3)
             HStack(spacing: 4) {
                 Circle().fill(app.controllerName.isEmpty ? Theme.dim : Theme.ok).frame(width: 7, height: 7)
                 Text(app.controllerName.isEmpty ? "No controller" : app.controllerName).font(.system(size: 11)).lineLimit(1)
             }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise))
-            if !phone { Text(app.audio.outputChannels >= 4 ? "4 ch · cue on 3/4" : "2 ch").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted) }
-            if phone {
-                Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: 150)
-                MixerView(masterBar: true)
-            }
+            Text(app.audio.outputChannels >= 4 ? "4 ch · cue on 3/4" : "2 ch").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
             Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
             RecButton()
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
@@ -276,7 +246,7 @@ struct LearnView: View {
         }
         .navigationTitle("MIDI learn")
         .onAppear { app.midi.learnHint = { h in hint = h }; app.midi.startLearn() }
-        .onDisappear { app.midi.stopLearn() }
+        .onDisappear { app.midi.stopLearn(); app.library.bpmRangeChanged() }
     }
 }
 

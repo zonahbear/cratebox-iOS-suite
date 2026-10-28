@@ -1,12 +1,14 @@
 import SwiftUI
 import CrateboxKit
 
-/// how far a synced deck's beats are from the master's, like the desktop: green within 6 ms, amber within 20
+/// how far a synced deck's beats are from the master's, like the desktop: green within 6 ms, amber within 20.
+/// An offset SYNC is leaving alone (a quarter beat or more, so taken as on purpose) says so: TEMPO only, in the muted colour.
 @ViewBuilder func phaseTag(_ d: DeckModel, size: CGFloat = 11) -> some View {
     if d.sync, let pe = d.phaseErr {
         let ms = Int(jsRoundUI(abs(pe) * 1000))
-        Text("\(pe >= 0 ? "+" : "−")\(ms) ms").font(.system(size: size, weight: .bold, design: .monospaced))
-            .foregroundStyle(abs(pe) < 0.006 ? Theme.ok : abs(pe) < 0.02 ? Theme.hex(0xffb020) : Theme.hex(0xff3b55))
+        Text("\(d.phaseHeld ? "TEMPO " : "")\(pe >= 0 ? "+" : "−")\(ms) ms").font(.system(size: size, weight: .bold, design: .monospaced))
+            .foregroundStyle(d.phaseHeld ? Theme.muted : abs(pe) < 0.006 ? Theme.ok : abs(pe) < 0.02 ? Theme.hex(0xffb020) : Theme.hex(0xff3b55))
+            .lineLimit(1).minimumScaleFactor(0.7)
     }
 }
 func jsRoundUI(_ x: Double) -> Double { (x + 0.5).rounded(.down) }

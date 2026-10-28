@@ -10,6 +10,9 @@
 //  7. clear the journal
 // If the app, the phone or the stick goes away in the middle, the journal is still there the next time the
 // stick is opened, and `recover` puts the right version back.
+// A change that spans files (both libraries, or a library and analysis files) is one group: a group journal
+// lists every file with its before and after, and if it's still there, recovery puts all of them back as they
+// were, so the stick never keeps half a change.
 //
 // Which writes are allowed at all is USBWriteGate's job (below): nothing that hasn't been proven on hardware.
 import Foundation
@@ -40,8 +43,35 @@ public struct USBJournal: Codable, Equatable {
     public var when: Date
 }
 
+/// one change made of several files' writes: all or none of them
+public struct USBGroupJournal: Codable, Equatable {
+    public struct Member: Codable, Equatable { public var target: String, oldHash: String, newHash: String }
+    public var id: String
+    public var members: [Member]
+    public var when: Date
+}
+
 public enum USBSafeWrite {
     public static let dirName = "PIONEER/rekordbox/.cratebox"
+
+    /// Runs `body` (the group's writes, and any putting back after a failure) with a group journal on the stick:
+    /// cleared when `body` returns or throws, so it's only left behind if the app stopped in the middle, or if
+    /// putting the files back failed too (swapFailed).
+    public static func group<T>(root: URL, _ files: [(rel: String, old: [UInt8], new: [UInt8])], _ body: () throws -> T) throws -> T {
+        if files.count < 2 { return try body() }
+        let dir = root.appendingPathComponent(dirName)
+        let g = USBGroupJournal(id: UUID().uuidString, members: files.map { .init(target: $0.rel, oldHash: hash($0.old), newHash: hash($0.new)) }, when: Date())
+        let gu = dir.appendingPathComponent("group-" + g.id + ".json")
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try JSONEncoder().encode(g).write(to: gu); flush(gu)
+        } catch { throw USBWriteError.stageFailed("group journal: \(error.localizedDescription)") }
+        do { let r = try body(); try? FileManager.default.removeItem(at: gu); return r }
+        catch USBWriteError.swapFailed(let why) {
+            // putting back failed too: the journal stays, so opening the stick again has another go
+            throw USBWriteError.swapFailed(why)
+        } catch { try? FileManager.default.removeItem(at: gu); throw error }
+    }
     public static func hash(_ b: [UInt8]) -> String {
         // FNV-1a 64 + size: enough to tell versions of one file apart (not a security hash)
         var h: UInt64 = 0xcbf29ce484222325
@@ -180,6 +210,27 @@ public enum USBSafeWrite {
         let dir = root.appendingPathComponent(dirName)
         guard let names = try? fm.contentsOfDirectory(atPath: dir.path) else { return [] }
         var out = [Recovery]()
+        // a group cut off part way: every file it had already changed goes back, from its newest backup of the
+        // old version (a file still mid-write is left to its own journal, below, which puts it back too)
+        for n in names where n.hasPrefix("group-") && n.hasSuffix(".json") {
+            let gu = dir.appendingPathComponent(n)
+            guard let d = try? Data(contentsOf: gu), let g = try? JSONDecoder().decode(USBGroupJournal.self, from: d) else { out.append(.needsAttention("unreadable group journal \(n)")); continue }
+            var back = [String](), failed = [String]()
+            for m in g.members {
+                let target = root.appendingPathComponent(m.target)
+                guard (try? [UInt8](Data(contentsOf: target))).map(hash) == m.newHash else { continue }
+                let bdir = dir.appendingPathComponent("backups")
+                let old = backupList(in: bdir, rel: m.target).reversed().lazy
+                    .compactMap { try? [UInt8](Data(contentsOf: bdir.appendingPathComponent($0.name))) }.first { hash($0) == m.oldHash }
+                if let old, (try? Data(old).write(to: target)) != nil { flush(target); back.append(m.target) } else { failed.append(m.target) }
+            }
+            if failed.isEmpty {
+                try? fm.removeItem(at: gu)
+                if !back.isEmpty { out.append(.restored("a save of \(g.members.count) files was cut off part way; \(back.map { ($0 as NSString).lastPathComponent }.joined(separator: ", ")) went back to the version from before it, so the files match again")) }
+            } else {
+                out.append(.needsAttention("a save of \(g.members.count) files was cut off and \(failed.joined(separator: ", ")) couldn't be put back (backup missing or damaged)"))
+            }
+        }
         for n in names where n.hasPrefix("journal-") && n.hasSuffix(".json") {
             let ju = dir.appendingPathComponent(n)
             guard let d = try? Data(contentsOf: ju), let j = try? JSONDecoder().decode(USBJournal.self, from: d) else { out.append(.needsAttention("unreadable journal \(n)")); continue }

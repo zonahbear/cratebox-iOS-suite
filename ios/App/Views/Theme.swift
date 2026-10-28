@@ -88,6 +88,29 @@ struct Knob: View {
     }
 }
 
+/// Faders follow the finger from where the cap is, like hardware: a touch on the track doesn't make the cap jump
+/// to it. `value` and `set` are 0...1 along the drag (`vertical`: 0 at the top, so down is up the scale).
+/// The start is GestureState, so a drag the system cancels can't leave a stale start for the next one.
+struct FaderDrag: ViewModifier {
+    let value: Double
+    let span: CGFloat
+    var vertical = false
+    let set: (Double) -> Void
+    @GestureState private var start: Double?
+    func body(content: Content) -> some View {
+        content.gesture(DragGesture(minimumDistance: 0).updating($start) { d, s, _ in
+            if s == nil { s = value }
+            let t = Double(vertical ? d.translation.height : d.translation.width) / Double(max(1, span))
+            set(min(1, max(0, s! + t)))
+        })
+    }
+}
+extension View {
+    func faderDrag(_ value: Double, span: CGFloat, vertical: Bool = false, set: @escaping (Double) -> Void) -> some View {
+        modifier(FaderDrag(value: value, span: span, vertical: vertical, set: set))
+    }
+}
+
 /// A vertical fader
 struct VFader: View {
     let value: Double
@@ -104,11 +127,8 @@ struct VFader: View {
                     .offset(y: -CGFloat(v) * (h - 14))
             }
             .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { d in
-                let y = min(max(0, d.location.y - 7), h - 14)
-                let nv = 1 - Double(y / (h - 14))
-                set(inverted ? 1 - nv : nv)
-            })
+            // 0 at the top for the drag: the shown value is 1 − that
+            .faderDrag(1 - v, span: h - 14, vertical: true) { y in set(inverted ? y : 1 - y) }
         }.frame(width: 34, height: height)
     }
 }

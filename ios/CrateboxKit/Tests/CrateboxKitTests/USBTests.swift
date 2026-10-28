@@ -253,6 +253,33 @@ final class USBTests: XCTestCase {
         XCTAssertTrue(left.contains(early), "journalled: kept")
         XCTAssertEqual(left.subtracting([early]), Set(made.suffix(3).map { $0.lastPathComponent }))
     }
+    /// a two-file save cut off after the first file: opening the stick again puts the first back too
+    func testAGroupCutOffPartWayIsPutBackAsAWhole() throws {
+        let root = try tempStick(oneLibrary: nil)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let fm = FileManager.default
+        let a = "PIONEER/rekordbox/a.bin", b = "PIONEER/rekordbox/b.bin"
+        try Data([1, 1]).write(to: root.appendingPathComponent(a)); try Data([2, 2]).write(to: root.appendingPathComponent(b))
+        let files: [(rel: String, old: [UInt8], new: [UInt8])] = [(a, [1, 1], [10]), (b, [2, 2], [20])]
+        func groups() -> [String] { ((try? fm.contentsOfDirectory(atPath: root.appendingPathComponent(USBSafeWrite.dirName).path)) ?? []).filter { $0.hasPrefix("group-") } }
+        // the app "stops" after a: swapFailed stands for that (it's the error that keeps the journal)
+        XCTAssertThrowsError(try USBSafeWrite.group(root: root, files) { () throws -> Void in
+            try USBSafeWrite.write([10], root: root, rel: a, expectedHash: USBSafeWrite.hash([1, 1]), appBackupDir: nil) { _ in }
+            throw USBWriteError.swapFailed("cut off")
+        })
+        XCTAssertEqual(groups().count, 1)
+        XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(a))), [10], "half a change on the stick")
+        let rec = USBSafeWrite.recover(root: root)
+        XCTAssertTrue(rec.contains { if case .restored = $0 { return true }; return false }, "\(rec)")
+        XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(a))), [1, 1], "put back with the rest")
+        XCTAssertEqual([UInt8](try Data(contentsOf: root.appendingPathComponent(b))), [2, 2])
+        XCTAssertTrue(groups().isEmpty)
+        // a whole save, and a failure that was put back in the app, leave no group journal behind
+        try USBSafeWrite.group(root: root, files) { () throws -> Void in for f in files { try USBSafeWrite.write(f.new, root: root, rel: f.rel, expectedHash: nil, appBackupDir: nil) { _ in } } }
+        XCTAssertTrue(groups().isEmpty)
+        XCTAssertThrowsError(try USBSafeWrite.group(root: root, files) { () throws -> Void in throw USBWriteError.verifyFailed("x") })
+        XCTAssertTrue(groups().isEmpty)
+    }
     func testWriteGate() {
         let none = USBWriteGate(proven: [])
         XCTAssertNotNil(none.playlistWriteBlocker(deviceLibrary: true, oneLibrary: false))

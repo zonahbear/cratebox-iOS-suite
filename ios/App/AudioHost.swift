@@ -28,6 +28,7 @@ final class AudioHost {
     func start() {
         configureSession()
         build()
+        builtFor = routeKey()
         NotificationCenter.default.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main) { [weak self] n in
             // a category change is our own setCategory in restart() coming back: not a new route
             let why = (n.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt).flatMap(AVAudioSession.RouteChangeReason.init)
@@ -150,7 +151,13 @@ final class AudioHost {
     private var restartWork: DispatchWorkItem?
     private func restartSoon() {
         restartWork?.cancel()
-        let w = DispatchWorkItem { [weak self] in self?.restart() }
+        let w = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            // our own restart's setPreferredOutputNumberOfChannels comes back as a route change too: when the engine
+            // is still running on the same outputs, there's nothing to rebuild (no second dropout)
+            if self.av.isRunning && self.routeKey() == self.builtFor { NSLog("Cratebox audio: route notice, same outputs, engine running: no restart"); return }
+            self.restart()
+        }
         restartWork = w
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15, execute: w)
     }
@@ -159,9 +166,17 @@ final class AudioHost {
         if building { return }
         building = true
         defer { building = false }
+        NSLog("Cratebox audio: restart (was on %@)", builtFor)
         _ = CBTry { self.av.stop() }
         configureSession()
         build()
+        builtFor = routeKey()
+    }
+    /// the outputs the engine was last built for, and how many channels they have
+    private var builtFor = ""
+    private func routeKey() -> String {
+        let s = AVAudioSession.sharedInstance()
+        return s.currentRoute.outputs.map { $0.uid }.joined(separator: "+") + "/\(s.outputNumberOfChannels)"
     }
     /// headphones on a plain stereo output: mono master left, mono cue right (a splitter cable)
     func setSplit(_ on: Bool) { engine.post(.output(on ? .split : outputMode(outputChannels))); preview.post(.output(on ? .split : outputMode(outputChannels))) }

@@ -180,29 +180,32 @@ public enum USBTrackWriter {
         return plan
     }
 
-    /// Writes a plan's files, each through USBSafeWrite (backed up, staged, checked, swapped). If one fails,
-    /// the ones already written are put back and the error is thrown. Returns the backups made.
+    /// Writes a plan's files, each through USBSafeWrite (backed up, staged, checked, swapped), as one group. If
+    /// one fails, the ones already written are put back and the error is thrown; if the app stops part way,
+    /// recovery puts them back. Returns the backups made.
     @discardableResult
     public static func apply(_ plan: USBWritePlan, root: URL, appBackupDir: URL?) throws -> [URL] {
-        var done = [USBWritePlan.File](), backups = [URL]()
-        do {
-            for f in plan.files {
-                let b = try USBSafeWrite.write(f.new, root: root, rel: f.rel, expectedHash: USBSafeWrite.hash(f.old), appBackupDir: appBackupDir) { staged in
-                    try check(f.rel, staged)
+        try USBSafeWrite.group(root: root, plan.files.map { ($0.rel, $0.old, $0.new) }) {
+            var done = [USBWritePlan.File](), backups = [URL]()
+            do {
+                for f in plan.files {
+                    let b = try USBSafeWrite.write(f.new, root: root, rel: f.rel, expectedHash: USBSafeWrite.hash(f.old), appBackupDir: appBackupDir) { staged in
+                        try check(f.rel, staged)
+                    }
+                    backups.append(b); done.append(f)
                 }
-                backups.append(b); done.append(f)
+            } catch {
+                var undo = [String]()
+                for f in done.reversed() {
+                    do { try USBSafeWrite.write(f.old, root: root, rel: f.rel, expectedHash: USBSafeWrite.hash(f.new), appBackupDir: nil) { _ in } }
+                    catch { undo.append("\((f.rel as NSString).lastPathComponent) (\(error))") }
+                }
+                if done.isEmpty { throw error }
+                if undo.isEmpty { throw USBWriteError.verifyFailed("\(error). The files already written were put back as they were.") }
+                throw USBWriteError.swapFailed("\(error). Putting back failed for \(undo.joined(separator: ", ")): restore from the backups in Cratebox USB")
             }
-        } catch {
-            var undo = [String]()
-            for f in done.reversed() {
-                do { try USBSafeWrite.write(f.old, root: root, rel: f.rel, expectedHash: USBSafeWrite.hash(f.new), appBackupDir: nil) { _ in } }
-                catch { undo.append("\((f.rel as NSString).lastPathComponent) (\(error))") }
-            }
-            if done.isEmpty { throw error }
-            if undo.isEmpty { throw USBWriteError.verifyFailed("\(error). The files already written were put back as they were.") }
-            throw USBWriteError.swapFailed("\(error). Putting back failed for \(undo.joined(separator: ", ")): restore from the backups in Cratebox USB")
+            return backups
         }
-        return backups
     }
 
     /// the check each staged file gets, as read back from the stick: parsed the way a player would
