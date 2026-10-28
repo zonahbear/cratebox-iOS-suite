@@ -1,0 +1,31 @@
+run 40656719313 sha 4662e1d316438936693237b70084a3db24e88daf build 44.1 at Wed Oct 28 08:29:08 UTC 2026
+     1 valid identities found
+PROFILE 'Cratebox Suite App Store' f7990ec7-b8d7-4271-8a93-731e96311219 team 369KQMGQW6 app 369KQMGQW6.com.zonahbear.cratebox.suite expires Fri Oct 22 05:33:14 UTC 2027
+** ARCHIVE SUCCEEDED **
+** EXPORT SUCCEEDED **
+UPLOADED build 44.1 from 4662e1d
+---- tail
+Xcode 26.3
+Build version 17C529
+  1) 558B71ABDA92ABBF9DC23066817FC569002E0ABA "Apple Distribution: Jonah Snead (369KQMGQW6)"
+     1 valid identities found
+PROFILE 'Cratebox Suite App Store' f7990ec7-b8d7-4271-8a93-731e96311219 team 369KQMGQW6 app 369KQMGQW6.com.zonahbear.cratebox.suite expires Fri Oct 22 05:33:14 UTC 2027
+⚙️  Generating project...
+⚙️  Writing project...
+Created project at /Users/runner/work/cratebox-iOS-suite/cratebox-iOS-suite/ios/Cratebox.xcodeproj
+** ARCHIVE SUCCEEDED **
+2026-10-28 08:28:30.864 xcodebuild[5214:18849] [MT] IDEDistribution: -[IDEDistributionLogging _createLoggingBundleAtPath:]: Created bundle at path "/var/folders/nj/vtw8zd2j31d1gdrtntc5y4600000gn/T/Cratebox_2026-10-28_08-28-30.858.xcdistributionlogs".
+Exported Cratebox to: /Users/runner/work/_temp/export
+** EXPORT SUCCEEDED **
+
+-rw-r--r--  1 runner  staff  3753983 Oct 28 08:28 /Users/runner/work/_temp/export/Cratebox.ipa
+Running altool at path '/Applications/Xcode_26.3.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-10-28 08:29:07.448  INFO: [ContentDelivery.Uploader.6000035784C0] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: 9cd85cd9-596b-44a6-9f69-4e6f30b05225
+Transferred 3753983 bytes in 0.102 seconds (36.8MB/s, 294.006Mbps)
+==========================================
+No errors uploading archive at '/Users/runner/work/_temp/export/Cratebox.ipa'.
+UPLOADED build 44.1 from 4662e1d
