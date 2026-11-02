@@ -146,3 +146,4 @@
   (node checks pass, same numbers). Swift **not compiled** (no toolchain here; CI or Xcode is the first compile).
 - Design + gaps: [`docs/next-track.md`](../docs/next-track.md). Mock: https://claude.ai/artifact/JWmXhgHsiMiucGkUHMZnsq
 - Next (only on Jonah's go): cache energy/bands in TrackRecord, session played set, MATCH sort in the quick library.
+- 2026-11-02 05:35Z: web player got it first (Jonah: "push to cloudflare"): Cratebox PR #12 merged to main, library MATCH column (tempo + key only). Live check from here was blocked (proxy); the copy of cratebox.html here isn't synced yet.
