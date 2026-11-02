@@ -14,4 +14,6 @@ fold this file into it.)
 
 ## Breadcrumbs
 
+- Next-track suggestions (draft, not wired in): [`docs/next-track.md`](docs/next-track.md).
+
 Session notes and next steps: [`.claudes/breadcrumbs.md`](.claudes/breadcrumbs.md).

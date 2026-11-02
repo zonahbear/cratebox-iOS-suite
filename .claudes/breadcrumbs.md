@@ -138,3 +138,11 @@
   The UI calls `syncPressed()`, which ignores the release that ends a hold. The FLX4's SYNC (MIDI) still just toggles.
 - Tests: testSyncFlipFlop140And92EndsOnTheBeat, testSyncMultipliersStayInTheTempoRange, testHoldSyncMakesTheMaster.
   The web app and Linux still have the old ¼-beat deadband and no range limit (parity gap).
+
+## 2026-11-02: next-track suggestions DRAFT (branch claude/project-thread-dqs1br, from preview/truecurve-usb)
+
+- Jonah: "draft up a track similarity checker that suggests next songs for mixing". Draft only, nothing wired in.
+- `CrateboxKit/NextTrack.swift` (pure, Foundation only) + `NextTrackTests.swift`; reference `tools/next_track.js`
+  (node checks pass, same numbers). Swift **not compiled** (no toolchain here; CI or Xcode is the first compile).
+- Design + gaps: [`docs/next-track.md`](../docs/next-track.md). Mock: https://claude.ai/artifact/JWmXhgHsiMiucGkUHMZnsq
+- Next (only on Jonah's go): cache energy/bands in TrackRecord, session played set, MATCH sort in the quick library.
