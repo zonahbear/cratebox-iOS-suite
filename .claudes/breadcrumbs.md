@@ -299,3 +299,4 @@ Intelligence for analysis" + "Toggle to switch between Apple and rb grid". All b
   for thermalState below serious, and for Low Power Mode off; a track load cancels the running one (`yield()`); 5 s rest
   between tracks when the phone isn't thermally nominal. MATCH sort computes each row's score once per sort, not per
   comparison. Not done: features JSON is still decoded on the main thread at load (a few hundred kB).
+- Shipped: ios.yml run 62 green (263608d), TestFlight run 53 uploaded 22:30Z (build 53.1). Untested on a device.
