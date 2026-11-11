@@ -18,6 +18,21 @@ func clock(_ t: Double) -> String {
     return String(format: "%d:%02d.%d", Int(s) / 60, Int(s) % 60, Int(s * 10) % 10)
 }
 
+/// the track's own tempo, shown beside the playing one whenever the fader or SYNC has moved it
+func origTempo(_ d: DeckModel) -> String? {
+    let o = d.origBpm()
+    return o > 0 && abs(d.effBpm() - o) >= 0.005 ? String(format: "%.2f", o) : nil
+}
+/// VINYL (or V where there's no room): the top of the platter holds and scratches, or only nudges
+struct VinylButton: View {
+    @ObservedObject var deck: DeckModel
+    var short = false
+    var body: some View {
+        LitButton(label: short ? "V" : "VINYL", on: deck.vinyl, color: Theme.deck[deck.i]) { deck.setVinyl(!deck.vinyl) }
+            .accessibilityLabel("Deck \(deck.i + 1) vinyl mode \(deck.vinyl ? "on" : "off")")
+    }
+}
+
 struct DeckView: View {
     @EnvironmentObject var app: AppModel
     @ObservedObject var deck: DeckModel
@@ -53,6 +68,7 @@ struct DeckView: View {
                         LitButton(label: "SYNC", on: deck.sync, color: color) { deck.syncPressed() }.simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in deck.makeMaster() })
                         LitButton(label: "MT", on: deck.mt, color: color) { deck.setMT(!deck.mt) }
                         LitButton(label: "Q", on: deck.quant, color: color) { deck.quant.toggle() }
+                        VinylButton(deck: deck, short: true)
                     }
                     HStack(spacing: 8) {
                         HoldButton(down: { deck.cueDown() }, up: { deck.cueUp() }) {
@@ -138,20 +154,14 @@ struct DeckView: View {
                 VStack(alignment: .trailing, spacing: 0) {
                     Text(String(format: "%.2f", deck.effBpm())).font(.system(size: 16, weight: .bold, design: .monospaced))
                     Text(String(format: "%+.2f%%", (deck.rate() - 1) * 100) + " ±\(deck.range == 100 ? "W" : String(Int(deck.range)))").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.muted)
+                    if let o = origTempo(deck) { Text("orig \(o)").font(.system(size: 9, design: .monospaced)).foregroundStyle(Theme.muted) }
                 }
                 VStack(alignment: .trailing, spacing: 0) {
                     Text("-" + clock(deck.duration - deck.now())).font(.system(size: 14, design: .monospaced))
-                    Text(barBeat).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
+                    Text(deck.barBeat()).font(.system(size: 12, weight: .bold, design: .monospaced)).foregroundStyle(color)
                 }
             }
         }
-    }
-    var barBeat: String {
-        guard deck.ana != nil else { return "" }
-        let b = deck.beatAt(deck.now())
-        if b < 0 { return "-.-" }
-        let n = Int(b.rounded(.down))
-        return "\(n / 4 + 1).\(n % 4 + 1)"
     }
     var tempo: some View {
         VStack(spacing: 4) {
@@ -180,6 +190,7 @@ struct DeckView: View {
             HStack(spacing: 4) {
                 LitButton(label: "TAP") { deck.tap() }
                 LitButton(label: "GRID") { app.gridDeck = deck.i }
+                VinylButton(deck: deck, short: compact)
             }
         }
     }
@@ -277,11 +288,11 @@ struct JogView: View {
                         if da > .pi { da -= 2 * .pi }
                         if da < -.pi { da += 2 * .pi }
                         deck.jogTicks(da / (2 * .pi) * 720, .scratch)
-                    } else { deck.jogTouch(true) }
+                    } else { deck.platterTouch(true) }
                     last = a
                 }
-                .onEnded { _ in if last != nil { last = nil; deck.jogTouch(false) } })
-            .onChange(of: touching) { _, t in if !t && last != nil { last = nil; deck.jogTouch(false) } }
+                .onEnded { _ in if last != nil { last = nil; deck.platterTouch(false) } })
+            .onChange(of: touching) { _, t in if !t && last != nil { last = nil; deck.platterTouch(false) } }
         }
     }
 }
@@ -324,11 +335,16 @@ struct PhoneLane: View {
                         if deck.loaded {
                             if let c = Keys.camelot(deck.keyNow()) { Text(c.label).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Theme.keyColor(c.num, c.letter)) }
                             Text(String(format: "%.2f", deck.effBpm())).font(.system(size: 12, weight: .bold, design: .monospaced))
+                            // the track's own tempo, when the fader or SYNC has moved it
+                            if let o = origTempo(deck) { Text("(\(o))").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted).lineLimit(1).fixedSize() }
                             Text(String(format: "%+.1f%%", (deck.rate() - 1) * 100)).font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted)
                             phaseTag(deck)
                             // whose beat grid this is: rekordbox's (beat by beat) or Cratebox's analysis
                             let rb = (deck.track?.rbGrid ?? false) && !(deck.track?.gridManual ?? false)
                             Text(deck.ana?.beats != nil ? "RB GRID · VAR" : rb ? "RB GRID" : "AUTO GRID").font(.system(size: 8, weight: .heavy)).foregroundStyle(rb ? Theme.ok : Theme.cue)
+                            // the beat counter, bar.beat like the web app's: 1.1 1.2 1.3 1.4 2.1 …
+                            Text(deck.barBeat()).font(.system(size: 12, weight: .heavy, design: .monospaced)).foregroundStyle(color).lineLimit(1).fixedSize()
+                                .accessibilityLabel("Bar and beat \(deck.barBeat())")
                             Text("-" + clock(deck.duration - deck.now())).font(.system(size: 11, design: .monospaced))
                         }
                     }

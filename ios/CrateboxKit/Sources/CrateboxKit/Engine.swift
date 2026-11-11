@@ -31,6 +31,9 @@ public final class Engine {
     public let decks: [DeckPlayer]
     let strips: [ChannelStrip]
     let masterFx: FxUnit
+    /// the master EQ's bands: the audio thread's alone, changed in place
+    let eq: UnsafeMutablePointer<PeakBand>
+    let eqN = MasterEQ.freqs.count
     var limiter: Limiter
     var mixer = MixerState()
     var gMaster: Double, gHpCue = 1.0, gHpMaster = 0.0, gMcue = 0.0
@@ -68,6 +71,9 @@ public final class Engine {
         strips = (0..<4).map { _ in ChannelStrip(sr: sampleRate) }
         masterFx = FxUnit(sampleRate: sampleRate)
         limiter = Limiter(sr: sampleRate)
+        let bands = UnsafeMutablePointer<PeakBand>.allocate(capacity: MasterEQ.freqs.count)
+        for (b, f) in MasterEQ.freqs.enumerated() { (bands + b).initialize(to: PeakBand(f: f, sr: sampleRate)) }
+        eq = bands
         gMaster = MixerCurves.masterGain(0.8)
         func buf() -> UnsafeMutablePointer<Float> { let p = UnsafeMutablePointer<Float>.allocate(capacity: 128); p.initialize(repeating: 0, count: 128); return p }
         dl = (0..<4).map { _ in buf() }; dr = (0..<4).map { _ in buf() }
@@ -103,7 +109,10 @@ public final class Engine {
         case .track(let i, let t):
             if let old = decks[i].track { retired.append(old) }     // keep it alive until the main thread drops it
             decks[i].setTrack(t)
-        case .mixer(let m): mixer = m; for i in 0..<4 { strips[i].apply(m, i) }
+        case .mixer(let m):
+            mixer = m; for i in 0..<4 { strips[i].apply(m, i) }
+            // off = every band back to flat (it glides there, then costs nothing)
+            for b in 0..<min(eqN, m.eq.gains.count) { eq[b].target = m.eq.on ? min(MasterEQ.range, max(-MasterEQ.range, m.eq.gains[b])) : 0 }
         case .fx(let u, let slot, let fx, let beats, let depth, let on):
             let unit = u < 4 ? strips[u].fx : masterFx
             (slot == .beat ? unit.beat : unit.pad).set(fx: fx, beats: beats, depth: depth, on: on)
@@ -137,6 +146,7 @@ public final class Engine {
                 for j in 0..<m { mL[j] += dl[i][j]; mR[j] += dr[i][j] }
             }
             masterFx.process(mL, mR, m, time: time)
+            for b in 0..<eqN { eq[b].process(mL, mR, m) }
             for j in 0..<m {
                 gMaster += (tMaster - gMaster) * k; gHpCue += (hm.cue - gHpCue) * k; gHpMaster += (hm.master - gHpMaster) * k; gMcue += (tMc - gMcue) * k
                 let ml = Double(mL[j]) * gMaster, mr = Double(mR[j]) * gMaster

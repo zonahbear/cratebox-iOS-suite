@@ -1,5 +1,5 @@
 // The mixer: per channel trim, 3-band isolator EQ, CFX filter, FX insert, CUE, fader and crossfader; the
-// master (BEAT FX on MASTER, level, limiter) and the headphone mix. The web app builds this from Web
+// master (BEAT FX on MASTER, the master EQ, level, limiter) and the headphone mix. The web app builds this from Web
 // Audio nodes (buildDeckChain / applyMixer / applyMaster in cratebox.html); this does the same sums: the
 // filters use the Web Audio BiquadFilter formulas (Q in dB for low/high-pass), parameter changes glide like
 // setTargetAtTime(v, t, 0.008), and the curves (EQ, trim, fader, crossfader, CUE/MASTER) are the app's.
@@ -16,7 +16,74 @@ public struct MixerState {
     public var xfader = 0.5, headMix = 0.0, masterCue = false, master = 0.8
     /// decks shown (3 and 4 only in 4-deck mode); hidden ones are muted
     public var active = [true, true, false, false]
+    /// the master EQ (after BEAT FX on MASTER, before the master level and the limiter)
+    public var eq = MasterEQ()
     public init() {}
+}
+
+/// The master EQ: ten bands an octave apart, each ±12 dB, for tuning the whole mix to the room or the speakers.
+/// It shapes everything the master carries (speakers, recording, the master in the headphones), not the CUE sends.
+public struct MasterEQ: Equatable {
+    public static let freqs: [Double] = [31.25, 62.5, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    public static let labels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
+    public static let range = 12.0
+    public static let presets: [(name: String, gains: [Double])] = [
+        ("Flat", [0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
+        ("Bass boost", [5, 5, 4, 2, 0, 0, 0, 0, 0, 0]),
+        ("Club", [4, 4, 2, 0, -1, -1, 0, 2, 3, 3]),
+        ("Warm", [2, 3, 2, 1, 0, 0, -1, -2, -2, -3]),
+        ("Bright", [0, 0, 0, 0, 0, 0, 1, 2, 4, 4]),
+        ("Vocal", [-2, -2, -1, 0, 2, 3, 3, 2, 0, -1]),
+        ("Small speakers", [-12, -4, 3, 3, 1, 0, 0, 1, 2, 1]),
+        ("Late night", [-6, -5, -3, -1, 0, 0, 0, 0, 0, 0]),
+    ]
+    public var on = false
+    /// dB per band
+    public var gains = [Double](repeating: 0, count: 10)
+    public init() {}
+    /// the preset these gains are, if any
+    public var preset: String? { MasterEQ.presets.first { $0.gains == gains }?.name }
+    /// "1;0,0,3,…" for the settings
+    public var text: String { (on ? "1;" : "0;") + gains.map { String(format: "%g", $0) }.joined(separator: ",") }
+    public init(text: String) {
+        let p = text.split(separator: ";", omittingEmptySubsequences: false)
+        guard p.count == 2 else { return }
+        let g = p[1].split(separator: ",").compactMap { Double($0) }
+        guard g.count == gains.count else { return }
+        on = p[0] == "1"; gains = g.map { min(MasterEQ.range, max(-MasterEQ.range, $0)) }
+    }
+}
+
+/// One band of the master EQ: a peaking filter (RBJ cookbook), stereo, transposed direct form II. Its gain glides
+/// to the target a block at a time; flat and settled, it costs nothing.
+struct PeakBand {
+    let f: Double, q: Double, sr: Double
+    var db = 0.0, target = 0.0
+    var b0 = 1.0, b1 = 0.0, b2 = 0.0, a1 = 0.0, a2 = 0.0
+    var zl1 = 0.0, zl2 = 0.0, zr1 = 0.0, zr2 = 0.0
+    /// q 1.41: about an octave wide, so neighbouring bands add up smoothly
+    init(f: Double, q: Double = 1.41, sr: Double) { self.f = min(f, sr * 0.45); self.q = q; self.sr = sr }
+    mutating func set() {
+        if db == 0 { b0 = 1; b1 = 0; b2 = 0; a1 = 0; a2 = 0; return }
+        let A = pow(10, db / 40), w0 = 2 * Double.pi * f / sr, alpha = sin(w0) / (2 * q), c = cos(w0)
+        let a0 = 1 + alpha / A
+        b0 = (1 + alpha * A) / a0; b1 = -2 * c / a0; b2 = (1 - alpha * A) / a0
+        a1 = -2 * c / a0; a2 = (1 - alpha / A) / a0
+    }
+    mutating func process(_ L: UnsafeMutablePointer<Float>, _ R: UnsafeMutablePointer<Float>, _ n: Int) {
+        if db == 0 && target == 0 { return }
+        if db != target {
+            db += (target - db) * 0.25
+            if abs(target - db) < 0.01 { db = target }
+            set()           // at 0 dB: straight through for this block, which also empties the filter's memory
+        }
+        for j in 0..<n {
+            let l = Double(L[j]), r = Double(R[j])
+            let yl = b0 * l + zl1; zl1 = b1 * l - a1 * yl + zl2; zl2 = b2 * l - a2 * yl
+            let yr = b0 * r + zr1; zr1 = b1 * r - a1 * yr + zr2; zr2 = b2 * r - a2 * yr
+            L[j] = Float(yl); R[j] = Float(yr)
+        }
+    }
 }
 
 public enum MixerCurves {

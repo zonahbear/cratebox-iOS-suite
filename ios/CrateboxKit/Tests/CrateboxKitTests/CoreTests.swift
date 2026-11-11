@@ -22,7 +22,7 @@ final class CoreTests: XCTestCase {
             case "sync": if on, let d { d.setSync(!d.sync) }
             case "hot": if on { d?.hotcue(Int(arg)!) }
             case "loop": if on { d?.beatLoop(Double(arg)!) }
-            case "touch": d?.jogTouch(on)
+            case "touch": d?.platterTouch(on)
             default: break
             }
         }
@@ -293,6 +293,55 @@ final class CoreTests: XCTestCase {
         rig.midi.toggleSide(0)
         rig.midi.receive([0x96, 0x46, 0x7f])
         XCTAssertEqual(rig.pressed.last.map { [$0.0] + ["\($0.1)"] }, ["load", "2"], "LOAD 1 follows the left side (deck 3)")
+    }
+    /// changing the tempo range keeps the tempo: the fader moves to the same change in the new range, or to the
+    /// range's end when the change doesn't fit
+    func testRangeChangeKeepsTheTempo() {
+        let (c, e) = makeCore(); load(c, 0, bpm: 120); render(e, c, secs: 0.1)
+        let d = c.decks[0]
+        var changed = [Int](); c.rangeChanged = { changed.append($0) }
+        d.setPitch(0.5); XCTAssertEqual(d.effBpm(), 123.6, accuracy: 1e-6)          // +3% of ±6
+        d.cycleRange(); XCTAssertEqual(d.range, 10)
+        XCTAssertEqual(d.effBpm(), 123.6, accuracy: 1e-6); XCTAssertEqual(d.pitch, 0.3, accuracy: 1e-9)
+        XCTAssertEqual(changed, [0])
+        d.setPitch(1); XCTAssertEqual(d.effBpm(), 132, accuracy: 1e-6)              // +10%
+        d.cycleRange(); d.cycleRange(); d.cycleRange(); XCTAssertEqual(d.range, 6)  // 16, WIDE, back to 6: +10% doesn't fit
+        XCTAssertEqual(d.pitch, 1, accuracy: 1e-9); XCTAssertEqual(d.effBpm(), 127.2, accuracy: 1e-6)
+        XCTAssertEqual(d.origBpm(), 120, accuracy: 1e-9)
+    }
+    /// VINYL off: the top of the platter doesn't hold the track, and a held one is let go
+    func testVinylMode() {
+        let (c, e) = makeCore(); load(c, 0, bpm: 120); render(e, c, secs: 0.1)
+        let d = c.decks[0]
+        XCTAssertTrue(d.vinyl)
+        d.platterTouch(true); XCTAssertTrue(d.touch); d.platterTouch(false); XCTAssertFalse(d.touch)
+        d.platterTouch(true); d.setVinyl(false); XCTAssertFalse(d.touch, "let go when vinyl goes off")
+        d.platterTouch(true); XCTAssertFalse(d.touch)
+        d.togglePlay(); render(e, c, secs: 1)
+        d.platterTouch(true); d.jogTicks(40, .scratch); render(e, c, secs: 0.5)       // a nudge, not a hold
+        XCTAssertTrue(d.playing); XCTAssertGreaterThan(d.now(), 1.3)
+        // the cores stay in locals: a deck's `core` is unowned, so a temporary Core would be gone before its deck is used
+        let p = MemoryPrefs(); let c1 = Core(engine: Engine(sampleRate: SR), prefs: p); c1.decks[1].setVinyl(false)
+        let c2 = Core(engine: Engine(sampleRate: SR), prefs: p)
+        XCTAssertFalse(c2.decks[1].vinyl, "remembered")
+    }
+    /// the beat counter, as the web app's barBeat: 1.1 on the grid's first beat, counting back before it
+    func testBarBeatCounter() {
+        let (c, e) = makeCore(); load(c, 0, bpm: 120); render(e, c, secs: 0.1)
+        let d = c.decks[0]
+        for (t, want) in [(0.0, "1.1"), (0.5, "1.2"), (1.6, "1.4"), (2.0, "2.1"), (9.75, "5.4")] { d.seek(t); XCTAssertEqual(d.barBeat(), want, "at \(t) s") }
+        d.setGrid(120, 1); d.seek(0.6); XCTAssertEqual(d.barBeat(), "0.4")           // bar 1 starts at 1 s: one beat before it
+    }
+    func testMasterEQSettings() {
+        let p = MemoryPrefs(); let c = Core(engine: Engine(sampleRate: SR), prefs: p)
+        XCTAssertFalse(c.mixer.eq.on); XCTAssertEqual(c.mixer.eq.preset, "Flat")
+        c.setEQ(preset: "Club"); XCTAssertTrue(c.mixer.eq.on); XCTAssertEqual(c.mixer.eq.preset, "Club")
+        c.setEQ(band: 0, db: 20.2); XCTAssertEqual(c.mixer.eq.gains[0], 12); XCTAssertNil(c.mixer.eq.preset)
+        c.setEQ(band: 9, db: -3.3); XCTAssertEqual(c.mixer.eq.gains[9], -3.5)
+        let c2 = Core(engine: Engine(sampleRate: SR), prefs: p)
+        XCTAssertEqual(c2.mixer.eq, c.mixer.eq, "remembered")
+        for pr in MasterEQ.presets { XCTAssertEqual(pr.gains.count, MasterEQ.freqs.count, pr.name) }
+        XCTAssertEqual(MasterEQ(text: "nonsense"), MasterEQ())
     }
     func testProfilesAndKeys() {
         XCTAssertEqual(Profiles.profile(for: "DDJ-FLX4").id, "ddj-flx4")

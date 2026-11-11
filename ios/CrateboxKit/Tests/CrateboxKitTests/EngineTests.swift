@@ -68,6 +68,23 @@ final class EngineTests: XCTestCase {
         print("ENGINE limiter peak \(peak)")
         XCTAssertLessThan(peak, 0.99, "never over full scale")
     }
+    /// the master EQ: +12 dB on the 1 kHz band lifts a 1 kHz tone by about 12 dB and leaves 62 Hz alone; off, it does nothing
+    func testMasterEQBoostsItsBand() {
+        func level(_ hz: Double, _ m: @escaping (inout MixerState) -> Void) -> Double {
+            let e = Engine(sampleRate: SR)
+            var ms = MixerState(); m(&ms)
+            e.post([.track(0, tone(hz, 2, amp: 0.02)), .deck(0, .load(mt: false, spin: nil)), .mixer(ms), .deck(0, .play(true))])   // quiet: clear of the limiter
+            return run(e)[0]
+        }
+        let boost: (inout MixerState) -> Void = { m in m.eq.on = true; m.eq.gains[5] = 12 }
+        let idle: (inout MixerState) -> Void = { m in m.eq.gains[5] = 12 }          // set, but the EQ is off
+        let flat: (inout MixerState) -> Void = { _ in }
+        let k = 20 * log10(level(1000, boost) / level(1000, flat))
+        let far = 20 * log10(level(62.5, boost) / level(62.5, flat))
+        let off = 20 * log10(level(1000, idle) / level(1000, flat))
+        print("ENGINE master EQ +12 at 1 kHz: \(k) dB there, \(far) dB at 62 Hz, \(off) dB when off")
+        XCTAssertEqual(k, 12, accuracy: 0.5); XCTAssertEqual(far, 0, accuracy: 0.5); XCTAssertEqual(off, 0, accuracy: 0.01)
+    }
     func testReportsPosition() {
         let e = engine(440)
         _ = run(e, skip: 0, secs: 1)

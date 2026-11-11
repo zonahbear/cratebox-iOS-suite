@@ -16,7 +16,7 @@ permissions:
 concurrency: { group: testflight, cancel-in-progress: false }
 jobs:
   upload:
-    runs-on: macos-15
+    runs-on: macos-15-intel   # GitHub's arm64 Mac pool has not been picking jobs up (Nov 2026); the archive is still arm64 for iPhones
     env:
       P12: ${{ secrets.IOS_DIST_P12_BASE64 }}
       P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}

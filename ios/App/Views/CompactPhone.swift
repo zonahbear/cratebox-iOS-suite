@@ -101,6 +101,7 @@ struct CompactTopBar: View {
                     Label(rec.recording ? "Stop recording" : "Record the mix", systemImage: rec.recording ? "stop.circle" : "record.circle")
                 }
                 Button { trimSheet = true } label: { Label("Trim & filter…", systemImage: "slider.horizontal.3") }
+                Button { app.eqShown = true } label: { Label("Master EQ\(core.mixer.eq.on ? " (on)" : "")…", systemImage: "slider.vertical.3") }
                 Button { settings = true } label: { Label("Settings", systemImage: "gearshape") }
             } label: {
                 Image(systemName: "ellipsis").font(.system(size: 17, weight: .bold)).frame(width: 44, height: 32)
@@ -234,7 +235,7 @@ struct CompactDeck: View {
                 .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.loop : Theme.raise))
         }.buttonStyle(.plain)
     }
-    /// the deck's ⋯: tempo range, TAP, beat grid, tempo reset, MT and Q, all 44 pt
+    /// the deck's ⋯: tempo range, TAP, beat grid, tempo reset, MT, Q, SCRATCH and VINYL, all 44 pt
     var toolPanel: some View {
         VStack(spacing: 8) {
             HStack(spacing: 8) {
@@ -251,6 +252,7 @@ struct CompactDeck: View {
             }
             HStack(spacing: 8) {
                 tool("SCRATCH", false) { tools = false; _ = app.scratch.insert(deck.i) }
+                tool("VINYL", deck.vinyl) { deck.setVinyl(!deck.vinyl) }
             }
         }.padding(10)
     }

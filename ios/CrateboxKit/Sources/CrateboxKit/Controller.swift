@@ -254,6 +254,9 @@ public final class MIDIEngine {
         pickup[k] = .some(val)
         return false
     }
+    /// a control's value changed under the hardware (a tempo range change moves the fader's meaning): the
+    /// hardware takes over again once it reaches the new value, instead of jumping there on its next message
+    public func holdPickup(_ name: String, deck: Int) { if profile != nil { pickup["\(name)/\(deck)"] = .some(nil) } }
     public func setSide(_ s: Int, _ deck: Int) {
         if deck == side[s] || deck >= (target?.deckCount ?? 2) { return }
         target?.press("touch", arg: "", deck: side[s], on: false)          // let go of the platter on the deck being left

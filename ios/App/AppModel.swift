@@ -56,6 +56,8 @@ final class AppModel: ObservableObject, ControlTarget {
     @Published var tab = 0                       // phones: 0 = mix, 1 = library
     /// WAVE: the decks and mixer fold away, the waveforms fill the screen (remembered across launches)
     @Published var waveMode = UserDefaults.standard.bool(forKey: "cb.waveMode") { didSet { UserDefaults.standard.set(waveMode, forKey: "cb.waveMode") } }
+    @Published var eqShown = false               // the master EQ sheet
+    @Published var tourShown = false             // the walkthrough
     @Published var gridDeck: Int?                // the deck whose beat grid editor is open
     var visibleTrackIds: [String] = []           // the library list as shown (for the browse knob)
     var libraryShown = false                     // the library list is on screen (then the knob follows it, search included)
@@ -73,6 +75,7 @@ final class AppModel: ObservableObject, ControlTarget {
         core.clock = { [unowned self] in self.smoothClock() }
         core.lag = { [unowned self] in self.audio.latency }
         core.status = { [weak self] s, secs in self?.status(s, secs) }
+        core.rangeChanged = { [weak self] d in self?.midi.holdPickup("tempo", deck: d) }
         core.trackChanged = { [weak self] t in if let lt = self?.library.track(t.id) { self?.library.changed(lt) } }
         core.reanalyse = { [weak self] t in if let lt = self?.library.track(t.id) { lt.rec.ver = 0; self?.library.enqueue(lt) } }
         library.status = { [weak self] s in self?.status(s) }
@@ -380,7 +383,7 @@ final class AppModel: ObservableObject, ControlTarget {
         case "sync": if on, let d { d.setSync(!d.sync) }
         case "syncOn": if on, let d, !d.sync { d.setSync(true) }
         case "range": if on { d?.cycleRange() }
-        case "touch": d?.jogTouch(on)
+        case "touch": d?.platterTouch(on)
         case "loopIn": d?.loopInPress(on)
         case "loopOut": if on { d?.loopOut() }
         case "reloop": if on { d?.reloopExit() }

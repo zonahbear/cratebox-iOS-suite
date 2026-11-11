@@ -17,7 +17,7 @@ permissions:
 concurrency: { group: "ios-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   build:
-    runs-on: macos-15-intel   # the arm64 pool had no capacity on 2026-11-10
+    runs-on: macos-15-intel   # GitHub's arm64 Mac pool has not been picking jobs up (Nov 2026); simulators here are x86_64
     steps:
       - uses: actions/checkout@v4
       - name: Xcode

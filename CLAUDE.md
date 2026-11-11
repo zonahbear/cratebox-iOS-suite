@@ -10,7 +10,7 @@ fold this file into it.)
   size. If a device is missing, measure it (ios.yml, `measure: true`) and add it there first.
 - HEAT never goes into the shipping app (`com.zonahbear.cratebox.suite`). It lives only on `personal/heat`
   (`com.zonahbear.cratebox.heat`), which never merges back.
-- Installs only via TestFlight (sideloading retired). macOS CI is manual-only.
+- Installs only via TestFlight (sideloading retired). macOS CI is manual-only, on `macos-15-intel` (the arm64 pool stopped picking jobs up, Nov 2026).
 
 ## Breadcrumbs
 

@@ -98,7 +98,15 @@ struct SuiteRoot: View {
         .onAppear {
             app.bridge.setActive(suite.mode == .deckBridge)
             app.usb.setActive(suite.mode == .usb)
+            // the walkthrough, offered once on the first launch (skippable on every page); not in CI screenshot
+            // runs, which all pass launch arguments
+            let u = UserDefaults.standard
+            if suite.mode == .performance && CommandLine.arguments.count <= 1 && !u.bool(forKey: "cb.tourSeen") {
+                u.set(true, forKey: "cb.tourSeen")
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { app.tourShown = true }
+            }
         }
+        .sheet(isPresented: $app.tourShown) { TourView() }
     }
 }
 

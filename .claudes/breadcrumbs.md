@@ -154,6 +154,42 @@
 - personal/heat needs the same two fixes as its own change (never merged from here). HEAT there should also get truecurve PR #4's two
   fail-safes (stop after 3 s with no temperature reading; no run without a slot 4 backup).
 
+## 2026-11-10 22:40Z: Jonah's TODO list for iOS (branch claude/project-thread-t5561g, from preview/truecurve-usb 24bbebb)
+
+NOT COMPILED: no Swift here and GitHub had no free macOS runners all evening (TestFlight run 42878900563 cancelled
+unstarted four times; that also means #28 itself has never been compiled). First compile = first run that gets a Mac.
+
+- Beat counter: `DeckModel.barBeat()` (same rule as the web's `barBeat`), shown in every PhoneLane (phones, Touch mode,
+  WAVE, iPad 4-deck) and the iPad deck header.
+- Tempo: `cycleRange()` keeps the tempo (the fader moves to the same % in the new range, or its end), then calls
+  `core.rangeChanged` → `MIDIEngine.holdPickup("tempo")` so a hardware fader takes over without a jump. The track's
+  own tempo (`origBpm()`) shows beside the playing one whenever they differ (`origTempo` in DeckView.swift).
+- VINYL: `DeckModel.vinyl` / `setVinyl` / `platterTouch` (pref `cb.vinyl<i>`). Off = the platter top never holds the
+  track, it nudges. Buttons: iPad transport row (VINYL), phone pad-tab row and iPad 4-deck row (V), Touch mode deck ⋯.
+  The phone edge strips had no room: 364 of 390 pt used on the shortest island phones.
+  Dragging the waveform still scratches in either mode.
+- Master EQ: `MasterEQ` in MixerState (10 bands 31 Hz-16 kHz, ±12 dB, 8 presets), `PeakBand` in the engine after BEAT FX
+  on MASTER and before the master level + limiter; `Core.setEQ(...)`, pref `cb.eq`. Screen: Views/MasterEQView.swift,
+  opened by EQ in the master section (iPad, phone top bar / MASTER popover), Touch mode ⋯, and Settings.
+- Walkthrough: Views/TourView.swift, six pages, Skip on every page. Offered once on first launch (`cb.tourSeen`), only
+  when there are no launch arguments (CI always passes -demo), and from Settings → Show the walkthrough.
+- Tests added (unrun): CoreTests testRangeChangeKeepsTheTempo / testVinylMode / testBarBeatCounter / testMasterEQSettings,
+  EngineTests testMasterEQBoostsItsBand.
+- Other iOS thread (claude/project-thread-ggbual, Apple Intelligence) touches Analysis.swift, DeckPlayer.swift (PCMTrack
+  init), Library.swift, LibraryView.swift, project.yml, SmartSearch.swift: none of the files above.
+- Next: get one macOS run through, fix what the compiler says, check the screenshots (EQ sheet on an SE-size screen,
+  the V tab on a 16e). personal/heat has none of this yet.
+
+## 2026-11-10 22:35Z: Intel Mac runners, first compile
+- GitHub's arm64 Mac pool cancelled TestFlight unstarted 4 times. Jonah: "try the intel pool". ios.yml and testflight.yml
+  now `runs-on: macos-15-intel`: picked up in 6 s. Simulators there are x86_64; the archive is still arm64 (generic/platform=iOS).
+- TestFlight run 42913806647 on claude/project-thread-t5561g @ 8283c23 (= #28 + the TODO features): ARCHIVE SUCCEEDED,
+  UPLOADED build 47.1 (Xcode 26.3). First compile of #28 and of d63cfd8; no fixes needed.
+- ios.yml run 42913811801 (same commit, devices none): "Core tests" step finished; check its final gate before merging PR #29.
+- Next: merge PR #29 into preview/truecurve-usb (triggers one more TestFlight build from the merge commit). Nothing tried
+  on a device: VINYL, range change + FLX4 soft takeover, master EQ sound, walkthrough layout on SE all need Jonah's hands.
+  personal/heat does not have these features.
+
 ## 2026-11-10: Apple Intelligence feasibility (research only, no code)
 - Full note: project files `research/apple-intelligence-ios.md`. Foundation Models = text/image LLM, 4096 tokens, iPhone 15 Pro+/16+ only:
   good for optional library features (natural-language search, tags), useless for audio analysis.

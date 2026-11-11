@@ -12,6 +12,7 @@ struct ContentView: View {
         if UIDevice.current.userInterfaceIdiom == .phone {
             PhoneScreen(settings: $settings)
                 .sheet(isPresented: $settings) { SettingsView() }
+                .sheet(isPresented: $app.eqShown) { MasterEQView() }
                 .sheet(item: Binding(get: { app.gridDeck.map { GridTarget(id: $0) } }, set: { app.gridDeck = $0?.id })) { t in GridEditor(deck: core.decks[t.id]) }
         } else { pad }
     }
@@ -27,6 +28,7 @@ struct ContentView: View {
             .background(Theme.bg)
         }
         .sheet(isPresented: $settings) { SettingsView() }
+        .sheet(isPresented: $app.eqShown) { MasterEQView() }
         .sheet(item: Binding(get: { app.gridDeck.map { GridTarget(id: $0) } }, set: { app.gridDeck = $0?.id })) { t in GridEditor(deck: core.decks[t.id]) }
     }
     struct GridTarget: Identifiable { let id: Int }
@@ -162,6 +164,10 @@ struct SettingsView: View {
                         Toggle("Split (mono master left, mono cue right, with a splitter cable)", isOn: $split).onChange(of: split) { _, v in app.audio.setSplit(v) }
                     }
                 }
+                Section {
+                    Button("Master EQ…") { dismiss(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { app.eqShown = true } }
+                    Button("Show the walkthrough") { dismiss(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { app.tourShown = true } }
+                } footer: { Text("Master EQ: ten bands on the whole mix, \(core.mixer.eq.on ? "on" : "off") now. The walkthrough is the short tour offered the first time the app opens.") }
                 Section("Look") {
                     Toggle("Phrases (Intro / Build / Drop… on the waveforms)", isOn: $phrases)
                     Picker("Waveform", selection: $waveStyle) { Text("RGB (red lows, green mids, blue highs)").tag("rgb"); Text("3-band").tag("3band") }

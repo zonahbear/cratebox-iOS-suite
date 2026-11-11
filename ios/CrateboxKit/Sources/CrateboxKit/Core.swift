@@ -95,6 +95,9 @@ public final class DeckModel: ObservableObject, Identifiable {
     var coasting = false, coastHold = 0.0
     public private(set) var startedAt = 0.0
     @Published public private(set) var mt = true
+    /// VINYL: touching the top of the platter holds and scratches the track. Off (a CDJ's "CDJ mode"): the top only
+    /// nudges, like the edge, so a hand resting on it can't stop the music
+    @Published public private(set) var vinyl = true
     var seekSeq = 0
     var syncWith: DeckModel?
     var syncTrack: TrackInfo?
@@ -105,6 +108,7 @@ public final class DeckModel: ObservableObject, Identifiable {
     init(_ i: Int, core: Core) {
         self.i = i; self.core = core
         mt = core.prefs.bool("cb.mt\(i)", true)
+        vinyl = core.prefs.bool("cb.vinyl\(i)", true)
     }
     func post(_ m: DeckMessage) { core.engine.post(.deck(i, m)) }
     public var loaded: Bool { track != nil && !loading && duration > 0 }
@@ -139,6 +143,18 @@ public final class DeckModel: ObservableObject, Identifiable {
         mt = on; core.prefs.set("cb.mt\(i)", on)
         post(.mt(on))
         core.status("Deck \(i + 1): master tempo \(on ? "on (tempo changes keep the key)" : "off (vinyl: tempo changes the pitch)")")
+    }
+
+    public func setVinyl(_ on: Bool) {
+        if !on && touch { jogTouch(false, noCoast: true) }       // a platter that's being held is let go
+        vinyl = on; core.prefs.set("cb.vinyl\(i)", on)
+        core.status("Deck \(i + 1): vinyl mode \(on ? "on (the top of the platter holds and scratches)" : "off (the platter only nudges the tempo)")")
+    }
+    /// the top of a platter, on screen or on the controller: holds the track only in vinyl mode. The turns that
+    /// follow go to jogTicks(.scratch) either way: with nothing held, they nudge.
+    public func platterTouch(_ on: Bool) {
+        if on ? !vinyl : !touch { return }
+        jogTouch(on)
     }
 
     // ---- beat grid editing: every edit keeps the beat under the playhead, and firstBeat on a bar line ----
@@ -479,10 +495,26 @@ public final class DeckModel: ObservableObject, Identifiable {
         let trim = syncTrim + (want - syncTrim) * 0.2
         if abs(trim - syncTrim) > 1e-6 || (want == 0 && syncTrim != 0) { syncTrim = abs(trim) < 1e-5 ? 0 : trim; sendRate() }
     }
+    /// the next tempo range. The tempo stays where it is: the fader moves to where the same change sits in the new
+    /// range (at its end, when the new range is too small for it), and a controller's fader takes over again once
+    /// it reaches that spot (core.rangeChanged), so nothing jumps.
     public func cycleRange() {
+        let was = pitch * range / 100
         rangeIdx = (rangeIdx + 1) % RANGES.count
+        pitch = clamp(was * 100 / range, -1, 1)
+        let kept = pitch * range / 100
         sendRate()
-        core.status("Deck \(i + 1) tempo range ±\(range == 100 ? "WIDE" : "\(Int(range))%")")
+        core.rangeChanged(i)
+        core.status("Deck \(i + 1) tempo range ±\(range == 100 ? "WIDE" : "\(Int(range))%")" + (abs(kept - was) > 1e-9 ? ": the tempo was outside it, now \(String(format: "%+.1f", kept * 100))%" : ""))
+    }
+    /// the track's own tempo at the playhead (what the grid says, before the fader or SYNC)
+    public func origBpm() -> Double { tempoNow() }
+    /// "bar.beat" at the playhead, like the web app: beat 0 of the grid is 1.1; before bar 1 it runs 0.4, 0.3 … back
+    public func barBeat() -> String {
+        guard ana != nil, bpm > 0 else { return "" }
+        let b = Int(jsFloor(beatAt(now()) + 1e-6))
+        let bar = Int(jsFloor(Double(b) / 4)) + 1, beat = ((b % 4) + 4) % 4 + 1
+        return "\(bar).\(beat)"
     }
     public func setPitch(_ v: Double) {
         let p = clamp(v, -1, 1)
@@ -626,6 +658,8 @@ public final class Core: ObservableObject {
     public var trackChanged: (TrackInfo) -> Void = { _ in }
     public var reanalyse: (TrackInfo) -> Void = { _ in }
     public var playStarted: () -> Void = {}
+    /// a deck's tempo range changed (its fader's position means something else now)
+    public var rangeChanged: (Int) -> Void = { _ in }
     @Published public var mixer = MixerState() { didSet { engine.post(.mixer(mixer)) } }
     /// more than two decks (3 or 4); `three`: three decks, 1 and 3 sharing the controller's left side, 2 alone on the right
     @Published public private(set) var four: Bool
@@ -643,6 +677,7 @@ public final class Core: ObservableObject {
         spinSecs = prefs.double("cb.spin", 2.5)
         decks = (0..<4).map { DeckModel($0, core: self) }
         mixer.active = [true, true, four, four && !three]
+        mixer.eq = MasterEQ(text: prefs.string("cb.eq", ""))
         engine.post(.mixer(mixer))
         for d in decks { engine.post(.deck(d.i, .mt(d.mt))) }
     }
@@ -702,6 +737,21 @@ public final class Core: ObservableObject {
         case "tempo": return (decks[deck].pitch + 1) / 2
         default: return nil
         }
+    }
+    // ---- master EQ (kept between launches) ----
+    public func setEQ(on: Bool) { mixer.eq.on = on; prefs.set("cb.eq", mixer.eq.text) }
+    public func setEQ(band: Int, db: Double) {
+        guard mixer.eq.gains.indices.contains(band) else { return }
+        // half-dB steps: fine enough to hear nothing between them, and the numbers stay readable
+        mixer.eq.gains[band] = clamp(jsRound(db * 2) / 2, -MasterEQ.range, MasterEQ.range)
+        prefs.set("cb.eq", mixer.eq.text)
+    }
+    /// a preset by name; picking one turns the EQ on (Flat leaves it as it is)
+    public func setEQ(preset name: String) {
+        guard let p = MasterEQ.presets.first(where: { $0.name == name }) else { return }
+        mixer.eq.gains = p.gains
+        if name != "Flat" { mixer.eq.on = true }
+        prefs.set("cb.eq", mixer.eq.text)
     }
     public func togglePfl(_ deck: Int) { mixer.pfl[deck].toggle() }
     public func toggleMasterCue() { mixer.masterCue.toggle() }
