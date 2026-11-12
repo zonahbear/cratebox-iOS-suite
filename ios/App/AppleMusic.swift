@@ -163,9 +163,10 @@ final class AppleMusic: ObservableObject {
         Suggest.app = app
         // new folders, a stick plugged in: look for tracks to analyse a few seconds after the list settles
         app.library.$tracks.sink { [weak self] _ in self?.twinStale = true }.store(in: &subs)
-        app.library.$tracks.debounce(for: .seconds(4), scheduler: RunLoop.main).sink { [weak self] _ in self?.kick() }.store(in: &subs)
+        app.library.$tracks.debounce(for: .seconds(4), scheduler: RunLoop.main).sink { [weak self] _ in self?.kick(); self?.adoptGrids() }.store(in: &subs)
         kick()
         backfill()
+        adoptGrids()
     }
 
     // ---- results ----
@@ -186,6 +187,37 @@ final class AppleMusic: ObservableObject {
     static func twinKey(_ t: LibTrack) -> String {
         if let r = t.rb { return Library.twinKey(r.filename.isEmpty ? (r.path as NSString).lastPathComponent : r.filename, Int64(r.size)) }
         return Library.twinKey((t.rec.rel as NSString).lastPathComponent, t.rec.size)
+    }
+    /// library tracks Cratebox hasn't analysed yet but Apple has (themselves or their USB twin): they take Apple's
+    /// grid, key and length straight away (grid order: Apple's comes before Cratebox's own), so the library, MATCH
+    /// and AI DJ can use them without a second analysis. Read off the main thread, a batch at a time
+    private var adopting = false
+    func adoptGrids() {
+        guard !adopting, AppleGridMode.now != .off, let app else { return }
+        let todo = app.library.tracks.filter { !$0.analysed && !$0.rec.gridManual }.compactMap { t in source(t).map { (t, file($0)) } }
+        guard !todo.isEmpty else { return }
+        adopting = true
+        let range = Settings.bpmRange
+        DispatchQueue.global(qos: .utility).async {
+            var got = [(LibTrack, Double, Double, Double, Int)]()
+            for (t, u) in todo {
+                guard let d = try? Data(contentsOf: u), let f = try? JSONDecoder().decode(AppleFeatures.self, from: d),
+                      let g = f.grid(near: nil, range: range) else { continue }
+                let dur = max(f.beats.last ?? 0, f.sections.last?.end ?? 0, f.phrases.last?.end ?? 0)
+                got.append((t, g.bpm, g.firstBeat, dur, f.key))
+            }
+            DispatchQueue.main.async {
+                for (t, bpm, first, dur, key) in got where !t.analysed && !t.rec.gridManual {
+                    t.info.bpm = bpm; t.info.firstBeat = first; t.info.appleGrid = true
+                    if t.info.duration <= 0 { t.info.duration = dur }
+                    if t.info.key < 0 && key >= 0 { t.info.key = key }
+                    t.rec.ver = Library.ANALYSIS_VER
+                    app.library.changed(t)
+                }
+                if !got.isEmpty { app.library.objectWillChange.send() }
+                self.adopting = false
+            }
+        }
     }
     /// the twin key of a stored result, from its track id and the size it was analysed at
     static func twinKey(id: String, size: Int64) -> String? {
@@ -338,6 +370,7 @@ final class AppleMusic: ObservableObject {
             if let d = try? JSONEncoder().encode(f) { try? d.write(to: file(id), options: .atomic) }
             cache[id] = f
             twinStale = true
+            DispatchQueue.main.async { [weak self] in self?.adoptGrids() }
             analysed += 1
         case .failure(let e):
             if e is CancellationError || cancelled { progress = AIMode.on ? "Paused while a deck plays" : ""; later(5); return }

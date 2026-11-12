@@ -148,7 +148,7 @@ struct AIDJView: View {
                 LitButton(label: "SELECTED", on: dj.source == .selected, color: Theme.accent, wide: true) { dj.source = .selected; if dj.selected.isEmpty { picking = true } }
             }
             HStack {
-                Text("\(count) analysed track\(count == 1 ? "" : "s") in \(dj.sourceName)").font(.system(size: 11)).foregroundStyle(Theme.muted)
+                Text("\(count) track\(count == 1 ? "" : "s") with a beat grid in \(dj.sourceName)").font(.system(size: 11)).foregroundStyle(Theme.muted)
                 Spacer()
                 if dj.source == .selected { Button("Choose…") { picking = true }.font(.system(size: 12, weight: .semibold)) }
             }

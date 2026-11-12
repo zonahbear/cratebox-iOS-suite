@@ -183,7 +183,7 @@ final class AIDJ: ObservableObject {
             return
         }
         let pool = poolTracks().filter { !skipped.contains($0.id) }
-        guard let first = firstPick(pool) else { say(pool.isEmpty ? "No analysed tracks in \(sourceName)" : "Nothing to play"); return }
+        guard let first = firstPick(pool) else { say(pool.isEmpty ? "No tracks with a beat grid in \(sourceName)" : "Nothing to play"); return }
         onAir = 0; nextDeck = 1
         for i in deckSet where i != 0 { deck(i).setPlaying(false) }
         load(first, on: 0)
