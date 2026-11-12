@@ -166,17 +166,7 @@ struct MixerView: View {
     }
 
     var crossfader: some View {
-        GeometryReader { g in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Theme.raise).frame(height: 6)
-                RoundedRectangle(cornerRadius: 3).fill(Theme.fg).frame(width: 16, height: 26)
-                    .offset(x: CGFloat(core.mixer.xfader) * (g.size.width - 16))
-            }
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .faderDrag(core.mixer.xfader, span: g.size.width - 16) { core.mixer.xfader = $0 }
-            .onTapGesture(count: 2) { core.mixer.xfader = 0.5 }
-        }.frame(height: 30)
+        XFaderBar(value: core.mixer.xfader, capW: 16, capH: 26) { core.mixer.xfader = $0 }.frame(height: 30)
     }
 }
 

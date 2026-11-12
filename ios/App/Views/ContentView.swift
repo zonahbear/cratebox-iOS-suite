@@ -17,24 +17,34 @@ struct ContentView: View {
         } else { pad }
     }
     var pad: some View {
-        // state is read here, in the body, not inside the reader's closure (see PhoneFrame: Xcode 27)
-        let wave = app.waveMode
-        return GeometryReader { g in
-            VStack(spacing: 6) {
-                topBar
-                // a short iPad (mini, ~724 pt): BEAT FX folds into a button and the library can get smaller
-                if wave { WaveStack().frame(maxHeight: .infinity) } else { mix(compact: g.size.height < 900, short: g.size.height < 800) }
-                LibraryPane().frame(minHeight: g.size.height < 800 ? 130 : 180)
-            }
-            .padding(6)
-            .background(Theme.bg)
-        }
+        // the reader only measures: PadFrame reads the app's state in its own body. Built with Xcode 27, state read
+        // only inside a reader's closure doesn't redraw (as PhoneFrame found): reading WAVE out here wasn't enough,
+        // 4 DECKS, the controller's name and the status line in the top bar were read in there too
+        GeometryReader { g in PadFrame(settings: $settings, size: g.size) }
         .sheet(isPresented: $settings) { SettingsView() }
         .sheet(isPresented: $app.eqShown) { MasterEQView() }
         .sheet(item: Binding(get: { app.gridDeck.map { GridTarget(id: $0) } }, set: { app.gridDeck = $0?.id })) { t in GridEditor(deck: core.decks[t.id]) }
     }
     struct GridTarget: Identifiable { let id: Int }
 
+}
+
+/// the iPad's screen, sized by ContentView's reader. Reads the app's state in its own body, so a change redraws it
+struct PadFrame: View {
+    @EnvironmentObject var app: AppModel
+    @EnvironmentObject var core: Core
+    @Binding var settings: Bool
+    let size: CGSize
+    var body: some View {
+        VStack(spacing: 6) {
+            topBar
+            // a short iPad (mini, ~724 pt): BEAT FX folds into a button and the library can get smaller
+            if app.waveMode { WaveStack().frame(maxHeight: .infinity) } else { mix(compact: size.height < 900, short: size.height < 800) }
+            LibraryPane().frame(minHeight: size.height < 800 ? 130 : 180)
+        }
+        .padding(6)
+        .background(Theme.bg)
+    }
     @ViewBuilder func mix(compact: Bool, short: Bool = false) -> some View {
         if core.four && short {
             // 4 decks on a short iPad (mini): two columns of decks don't fit, so like the iPhone it shows the two
@@ -129,12 +139,16 @@ struct SettingsView: View {
     @AppStorage("cb.wave") var waveStyle = "rgb"
     @AppStorage("cb.compact") var compact = false
     @AppStorage(AIMode.key) var aiMode = false
+    @AppStorage(AutoTrim.key) var autoTrim = false
+    @AppStorage(AutoTrim.targetKey) var autoTrimTarget = -9.0
     @AppStorage(AppleGridMode.key) var appleGrid = 0
     @ObservedObject var apple = AppleMusic.shared
     @State private var warn = false
     @State private var learning = false
     @State private var hint = ""
 
+    /// auto trim turned on or its loudness changed: the loaded decks too (a playing one glides)
+    func retrim() { for i in core.activeDecks where core.decks[i].loaded { app.autoTrim(core.decks[i]) } }
     var body: some View {
         NavigationStack {
             Form {
@@ -167,6 +181,16 @@ struct SettingsView: View {
                     Text(app.audio.diagnostics).font(.caption2).foregroundStyle(Theme.muted).textSelection(.enabled)
                     if app.audio.outputChannels < 4 {
                         Toggle("Split (mono master left, mono cue right, with a splitter cable)", isOn: $split).onChange(of: split) { _, v in app.audio.setSplit(v) }
+                    }
+                    Toggle("Auto trim (every track at the same loudness)", isOn: $autoTrim)
+                        .onChange(of: autoTrim) { _, v in if v { retrim() } }
+                    if autoTrim {
+                        Picker("Loudness", selection: $autoTrimTarget) {
+                            ForEach(AutoTrim.targets, id: \.self) { t in Text("\(Int(t)) LUFS\(t == -9 ? " (club masters, default)" : t == -14 ? " (streaming level)" : "")").tag(t) }
+                        }
+                        .onChange(of: autoTrimTarget) { _, _ in retrim() }
+                        Text("Sets each deck's TRIM when a track loads, measured from the track itself (ITU-R BS.1770 loudness). Turn TRIM by hand afterwards as usual. Boosts stop at +6 dB, and before the track's peaks would hit the limiter.")
+                            .font(.caption).foregroundStyle(Theme.muted)
                     }
                 }
                 Section {

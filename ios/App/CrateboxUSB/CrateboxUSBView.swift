@@ -66,23 +66,35 @@ struct CrateboxUSBView: View {
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     var panes: some View {
-        GeometryReader { g in
-            if g.size.width >= 900 {
-                HStack(spacing: 6) {
-                    USBSidebar(usb: usb, selected: $selectedNode).frame(width: min(240, g.size.width * 0.2))
-                    USBTrackList(usb: usb, node: selectedNode, selected: $selectedTrack)
-                    USBInspector(usb: usb, preview: usb.preview, key: selectedTrack).frame(width: min(420, g.size.width * 0.36))
-                }.padding(.horizontal, 6)
-            } else {
-                VStack(spacing: 4) {
-                    Picker("", selection: $tab) { Text("Playlists").tag(0); Text("Tracks").tag(1); Text("Track").tag(2) }.pickerStyle(.segmented).padding(.horizontal, 8)
-                    switch tab {
-                    case 0: USBSidebar(usb: usb, selected: Binding(get: { selectedNode }, set: { selectedNode = $0; tab = 1 }))
-                    case 1: USBTrackList(usb: usb, node: selectedNode, selected: Binding(get: { selectedTrack }, set: { selectedTrack = $0; if $0 != nil { tab = 2 } }))
-                    default: USBInspector(usb: usb, preview: usb.preview, key: selectedTrack)
-                    }
-                }.padding(.horizontal, 6)
-            }
+        // the reader only measures: USBPanes reads the tab and the picks in its own body (built with Xcode 27, state
+        // read only inside a reader's closure doesn't redraw: on a phone the Playlists / Tracks / Track tabs stuck)
+        GeometryReader { g in USBPanes(usb: usb, selectedNode: $selectedNode, selectedTrack: $selectedTrack, tab: $tab, size: g.size) }
+    }
+}
+
+/// the three panes side by side, or (narrower than 900 pt) as tabs
+struct USBPanes: View {
+    @ObservedObject var usb: USBSession
+    @Binding var selectedNode: String?
+    @Binding var selectedTrack: String?
+    @Binding var tab: Int
+    let size: CGSize
+    var body: some View {
+        if size.width >= 900 {
+            HStack(spacing: 6) {
+                USBSidebar(usb: usb, selected: $selectedNode).frame(width: min(240, size.width * 0.2))
+                USBTrackList(usb: usb, node: selectedNode, selected: $selectedTrack)
+                USBInspector(usb: usb, preview: usb.preview, key: selectedTrack).frame(width: min(420, size.width * 0.36))
+            }.padding(.horizontal, 6)
+        } else {
+            VStack(spacing: 4) {
+                Picker("", selection: $tab) { Text("Playlists").tag(0); Text("Tracks").tag(1); Text("Track").tag(2) }.pickerStyle(.segmented).padding(.horizontal, 8)
+                switch tab {
+                case 0: USBSidebar(usb: usb, selected: Binding(get: { selectedNode }, set: { selectedNode = $0; tab = 1 }))
+                case 1: USBTrackList(usb: usb, node: selectedNode, selected: Binding(get: { selectedTrack }, set: { selectedTrack = $0; if $0 != nil { tab = 2 } }))
+                default: USBInspector(usb: usb, preview: usb.preview, key: selectedTrack)
+                }
+            }.padding(.horizontal, 6)
         }
     }
 }

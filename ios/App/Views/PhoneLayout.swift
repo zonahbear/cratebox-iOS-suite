@@ -329,10 +329,11 @@ struct PhoneDeck: View {
 struct TempoFader: View {
     @ObservedObject var deck: DeckModel
     var body: some View {
-        VStack(spacing: 2) {
+        let v = (deck.pitch + 1) / 2   // 0 top (slower) ... 1 bottom (faster); read here, not in the reader (Xcode 27)
+        return VStack(spacing: 2) {
             Text(String(format: "%+.1f", (deck.rate() - 1) * 100)).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(Theme.muted).lineLimit(1).minimumScaleFactor(0.7)
             GeometryReader { g in
-                let h = g.size.height, w = g.size.width, v = (deck.pitch + 1) / 2   // 0 top (slower) ... 1 bottom (faster)
+                let h = g.size.height, w = g.size.width
                 ZStack(alignment: .top) {
                     ForEach(0...8, id: \.self) { k in
                         Rectangle().fill(k == 4 ? Theme.muted : Theme.line2).frame(width: k == 4 ? w - 4 : w - 12, height: 1)

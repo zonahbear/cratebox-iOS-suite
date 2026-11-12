@@ -508,6 +508,17 @@ public final class DeckModel: ObservableObject, Identifiable {
         core.rangeChanged(i)
         core.status("Deck \(i + 1) tempo range ±\(range == 100 ? "WIDE" : "\(Int(range))%")" + (abs(kept - was) > 1e-9 ? ": the tempo was outside it, now \(String(format: "%+.1f", kept * 100))%" : ""))
     }
+    /// a tempo range by index into RANGES (3 = WIDE), keeping the tempo where it is, without a status message
+    /// (AI DJ puts its decks on WIDE so a tempo glide or SYNC is never cut short by the range)
+    public func setRange(_ idx: Int) {
+        let k = max(0, min(RANGES.count - 1, idx))
+        guard k != rangeIdx else { return }
+        let was = pitch * range / 100
+        rangeIdx = k
+        pitch = clamp(was * 100 / range, -1, 1)
+        sendRate()
+        core.rangeChanged(i)
+    }
     /// the track's own tempo at the playhead (what the grid says, before the fader or SYNC)
     public func origBpm() -> Double { tempoNow() }
     /// "bar.beat" at the playhead, like the web app: beat 0 of the grid is 1.1; before bar 1 it runs 0.4, 0.3 … back

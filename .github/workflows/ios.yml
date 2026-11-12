@@ -120,6 +120,16 @@ jobs:
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -four -wave > /dev/null || true
             sleep 20
             xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_wave4.png" || true
+            # Xcode 27 redraw check: state changed from code 6 s after launch (4 decks, crossfader left, deck 1 bass cut, tempo down)
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -demo -redraw > /dev/null || true
+            sleep 20
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_redraw.png" || true
+            # AI DJ (AI mode on), with the demo decks loaded underneath
+            xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
+            xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -aidj -demo -cb.ai YES > /dev/null || true
+            sleep 15
+            xcrun simctl io "$UDID" screenshot "$RUNNER_TEMP/shots/${n}_aidj.png" || true
             # the suite's other two modes: Deck Bridge, and Cratebox USB on a copy of the test stick (no audio: the scan flags it)
             xcrun simctl terminate "$UDID" com.zonahbear.cratebox.suite || true
             xcrun simctl launch "$UDID" com.zonahbear.cratebox.suite -bridge > /dev/null || true

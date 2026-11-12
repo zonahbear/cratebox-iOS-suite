@@ -51,15 +51,17 @@ struct BridgeJog: View {
     let color: Color
     @State private var last: Double?
     var body: some View {
-        GeometryReader { g in
+        // read here, not in the reader's closure (Xcode 27 doesn't redraw for state read only in there)
+        let touched = deck.jogTouched, angle = deck.jogAngle, number = deck.deck + 1
+        return GeometryReader { g in
             let c = CGPoint(x: g.size.width / 2, y: g.size.height / 2)
             ZStack {
                 // the same platter as Performance Mode's JogView
-                Circle().fill(Theme.raise).overlay(Circle().stroke(deck.jogTouched ? color : Theme.line2, lineWidth: 2))
+                Circle().fill(Theme.raise).overlay(Circle().stroke(touched ? color : Theme.line2, lineWidth: 2))
                 Circle().fill(Theme.panel).padding(g.size.width * 0.18)
                 Rectangle().fill(color).frame(width: 3, height: g.size.width * 0.18).offset(y: -g.size.width * 0.38)
-                    .rotationEffect(.degrees(deck.jogAngle))
-                Text("\(deck.deck + 1)").font(.system(size: max(14, g.size.width * 0.12), weight: .heavy)).foregroundStyle(color.opacity(0.8))
+                    .rotationEffect(.degrees(angle))
+                Text("\(number)").font(.system(size: max(14, g.size.width * 0.12), weight: .heavy)).foregroundStyle(color.opacity(0.8))
             }
             .contentShape(Circle())
             .gesture(DragGesture(minimumDistance: 0)

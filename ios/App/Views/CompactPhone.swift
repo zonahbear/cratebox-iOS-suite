@@ -310,17 +310,7 @@ struct CompactMixer: View {
             .accessibilityHint("Tap to cut or put back at the centre, drag up or down to turn")
     }
     var crossfader: some View {
-        GeometryReader { g in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Theme.raise).frame(height: 6)
-                RoundedRectangle(cornerRadius: 3).fill(Theme.fg).frame(width: 18, height: 30)
-                    .offset(x: CGFloat(core.mixer.xfader) * (g.size.width - 18))
-            }
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .faderDrag(core.mixer.xfader, span: g.size.width - 18) { core.mixer.xfader = $0 }
-            .onTapGesture(count: 2) { core.mixer.xfader = 0.5 }
-        }.frame(height: c.btn)
+        XFaderBar(value: core.mixer.xfader, capW: 18, capH: 30) { core.mixer.xfader = $0 }.frame(height: c.btn)
     }
 }
 

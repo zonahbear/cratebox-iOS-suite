@@ -1,15 +1,16 @@
-// The suite's three modes and the selector that switches between them. Each mode is its own screen with its
+// The suite's four modes and the selector that switches between them. Each mode is its own screen with its
 // own model; switching never stops Performance Mode's audio (decks keep playing while you check a stick).
 import SwiftUI
 
 enum AppMode: String, CaseIterable, Identifiable {
-    case performance, deckBridge, usb
+    case performance, deckBridge, usb, aiDJ
     var id: String { rawValue }
     var title: String {
         switch self {
         case .performance: return "Performance Mode"
         case .deckBridge: return "Deck Bridge"
         case .usb: return "Cratebox USB"
+        case .aiDJ: return "AI DJ"
         }
     }
     var short: String {
@@ -17,6 +18,7 @@ enum AppMode: String, CaseIterable, Identifiable {
         case .performance: return "PERFORMANCE"
         case .deckBridge: return "DECK BRIDGE"
         case .usb: return "USB"
+        case .aiDJ: return "AI DJ"
         }
     }
     var icon: String {
@@ -24,6 +26,7 @@ enum AppMode: String, CaseIterable, Identifiable {
         case .performance: return "dial.medium"
         case .deckBridge: return "slider.horizontal.below.square.and.square.filled"
         case .usb: return "externaldrive"
+        case .aiDJ: return "sparkles"
         }
     }
     var blurb: String {
@@ -31,6 +34,7 @@ enum AppMode: String, CaseIterable, Identifiable {
         case .performance: return "Cratebox's decks, mixer, controller and library"
         case .deckBridge: return "Touch controller for rekordbox decks 3 and 4"
         case .usb: return "Prepare and check rekordbox USB sticks"
+        case .aiDJ: return "Mixes on its own on decks 1 and 2 (AI mode)"
         }
     }
 }
@@ -42,6 +46,7 @@ final class SuiteState: ObservableObject {
     init() {
         let args = CommandLine.arguments
         if args.contains("-bridge") { mode = .deckBridge }
+        else if args.contains("-aidj") { mode = .aiDJ }
         else if args.contains("-usb") { mode = .usb }
         else if args.contains("-demo") { mode = .performance }
         else { mode = AppMode(rawValue: UserDefaults.standard.string(forKey: "cb.mode") ?? "") ?? .performance }
@@ -88,6 +93,9 @@ struct SuiteRoot: View {
             }
             if suite.mode == .usb {
                 CrateboxUSBView(usb: app.usb).transition(.opacity)
+            }
+            if suite.mode == .aiDJ {
+                AIDJView(dj: app.aidj).transition(.opacity)
             }
         }
         .background(Theme.bg)

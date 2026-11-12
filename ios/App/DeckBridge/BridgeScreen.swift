@@ -13,35 +13,45 @@ struct BridgeScreen: View {
         let ins = PhoneScreen.windowInsets()
         let phone = UIDevice.current.userInterfaceIdiom == .phone
         let band = phone ? max(40, min(ins.left, ins.right)) : 58
-        GeometryReader { g in
-            HStack(spacing: 0) {
-                BridgeEdge(bridge: bridge, deck: bridge.sides[0], side: 0, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band)
-                VStack(spacing: 4) {
-                    BridgeTopBar(bridge: bridge, setup: $setup, narrow: g.size.width - 2 * band < 680).frame(height: 30)
-                    GeometryReader { b in
-                        let mixW: CGFloat = min(170, max(140, b.size.width * 0.19))
-                        HStack(alignment: .top, spacing: 4) {
-                            BridgeDeck(bridge: bridge, deck: bridge.sides[0], side: 0)
-                            BridgeMixerView(bridge: bridge, a: bridge.sides[0], b: bridge.sides[1]).frame(width: mixW)
-                            BridgeDeck(bridge: bridge, deck: bridge.sides[1], side: 1)
-                        }
-                    }
-                    // the home-bar strip: text only, like Performance Mode
-                    HStack {
-                        Text("\(bridge.sides[0].deck + 1) · rekordbox").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted).padding(.horizontal, 10)
-                        Spacer()
-                        Text("\(bridge.sides[1].deck + 1) · rekordbox").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted).padding(.horizontal, 10)
-                    }.frame(height: max(ins.bottom, 12))
-                }
-                .frame(width: max(0, g.size.width - 2 * band))   // a fixed width: too little room clips the middle, never shoves the strips off
-                .clipped()
-                BridgeEdge(bridge: bridge, deck: bridge.sides[1], side: 1, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band)
-            }
-            .padding(.top, phone ? ins.top : 6)
-            .frame(width: g.size.width, height: g.size.height)
-        }
+        // the reader only measures; BridgeFrame reads the bridge in its own body (Xcode 27: state read only inside
+        // a reader's closure doesn't redraw, so switching rekordbox decks 1/3 ⇄ 2/4 left the old numbers up)
+        GeometryReader { g in BridgeFrame(bridge: bridge, setup: $setup, size: g.size, ins: ins, band: band, phone: phone) }
         .background(Theme.bg)
         .ignoresSafeArea()
+    }
+}
+
+struct BridgeFrame: View {
+    @ObservedObject var bridge: DeckBridge
+    @Binding var setup: Bool
+    let size: CGSize, ins: UIEdgeInsets, band: CGFloat, phone: Bool
+    var body: some View {
+        let s0 = bridge.sides[0], s1 = bridge.sides[1]      // read here: the reader below only measures
+        HStack(spacing: 0) {
+            BridgeEdge(bridge: bridge, deck: bridge.sides[0], side: 0, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band)
+            VStack(spacing: 4) {
+                BridgeTopBar(bridge: bridge, setup: $setup, narrow: size.width - 2 * band < 680).frame(height: 30)
+                GeometryReader { b in
+                    let mixW: CGFloat = min(170, max(140, b.size.width * 0.19))
+                    HStack(alignment: .top, spacing: 4) {
+                        BridgeDeck(bridge: bridge, deck: s0, side: 0)
+                        BridgeMixerView(bridge: bridge, a: s0, b: s1).frame(width: mixW)
+                        BridgeDeck(bridge: bridge, deck: s1, side: 1)
+                    }
+                }
+                // the home-bar strip: text only, like Performance Mode
+                HStack {
+                    Text("\(bridge.sides[0].deck + 1) · rekordbox").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted).padding(.horizontal, 10)
+                    Spacer()
+                    Text("\(bridge.sides[1].deck + 1) · rekordbox").font(.system(size: 10, design: .monospaced)).foregroundStyle(Theme.muted).padding(.horizontal, 10)
+                }.frame(height: max(ins.bottom, 12))
+            }
+            .frame(width: max(0, size.width - 2 * band))   // a fixed width: too little room clips the middle, never shoves the strips off
+            .clipped()
+            BridgeEdge(bridge: bridge, deck: bridge.sides[1], side: 1, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band)
+        }
+        .padding(.top, phone ? ins.top : 6)
+        .frame(width: size.width, height: size.height)
     }
 }
 
@@ -131,7 +141,6 @@ struct BridgeDeck: View {
     @ObservedObject var bridge: DeckBridge
     @ObservedObject var deck: BridgeDeckState
     let side: Int
-    var color: Color { Theme.deck[deck.deck] }
     static let tempoW: CGFloat = 40, capW: CGFloat = 70, loopH: CGFloat = 34, tabsH: CGFloat = 22
     /// the jog takes the width left after the tempo fader and CUE / PLAY (and leaves room for two rows of pads)
     static func jogSize(_ W: CGFloat, _ H: CGFloat) -> CGFloat {
@@ -140,22 +149,33 @@ struct BridgeDeck: View {
         return max(72, min(byWidth, byHeight))
     }
     var body: some View {
-        GeometryReader { g in
-            let W: CGFloat = g.size.width - 12
-            let H: CGFloat = g.size.height - 12
-            let jog: CGFloat = BridgeDeck.jogSize(W, H)
-            let rest: CGFloat = H - jog - BridgeDeck.loopH - BridgeDeck.tabsH - 24
-            let padH: CGFloat = max(36, rest / 2)
-            VStack(spacing: 5) {
-                topBlock(jog)
-                tabsRow
-                padsGrid(padH)
-            }
-            .padding(6)
-            .frame(width: g.size.width, height: g.size.height, alignment: .top)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.7), lineWidth: 1))
+        // the reader only measures; the deck is a view of its own that reads its lights in its own body (built with
+        // Xcode 27, state read only inside a reader's closure doesn't redraw: pads and loop lights would stick)
+        GeometryReader { g in BridgeDeckBody(bridge: bridge, deck: deck, side: side, size: g.size) }
+    }
+}
+
+struct BridgeDeckBody: View {
+    @ObservedObject var bridge: DeckBridge
+    @ObservedObject var deck: BridgeDeckState
+    let side: Int
+    let size: CGSize
+    var color: Color { Theme.deck[deck.deck] }
+    var body: some View {
+        let W: CGFloat = size.width - 12
+        let H: CGFloat = size.height - 12
+        let jog: CGFloat = BridgeDeck.jogSize(W, H)
+        let rest: CGFloat = H - jog - BridgeDeck.loopH - BridgeDeck.tabsH - 24
+        let padH: CGFloat = max(36, rest / 2)
+        VStack(spacing: 5) {
+            topBlock(jog)
+            tabsRow
+            padsGrid(padH)
         }
+        .padding(6)
+        .frame(width: size.width, height: size.height, alignment: .top)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.7), lineWidth: 1))
     }
     /// tempo fader (full height of jog and loops), the jog with CUE / PLAY beside it, IN / OUT / RELOOP under them
     func topBlock(_ jog: CGFloat) -> some View {
@@ -269,10 +289,11 @@ struct BridgeTempo: View {
     @ObservedObject var deck: BridgeDeckState
     let side: Int
     var body: some View {
-        VStack(spacing: 2) {
-            Text(abs(deck.tempo - 0.5) < 0.005 ? "0.0" : String(format: "%+.1f", (deck.tempo - 0.5) * 2 * 6)).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(Theme.muted).lineLimit(1).minimumScaleFactor(0.7)
+        let v = deck.tempo, color = Theme.deck[deck.deck]      // read here, not in the reader (Xcode 27)
+        return VStack(spacing: 2) {
+            Text(abs(v - 0.5) < 0.005 ? "0.0" : String(format: "%+.1f", (v - 0.5) * 2 * 6)).font(.system(size: 9, weight: .bold, design: .monospaced)).foregroundStyle(Theme.muted).lineLimit(1).minimumScaleFactor(0.7)
             GeometryReader { g in
-                let h = g.size.height, w = g.size.width, v = deck.tempo
+                let h = g.size.height, w = g.size.width
                 ZStack(alignment: .top) {
                     ForEach(0...8, id: \.self) { k in
                         Rectangle().fill(k == 4 ? Theme.muted : Theme.line2).frame(width: k == 4 ? w - 4 : w - 12, height: 1)
@@ -282,7 +303,7 @@ struct BridgeTempo: View {
                     RoundedRectangle(cornerRadius: 4)
                         .fill(LinearGradient(colors: [Theme.line2, Theme.raise], startPoint: .top, endPoint: .bottom))
                         .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.dim, lineWidth: 1))
-                        .overlay(Rectangle().fill(Theme.deck[deck.deck]).frame(height: 2).padding(.horizontal, 3))
+                        .overlay(Rectangle().fill(color).frame(height: 2).padding(.horizontal, 3))
                         .frame(width: w, height: 18)
                         .offset(y: CGFloat(v) * (h - 18))
                 }
@@ -304,34 +325,45 @@ struct BridgeMixerView: View {
     @ObservedObject var a: BridgeDeckState
     @ObservedObject var b: BridgeDeckState
     var body: some View {
-        GeometryReader { g in
-            let H = g.size.height - 8
-            let k = max(22, min(34, (H * 0.5) / 5 - 4))
-            let fader = max(70, H - (k + 6) * 5 - 22 - 30 - 16)
-            VStack(spacing: 4) {
-                VStack(spacing: 1) {
-                    row("TRIM", .trim, k, { $0.trim })
-                    row("HI", .eqHigh, k, { $0.hi })
-                    row("MID", .eqMid, k, { $0.mid })
-                    row("LOW", .eqLow, k, { $0.low })
-                    row("CFX", .filter, k, { $0.filter }, cfx: true)
-                }
-                HStack(spacing: 0) {
-                    cueBtn(a, 0).frame(maxWidth: .infinity)
-                    Color.clear.frame(width: 30, height: 1)
-                    cueBtn(b, 1).frame(maxWidth: .infinity)
-                }
-                HStack(spacing: 0) {
-                    VFader(value: a.fader, color: Theme.deck[a.deck], height: fader) { bridge.value(.channelFader, side: 0, $0) }.frame(maxWidth: .infinity)
-                    Color.clear.frame(width: 30, height: 1)
-                    VFader(value: b.fader, color: Theme.deck[b.deck], height: fader) { bridge.value(.channelFader, side: 1, $0) }.frame(maxWidth: .infinity)
-                }
-                crossfader
+        // the reader only measures: what's drawn is a view of its own that reads the mixer in its own body (built
+        // with Xcode 27, state read only inside a reader's closure doesn't redraw)
+        GeometryReader { g in BridgeMixerBody(bridge: bridge, a: a, b: b, size: g.size) }
+    }
+}
+
+struct BridgeMixerBody: View {
+    @ObservedObject var bridge: DeckBridge
+    @ObservedObject var a: BridgeDeckState
+    @ObservedObject var b: BridgeDeckState
+    let size: CGSize
+    var body: some View {
+        let x = bridge.xfader
+        let H = size.height - 8
+        let k = max(22, min(34, (H * 0.5) / 5 - 4))
+        let fader = max(70, H - (k + 6) * 5 - 22 - 30 - 16)
+        VStack(spacing: 4) {
+            VStack(spacing: 1) {
+                row("TRIM", .trim, k, { $0.trim })
+                row("HI", .eqHigh, k, { $0.hi })
+                row("MID", .eqMid, k, { $0.mid })
+                row("LOW", .eqLow, k, { $0.low })
+                row("CFX", .filter, k, { $0.filter }, cfx: true)
             }
-            .padding(4)
-            .frame(width: g.size.width, height: g.size.height, alignment: .top)
-            .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+            HStack(spacing: 0) {
+                cueBtn(a, 0).frame(maxWidth: .infinity)
+                Color.clear.frame(width: 30, height: 1)
+                cueBtn(b, 1).frame(maxWidth: .infinity)
+            }
+            HStack(spacing: 0) {
+                VFader(value: a.fader, color: Theme.deck[a.deck], height: fader) { bridge.value(.channelFader, side: 0, $0) }.frame(maxWidth: .infinity)
+                Color.clear.frame(width: 30, height: 1)
+                VFader(value: b.fader, color: Theme.deck[b.deck], height: fader) { bridge.value(.channelFader, side: 1, $0) }.frame(maxWidth: .infinity)
+            }
+            crossfader(x)
         }
+        .padding(4)
+        .frame(width: size.width, height: size.height, alignment: .top)
+        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
     }
     func row(_ label: String, _ c: BridgeControl, _ k: CGFloat, _ get: (BridgeDeckState) -> Double, cfx: Bool = false) -> some View {
         HStack(spacing: 0) {
@@ -343,19 +375,7 @@ struct BridgeMixerView: View {
     func cueBtn(_ d: BridgeDeckState, _ side: Int) -> some View {
         BridgeKey(label: "CUE", lit: d.headphoneCue, color: Theme.cue, height: 22, radius: 4, fontSize: 10, textColor: Theme.deck[d.deck]) { bridge.button(.headphoneCue, side: side, on: $0) }.frame(width: 40)
     }
-    var crossfader: some View {
-        GeometryReader { g in
-            ZStack(alignment: .leading) {
-                Capsule().fill(Theme.raise).frame(height: 6)
-                RoundedRectangle(cornerRadius: 3).fill(Theme.fg).frame(width: 16, height: 26)
-                    .offset(x: CGFloat(bridge.xfader) * (g.size.width - 16))
-            }
-            .frame(maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .gesture(DragGesture(minimumDistance: 0).onChanged { d in
-                bridge.setXfader(min(1, max(0, Double((d.location.x - 8) / (g.size.width - 16)))))
-            })
-            .onTapGesture(count: 2) { bridge.setXfader(0.5) }
-        }.frame(height: 30)
+    func crossfader(_ x: Double) -> some View {
+        HFader(value: x) { bridge.setXfader($0) }.frame(height: 30)
     }
 }

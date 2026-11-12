@@ -270,13 +270,15 @@ struct JogView: View {
     /// playing deck isn't left held still under a finger that's gone
     @GestureState private var touching = false
     var body: some View {
-        GeometryReader { g in
+        // read here, not in the reader's closure (Xcode 27 doesn't redraw for state read only in there)
+        let angle = deck.now() / 1.8 * 360
+        return GeometryReader { g in
             let c = CGPoint(x: g.size.width / 2, y: g.size.height / 2)
             ZStack {
                 Circle().fill(Theme.raise).overlay(Circle().stroke(Theme.line2, lineWidth: 2))
                 Circle().fill(Theme.panel).padding(g.size.width * 0.18)
                 Rectangle().fill(color).frame(width: 3, height: g.size.width * 0.18).offset(y: -g.size.width * 0.38)
-                    .rotationEffect(.degrees(deck.now() / 1.8 * 360))
+                    .rotationEffect(.degrees(angle))
             }
             .contentShape(Circle())
             .gesture(DragGesture(minimumDistance: 0)
@@ -366,12 +368,14 @@ struct WaveformView: View {
     @State private var dragX: CGFloat?
     @GestureState private var dragging = false          // reset on a cancelled drag (see JogView)
     var body: some View {
-        GeometryReader { g in
+        // read here, not in the reader's closure (Xcode 27): a canvas left paused after a load would stay blank
+        let loaded = deck.loaded
+        return GeometryReader { g in
             // capped at 60 a second (ProMotion would draw every lane 120 times), and still while nothing's loaded
-            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !deck.loaded)) { _ in
+            TimelineView(.animation(minimumInterval: 1.0 / 60, paused: !loaded)) { _ in
                 Canvas { ctx, size in draw(ctx, size) }
             }
-            .id(deck.loaded)                // a new canvas on load/eject, so a paused one can't keep the old track
+            .id(loaded)                // a new canvas on load/eject, so a paused one can't keep the old track
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
                 .updating($dragging) { _, s, _ in s = true }

@@ -111,6 +111,31 @@ extension View {
     }
 }
 
+/// The crossfader bar (Performance Mode's mixers). It gets its value from the caller, read in the caller's body:
+/// built with Xcode 27, observed state read only inside a GeometryReader's closure doesn't redraw the view (the
+/// cap stayed put while the crossfader moved from the controller or AI DJ)
+struct XFaderBar: View {
+    let value: Double
+    var capW: CGFloat = 16, capH: CGFloat = 26
+    let set: (Double) -> Void
+    var body: some View {
+        GeometryReader { g in
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.raise).frame(height: 6)
+                RoundedRectangle(cornerRadius: 3).fill(Theme.fg).frame(width: capW, height: capH)
+                    .offset(x: CGFloat(value) * (g.size.width - capW))
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .faderDrag(value, span: g.size.width - capW) { set($0) }
+            .onTapGesture(count: 2) { set(0.5) }
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Crossfader")
+        .accessibilityValue("\(Int((value * 100).rounded())) percent")
+    }
+}
+
 /// A vertical fader
 struct VFader: View {
     let value: Double
