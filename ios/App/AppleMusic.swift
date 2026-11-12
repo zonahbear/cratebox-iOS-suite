@@ -146,6 +146,10 @@ final class AppleMusic: ObservableObject {
     private var deadFolder = [String: Double]()   // music folders found unreachable, and when
     private var saveWork: DispatchWorkItem?
     private var mixCache = [String: (bpm: Double, first: Double, r: MixPoints.Result)]()
+    /// twin key (file name + size, Library.twinKey) → a track analysed under that key, so a USB track and its copy on
+    /// this device share one analysis (Jonah, 2026-11-12). Rebuilt lazily when the library or the results change
+    private var twinOf = [String: String]()
+    private var twinStale = true
     private let dir: URL
 
     private init() {
@@ -158,6 +162,7 @@ final class AppleMusic: ObservableObject {
         self.app = app
         Suggest.app = app
         // new folders, a stick plugged in: look for tracks to analyse a few seconds after the list settles
+        app.library.$tracks.sink { [weak self] _ in self?.twinStale = true }.store(in: &subs)
         app.library.$tracks.debounce(for: .seconds(4), scheduler: RunLoop.main).sink { [weak self] _ in self?.kick() }.store(in: &subs)
         kick()
         backfill()
@@ -168,14 +173,32 @@ final class AppleMusic: ObservableObject {
         let h = SHA256.hash(data: Data(id.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
         return dir.appendingPathComponent(h + ".json")
     }
-    /// Apple's results for a track, if they're for the file as it is now
+    /// Apple's results for a track, if they're for the file as it is now (its own, else its twin's)
     func features(_ t: LibTrack) -> AppleFeatures? {
-        guard let s = index[t.id], s.failed == nil, current(s, t) else { return nil }
-        if let f = cache[t.id] { return f }
-        guard let d = try? Data(contentsOf: file(t.id)), let f = try? JSONDecoder().decode(AppleFeatures.self, from: d) else { return nil }
+        guard let id = source(t) else { return nil }
+        if let f = cache[id] { return f }
+        guard let d = try? Data(contentsOf: file(id)), let f = try? JSONDecoder().decode(AppleFeatures.self, from: d) else { return nil }
         if cache.count > 200 { cache.removeAll() }      // a few hundred kB each: keep the memory bounded
-        cache[t.id] = f
+        cache[id] = f
         return f
+    }
+    /// a track's file name + size, the same twin rule as USB copy (a stick track by rekordbox's file name and size)
+    static func twinKey(_ t: LibTrack) -> String {
+        if let r = t.rb { return Library.twinKey(r.filename.isEmpty ? (r.path as NSString).lastPathComponent : r.filename, Int64(r.size)) }
+        return Library.twinKey((t.rec.rel as NSString).lastPathComponent, t.rec.size)
+    }
+    /// whose results stand for a track: its own when they're current, else an analysed twin's (the same file on the
+    /// stick and on this device: same name and size, so the same audio; dates differ after a copy, so they aren't
+    /// compared). nil: neither is analysed
+    private func source(_ t: LibTrack) -> String? {
+        if let s = index[t.id], s.failed == nil, current(s, t) { return t.id }
+        if twinStale, let app {
+            twinOf = [:]
+            for o in app.library.tracks { if let s = index[o.id], s.failed == nil, current(s, o) { twinOf[AppleMusic.twinKey(o)] = o.id } }
+            twinStale = false
+        }
+        guard let id = twinOf[AppleMusic.twinKey(t)], id != t.id, let s = index[id], s.failed == nil, s.ver == AppleFeatures.VER else { return nil }
+        return id
     }
     /// a stamp still describes the track's file (same size, same date when the library knows it, same format)
     private func current(_ s: Stamp, _ t: LibTrack) -> Bool {
@@ -189,7 +212,9 @@ final class AppleMusic: ObservableObject {
     func gridSource(_ t: LibTrack) -> AppleFeatures? { AppleGridMode.now == .off ? nil : features(t) }
     /// loudness and vocal / drum / bass shares for a track, if Apple has analysed it
     func lite(_ id: String) -> (lufs: Double?, shares: [Double]?)? {
-        guard AIMode.on, let s = index[id], s.failed == nil, s.ver == AppleFeatures.VER else { return nil }
+        guard AIMode.on else { return nil }
+        let src = app?.library.track(id).flatMap { source($0) } ?? id
+        guard let s = index[src], s.failed == nil, s.ver == AppleFeatures.VER else { return nil }
         return (s.lufs, s.shares)
     }
     /// where to mix a loaded track in and out, on the deck's grid (nil without Apple's results). Asked for by the
@@ -242,7 +267,8 @@ final class AppleMusic: ObservableObject {
         let heat = ProcessInfo.processInfo.thermalState
         if heat == .serious || heat == .critical { progress = "Waits for the phone to cool down"; later(30); return }
         if ProcessInfo.processInfo.isLowPowerModeEnabled { progress = "Waits while Low Power Mode is on"; later(30); return }
-        let todo = app.library.tracks.filter { t in index[t.id].map { !current($0, t) } ?? true }
+        // a track whose twin (USB ↔ this device) is already analysed shares those results: not done again
+        let todo = app.library.tracks.filter { t in source(t) == nil && (index[t.id].map { !current($0, t) } ?? true) }
         // a folder whose drive isn't there is asked once a minute, not once per track (resolving a bookmark to a
         // missing drive can take seconds, and this runs on the main thread)
         let now = Date().timeIntervalSince1970
@@ -299,6 +325,7 @@ final class AppleMusic: ObservableObject {
             mixCache[id] = nil
             if let d = try? JSONEncoder().encode(f) { try? d.write(to: file(id), options: .atomic) }
             cache[id] = f
+            twinStale = true
             analysed += 1
         case .failure(let e):
             if e is CancellationError || cancelled { progress = AIMode.on ? "Paused while a deck plays" : ""; later(5); return }
@@ -318,7 +345,7 @@ final class AppleMusic: ObservableObject {
     /// forget everything (Settings), so it's all analysed again
     func clear() {
         job?.cancel()
-        index = [:]; cache = [:]; analysed = 0; deadFolder = [:]
+        index = [:]; cache = [:]; analysed = 0; deadFolder = [:]; twinOf = [:]; twinStale = true
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         objectWillChange.send()
