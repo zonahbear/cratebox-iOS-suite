@@ -92,8 +92,8 @@ final class UsbCopy: ObservableObject {
                     if let a = j.anlz, let x = Devices.readAnalysis(at: a), x.bpm > 0 {
                         r.bpm = x.bpm; r.firstBeat = x.firstBeat; r.autoBpm = x.bpm; r.autoFirst = x.firstBeat
                         if let ph = x.phrases { r.phrases = ph }
-                        r.ver = Library.ANALYSIS_VER
-                    } else if (r.bpm ?? 0) <= 0 || r.firstBeat == nil { r.ver = 0 }
+                        r.ver = Library.ANALYSIS_VER; r.rbGrid = true
+                    } else { r.rbGrid = false; if (r.bpm ?? 0) <= 0 || r.firstBeat == nil { r.ver = 0 } }
                     done.append(r)
                 } catch { failed += 1 }
                 DispatchQueue.main.async { self.progress = "Copying \(i + 1) of \(n) from \(name)…" }

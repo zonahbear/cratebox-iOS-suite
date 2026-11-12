@@ -17,6 +17,10 @@ struct TrackRecord: Codable {
     var ver: Int
     /// the stored grid is Apple's (AI mode's grid setting), not Cratebox's own: nil in older libraries
     var appleGrid: Bool? = nil
+    /// why Cratebox's own analysis of this file failed last time (nil: it didn't), shown in Settings → Library & USB
+    var fail: String? = nil
+    /// the grid came from rekordbox's analysis on the stick (USB copies): a BPM range change leaves it alone
+    var rbGrid: Bool? = nil
 }
 
 final class LibTrack: Identifiable {
@@ -31,6 +35,7 @@ final class LibTrack: Identifiable {
         info = TrackInfo(id: r.id, title: r.title, artist: r.artist, bpm: r.bpm, firstBeat: r.firstBeat, key: r.key, duration: r.duration, phrases: r.phrases)
         info.gridManual = r.gridManual; info.autoBpm = r.autoBpm; info.autoFirst = r.autoFirst
         info.appleGrid = r.appleGrid ?? false
+        info.rbGrid = r.rbGrid ?? false
     }
     func sync() {
         rec.bpm = info.bpm; rec.firstBeat = info.firstBeat; rec.key = info.key; rec.duration = info.duration; rec.phrases = info.phrases
@@ -213,7 +218,26 @@ final class Library: ObservableObject {
         byId = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
-    func changed(_ t: LibTrack) { t.sync(); save() }
+    func changed(_ t: LibTrack) { let f = t.rec.fail; t.sync(); t.rec.fail = f; save() }
+    /// tracks Cratebox's own analysis couldn't do, with why (Settings → Library & USB)
+    var failed: [LibTrack] { tracks.filter { $0.device == nil && $0.rec.fail != nil } }
+    /// try the failed ones again (after plugging the drive back in, adding the folder again, …)
+    func retryFailed() {
+        for t in failed { t.rec.fail = nil; t.rec.ver = 0; t.info.bpm = nil; if !queue.contains(where: { $0 === t }) { queue.append(t) } }
+        objectWillChange.send(); save(); runQueue()
+    }
+    /// a decoding error in words
+    static func reason(_ e: Error, _ url: URL) -> String {
+        if !FileManager.default.fileExists(atPath: url.path) { return "The file isn't there any more (moved, renamed or deleted)" }
+        let ext = url.pathExtension.lowercased()
+        if ext == "m4p" { return "Protected (DRM) file: iOS won't let apps read it" }
+        if e is AudioDecoder.Failure { return "The file opened but no audio came out (empty or damaged)" }
+        let ns = e as NSError
+        if ns.domain == NSOSStatusErrorDomain || ns.domain == "com.apple.coreaudio.avfaudio" {
+            return ["ogg", "opus", "wma", "ape", "dsf", "dff"].contains(ext) ? "iOS can't play .\(ext) files" : "iOS can't read this file (unsupported format or damaged; code \(ns.code))"
+        }
+        return ns.localizedDescription
+    }
     func save() {
         saveWork?.cancel()
         let w = DispatchWorkItem { [weak self] in
@@ -233,7 +257,9 @@ final class Library: ObservableObject {
         let was = UserDefaults.standard.string(forKey: k)
         UserDefaults.standard.set(now, forKey: k)
         guard let was, was != now else { return }          // first run: the library was analysed with this range
-        let again = tracks.filter { $0.device == nil && !$0.rec.gridManual && $0.analysed }
+        // rekordbox's grids on USB copies stay (copies from before rbGrid existed count as rekordbox's too)
+        let again = tracks.filter { $0.device == nil && !$0.rec.gridManual && $0.analysed
+            && !($0.rec.rbGrid ?? ($0.rec.folder == UsbCopy.folderId)) }
         for t in again { t.rec.ver = 0; if !queue.contains(where: { $0 === t }) { queue.append(t) } }
         if !again.isEmpty { status("BPM range changed: analysing \(again.count) track\(again.count == 1 ? "" : "s") again") }
         save(); runQueue()
@@ -259,15 +285,23 @@ final class Library: ObservableObject {
         let url = fileURL(t), grid = t.rec.gridManual ? (t.rec.bpm ?? 0, t.rec.firstBeat ?? 0) : nil
         let range = Settings.bpmRange           // Settings → Decks → BPM range, as for a track analysed at load
         DispatchQueue.global(qos: .utility).async {
-            var res: (AnalysisResult, Double)?
+            var res: (AnalysisResult, Double)?, why: String?
             // only the 11 kHz mono is kept while decoding (~20 MB for 8 minutes, not the ~180 MB stereo track)
-            if let url, let m = try? AudioDecoder.analysisMono(url) {
-                let r = Analysis.analyze(m.x, fs: m.fs, range: range, noWave: true, grid: grid.map { (bpm: $0.0, firstBeat: $0.1) })
-                res = (r, m.duration)
-            }
+            if let url {
+                let open = url.startAccessingSecurityScopedResource()
+                defer { if open { url.stopAccessingSecurityScopedResource() } }
+                do {
+                    let m = try AudioDecoder.analysisMono(url)
+                    let r = Analysis.analyze(m.x, fs: m.fs, range: range, noWave: true, grid: grid.map { (bpm: $0.0, firstBeat: $0.1) })
+                    res = (r, m.duration)
+                    if r.bpm <= 0 { why = "No steady beat found (beatless, very short, or mostly silence)" }
+                } catch { why = Library.reason(error, url) }
+            } else { why = "Its folder isn't reachable: the drive is unplugged, or Cratebox lost permission (add the folder again in the library)" }
             DispatchQueue.main.async {
                 self.analysing = false; self.current = nil
-                if let (r, dur) = res {
+                t.rec.fail = why
+                if let why { self.status("Couldn't analyse \(t.rec.title): \(why)") }
+                if case let (r, dur)? = res, r.bpm > 0 {
                     t.info.bpm = r.bpm; t.info.firstBeat = r.firstBeat; t.info.phrases = r.phrases; t.info.duration = dur
                     t.info.appleGrid = false
                     if !t.info.keyFromRekordbox { t.info.key = r.key }

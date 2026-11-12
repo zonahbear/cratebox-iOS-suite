@@ -153,6 +153,7 @@ struct SettingsView: View {
         case .look: look
         case .library:
             grids
+            AnalysisProblems(library: app.library)
             usb
         case .ai: ai
         }
@@ -345,6 +346,17 @@ struct SettingsView: View {
                 } else {
                     LabeledContent("Apple music analysis", value: "\(apple.analysed) track\(apple.analysed == 1 ? "" : "s")" + (apple.failedCount > 0 ? ", \(apple.failedCount) failed" : ""))
                     if !apple.progress.isEmpty { Text(apple.progress).font(.caption).foregroundStyle(Theme.muted) }
+                    if apple.failedCount > 0 {
+                        DisclosureGroup("Why \(apple.failedCount) failed") {
+                            ForEach(Array(apple.failures.prefix(200).enumerated()), id: \.offset) { _, f in
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(f.title).lineLimit(1)
+                                    Text(f.why).font(.caption).foregroundStyle(Theme.muted)
+                                }
+                            }
+                            Button("Try these again") { apple.retryFailed() }
+                        }
+                    }
                 }
             } header: { Text("Apple music analysis") } footer: {
                 Text("iOS 27+. Finds beats, bars, key, phrases, vocals and loudness in the background, only while nothing plays. It also sorts the library by MATCH (what would follow the playing track best) and marks MIX IN and MIX OUT on a loaded track's waveform. Whose grid wins: Library & USB → Beat grids.")
@@ -392,6 +404,29 @@ struct MoveToggle: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                 Text(detail).font(.caption).foregroundStyle(Theme.muted)
+            }
+        }
+    }
+}
+
+/// Settings → Library & USB: tracks Cratebox's own analysis couldn't do, and why
+struct AnalysisProblems: View {
+    @ObservedObject var library: Library
+    var body: some View {
+        let bad = library.failed
+        if !bad.isEmpty {
+            Section {
+                DisclosureGroup("\(bad.count) track\(bad.count == 1 ? "" : "s") couldn't be analysed") {
+                    ForEach(bad.prefix(200), id: \.id) { t in
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(t.rec.artist.isEmpty ? t.rec.title : "\(t.rec.artist) - \(t.rec.title)").lineLimit(1)
+                            Text(t.rec.fail ?? "").font(.caption).foregroundStyle(Theme.muted)
+                        }
+                    }
+                }
+                Button("Try again") { library.retryFailed() }
+            } header: { Text("Analysis problems") } footer: {
+                Text("These tracks have no beat grid, so AI DJ and SYNC skip them. Fix the cause (plug the drive back in, add the folder again, or convert the file), then try again.")
             }
         }
     }

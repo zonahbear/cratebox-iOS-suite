@@ -374,7 +374,7 @@ final class AppleMusic: ObservableObject {
             analysed += 1
         case .failure(let e):
             if e is CancellationError || cancelled { progress = AIMode.on ? "Paused while a deck plays" : ""; later(5); return }
-            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: e.localizedDescription)
+            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: AppleMusic.reason(e))
         }
         // the index is written a couple of seconds after the last change, not after every track
         saveWork?.cancel()
@@ -397,6 +397,38 @@ final class AppleMusic: ObservableObject {
         kick()
     }
     var failedCount: Int { index.values.filter { $0.failed != nil }.count }
+    /// tracks Apple's analysis gave up on, with why (Settings → AI)
+    var failures: [(title: String, why: String)] {
+        let byId = Dictionary((app?.library.tracks ?? []).map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
+        return index.compactMap { id, s in
+            guard let why = s.failed else { return nil }
+            let t = byId[id]
+            let name = t.map { $0.rec.artist.isEmpty ? $0.rec.title : "\($0.rec.artist) - \($0.rec.title)" }
+                ?? ((id.split(separator: "|").dropFirst().first).map { (String($0) as NSString).lastPathComponent } ?? id)
+            return (name, why)
+        }.sorted { $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending }
+    }
+    /// forget the failures, so those tracks are tried again
+    func retryFailed() {
+        for (id, s) in index where s.failed != nil { index[id] = nil }
+        saveIndex(); objectWillChange.send(); kick()
+    }
+    /// Apple's error in words: what went wrong and whether trying again can help
+    static func reason(_ e: Error) -> String {
+        let d = String(describing: e).lowercased(), l = e.localizedDescription
+        if d.contains("protected") || d.contains("drm") { return "The file is copy-protected (DRM), so it can't be analysed" }
+        if d.contains("invalidasset") || d.contains("unsupported") || d.contains("cannotopen") || d.contains("format") {
+            return "Apple couldn't read this file (damaged, or a format it doesn't support): \(l)"
+        }
+        if d.contains("nosuchfile") || d.contains("not found") || d.contains("couldn’t be opened") || d.contains("permission") {
+            return "The file wasn't reachable (drive unplugged or folder permission lost). Try again once it's back"
+        }
+        if d.contains("timeout") || d.contains("timed out") { return "Took too long and was stopped. Try again when the phone is idle" }
+        if d.contains("sessioninprogress") || d.contains("busy") || d.contains("internal") {
+            return "Apple's analysis hit an internal error (\(l)). Trying again usually works"
+        }
+        return l
+    }
 
     // ---- the framework ----
     enum Failure: LocalizedError {
