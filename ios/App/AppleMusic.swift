@@ -187,6 +187,12 @@ final class AppleMusic: ObservableObject {
         if let r = t.rb { return Library.twinKey(r.filename.isEmpty ? (r.path as NSString).lastPathComponent : r.filename, Int64(r.size)) }
         return Library.twinKey((t.rec.rel as NSString).lastPathComponent, t.rec.size)
     }
+    /// the twin key of a stored result, from its track id and the size it was analysed at
+    static func twinKey(id: String, size: Int64) -> String? {
+        let parts = id.split(separator: "|", omittingEmptySubsequences: false)
+        guard parts.count >= 2, size > 0 else { return nil }
+        return Library.twinKey((String(parts[1]) as NSString).lastPathComponent, size)
+    }
     /// whose results stand for a track: its own when they're current, else an analysed twin's (the same file on the
     /// stick and on this device: same name and size, so the same audio; dates differ after a copy, so they aren't
     /// compared). nil: neither is analysed
@@ -194,6 +200,12 @@ final class AppleMusic: ObservableObject {
         if let s = index[t.id], s.failed == nil, current(s, t) { return t.id }
         if twinStale, let app {
             twinOf = [:]
+            // every analysed file, from the stored results alone, so a stick that's unplugged still counts (its
+            // tracks aren't in the library then): ids are "<stick>|<path>" or "<folder>|<path>|<size>"
+            for (id, s) in index where s.failed == nil && s.ver == AppleFeatures.VER {
+                if let k = AppleMusic.twinKey(id: id, size: s.size) { twinOf[k] = id }
+            }
+            // and the tracks that are here, by rekordbox's file name too (it can differ from the path's)
             for o in app.library.tracks { if let s = index[o.id], s.failed == nil, current(s, o) { twinOf[AppleMusic.twinKey(o)] = o.id } }
             twinStale = false
         }
