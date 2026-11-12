@@ -12,12 +12,19 @@ on:
       devices:
         description: "Simulators to screenshot, comma-separated (e.g. iPhone SE (3rd generation),iPhone 16,iPad mini (A17 Pro)), or none"
         default: "iPhone 16 Pro Max,iPad Pro 13-inch (M4)"
+      runner:
+        description: "Mac: xcode-27 = Apple Silicon with Xcode 27 / iOS 27 SDK (builds Apple's music analysis in); macos-15-intel = Xcode 26, without it"
+        type: choice
+        options: [xcode-27, macos-15-intel]
+        default: xcode-27
 permissions:
   contents: write
 concurrency: { group: "ios-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   build:
-    runs-on: macos-15-intel   # GitHub's arm64 Mac pool has not been picking jobs up (Nov 2026); simulators here are x86_64
+    # xcode-27 (Apple Silicon, iOS 27 SDK) compiles AI mode's Music Understanding; macos-15-intel (x86_64 simulators,
+    # Xcode ≤ 26.3) is the fallback for when the arm64 pool doesn't pick jobs up, as on 2026-11-10
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
     steps:
       - uses: actions/checkout@v4
       - name: Xcode
@@ -37,6 +44,7 @@ jobs:
       - name: Core tests (swift test, optimised)
         id: tests
         continue-on-error: true
+        timeout-minutes: 25      # a hung test (Xcode 27 once looped forever in Core.status) mustn't burn hours of Mac minutes
         run: |
           set -o pipefail
           cd ios/CrateboxKit && CRATEBOX_MUSIC="$RUNNER_TEMP/music" swift test -c release -Xswiftc -enable-testing 2>&1 | tee -a ../../ci.log

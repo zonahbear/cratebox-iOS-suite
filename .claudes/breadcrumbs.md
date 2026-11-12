@@ -154,6 +154,27 @@
 - personal/heat needs the same two fixes as its own change (never merged from here). HEAT there should also get truecurve PR #4's two
   fail-safes (stop after 3 s with no temperature reading; no run without a slot 4 backup).
 
+## 2026-11-10: Apple Intelligence feasibility (research only, no code)
+- Full note: project files `research/apple-intelligence-ios.md`. Foundation Models = text/image LLM, 4096 tokens, iPhone 15 Pro+/16+ only:
+  good for optional library features (natural-language search, tags), useless for audio analysis.
+- Speed/memory wins found instead: Analysis.swift FFT is hand-rolled `[Double]` (no Accelerate); Library.swift:293 decodes whole
+  tracks before downmixing (the ~320 MB issue). Next steps wait on Jonah's go.
+
+## 2026-11-10: analysis speed/memory + "ask the library" (branch claude/project-thread-ggbual, from preview/truecurve-usb 24bbebb)
+- Not compiled locally (no Swift toolchain allowed in the cloud session); compiled + tested only by ios.yml on GitHub's Mac.
+- `Analysis.fft` uses vDSP_fft_zipD when Accelerate exists (`Analysis.useAccelerate`, tests flip it); the radix-2 loop stays as
+  the reference. AnalysisSpeedTests: loop vs vDSP (< 1e-9), timing printed as `ANALYSIS speed`.
+- `AudioDecoder` (Library.swift) streams 1 s blocks: decks write straight into PCMTrack(adopting:) (one copy, was two),
+  library analysis uses `analysisMono` + `Analysis.MonoAccumulator` (same samples as monoFor, tested) and never holds stereo.
+- Ask the library: SmartSearch.swift (App) + CrateboxKit SmartFilter (tested). Foundation Models on-device only, iOS 26+,
+  FoundationModels weak-linked in project.yml; the sparkles button only shows when SystemLanguageModel.default.isAvailable.
+- Compiled + tested 2026-11-10 22:30Z on macos-15-intel (ios.yml run 42914100713): 85 tests pass, app builds (Xcode 26.3).
+  JS oracle still exact with vDSP; fft diff 1e-13; whole analysis ~25% faster (0.25 s -> 0.19 s per synthetic track on CI).
+- Beat This! small -> Core ML: ios/tools/coreml/convert.py + .github/workflows/coreml.yml (ubuntu, claude/** pushes or manual).
+  Rotary einsum replaced by cos/sin tables (exact match); lookups must use int(shape) or tracing misses them.
+  Artifact BeatThisSmall-coreml (run 42914095676, 30-day retention). NOT wired into the app: needs a Swift log-mel front end
+  (22050 Hz, n_fft 1024, hop 441, 30-11000 Hz, 128 slaney mels, log1p(1000x)) + peak picking, then a bar-1 check vs rekordbox on
+  Jonah's D: tracks. Reference beats for two real tracks: Jonah's PC, Relay\beatthis\out\reference.json.
 ## 2026-11-10 22:40Z: Jonah's TODO list for iOS (branch claude/project-thread-t5561g, from preview/truecurve-usb 24bbebb)
 
 NOT COMPILED: no Swift here and GitHub had no free macOS runners all evening (TestFlight run 42878900563 cancelled
@@ -189,3 +210,93 @@ unstarted four times; that also means #28 itself has never been compiled). First
 - Next: merge PR #29 into preview/truecurve-usb (triggers one more TestFlight build from the merge commit). Nothing tried
   on a device: VINYL, range change + FLX4 soft takeover, master EQ sound, walkthrough layout on SE all need Jonah's hands.
   personal/heat does not have these features.
+
+## 2026-11-11: AI mode + Apple Music Understanding (branch claude/project-thread-oq8tnx, on top of PR #30 + #29)
+
+- Apple's `MusicUnderstanding` (iOS 27+, Xcode 27 SDK) is real: beats, bars, BPM, key ranges, sections/segments/phrases,
+  pace, vocal/drum/bass/other activity, LUFS. The 2026-11-10 Apple Intelligence research missed it.
+- Settings → AI mode (`cb.ai`, OFF by default) gates every AI feature: Ask the library (PR #30, SmartSearch) and
+  Apple music analysis (App/AppleMusic.swift). Nothing is uploaded.
+- AppleMusic: background, one track at a time, only while no deck plays (cancels the session when one starts).
+  Results go to Application Support/Cratebox/apple/<sha>.json + index.json, stamped with the file's size + date (a
+  replaced file is redone). They never touch grids/keys/cues. Settings → AI mode → Compare with the grids shows
+  GridCompare (CrateboxKit/AppleFeatures.swift: tempo ratio, beat offset, bar-1 shift vs Cratebox / rekordbox /
+  hand-fixed grid) and saves "Apple analysis vs grids.csv" to Files. That CSV on Jonah's real tracks decides whether
+  Apple's beats/bars are ever used for anything.
+- Build: `#if canImport(MusicUnderstanding)`; project.yml weak-links it only for `sdk=iphoneos27*`/`iphonesimulator27*`.
+  Only the GitHub `xcode-27` runner (Apple Silicon) has the SDK. ios.yml now defaults to it (input `runner`);
+  testflight.yml pushes stay on macos-15-intel (no Music Understanding in those builds) unless run by hand with xcode-27.
+- Tests: CrateboxKitTests/AppleFeaturesTests (GridCompare, key, bin, Codable). The framework call itself can only be
+  tried on an iOS 27 device.
+- 03:30Z: first xcode-27 run hung in the core tests: Xcode 27's Swift resolved `status(s, secs)` inside
+  `Core.status(_:_:)` to the method itself (endless loop; "function call causes an infinite recursion" warning). Fixed by
+  renaming the closure to `Core.onStatus` (0e7eab4). personal/heat has the same Core.swift: it needs this fix before any
+  Xcode 27 build of it. ios.yml's test step now has a 25-minute timeout.
+- Second run (42952836934, Xcode 27.2): 99 tests pass, app builds. TestFlight run 42953441241 on xcode-27 uploaded
+  build 49.1 from 0e7eab4 (includes #30's Ask the library + AI mode + Apple analysis). Not tried on a device.
+- Jonah (03:16Z): drop the Beat This! Core ML model; Music Understanding covers it. coreml.yml / convert.py from #30 are
+  still in the tree, unused.
+
+## 2026-11-11 (later): Xcode 27 redraw bug, TestFlight run 50
+
+- TestFlight 49.1 (first Xcode 27 build): LIBRARY / WAVE / DECKS tapped (state saved) but the phone screen never changed.
+  Cause: on the iOS 27 SDK, app state read inside `PhoneScreen`'s `GeometryReader` closure no longer redraws it
+  (child views with their own `@EnvironmentObject`, like the top bar, still do).
+- Fix 28ec954: the screen's contents are `PhoneFrame` (PhoneLayout.swift), which reads state in its own body; the iPad
+  `pad` (ContentView.swift) captures `waveMode` in the body. Verified by ios.yml run 42983849649 on `xcode-27`
+  (shots: iPhone 17 Pro wave + browse, iPad wave). TestFlight run 50 uploaded from 28ec954 (build 50.1 expected).
+- Not checked: Deck Bridge and USB screens also read state inside GeometryReader closures (BridgeScreen.swift:16,
+  CrateboxUSBView.swift:69). If they stop updating on Xcode 27 builds, apply the same pattern.
+- Rule of thumb for Xcode 27: don't read observed state inside a GeometryReader closure; pass the size to a child view.
+- Monorepo: this branch at 28ec954 is merged in zonahbear/Cratebox main under apps/ios-suite (PR #18). TestFlight still
+  builds from this repo until the signing secrets are added to the monorepo; new iOS code changes go to the monorepo.
+- Next: Jonah to confirm 50.1 on his phone; personal/heat still needs the Core.onStatus fix (0e7eab4) and this one
+  before any Xcode 27 build.
+
+## 2026-11-11 (afternoon): first overnight Apple analysis, comparison fix, TestFlight run 51
+
+- Jonah's CSV (432 tracks, ~15 s each): Apple tempo same 29%, exactly half 62% (140 → 70), other 9%; key exact 80%.
+  Jonah: half time is fine, account for it (rekordbox and Serato do it too). Never use Apple's BPM raw.
+- Beat / bar-1 columns were blank for 422 rows: `GridCompare` skipped unequal tempos, and stick tracks had rekordbox's
+  BPM but no `firstBeat` until their ANLZ file is read (inferred, not reproduced).
+- Fix a4bc095: `Result.tempoMult` (1, 0.5, 2), `comparable`; `AppleMusic.rows()` calls `Devices.shared.readAnalysis`
+  for stick tracks without a first beat, and labels BPM-without-grid rows "BPM only". CSV has a new `tempo_mult` column.
+  ios.yml run 43049854031 green; TestFlight run 51 uploaded (51.1 expected). Monorepo port: zonahbear/Cratebox PR #19.
+- Next: Jonah re-exports the CSV (no re-analysis needed); read bar-1 agreement from it. Proposal for track / transition
+  suggestions + similarity: https://claude.ai/artifact/R1RpoHyn11ENTGFFfA6Z4s (4 decisions pending, nothing built).
+
+## 2026-11-11 (later): track suggestions, mix points, Apple grid setting (PR #31, commit 988438f)
+
+Jonah: "Go ahead with track suggestions and mix in points. On supported devices, allow to use strictly/prefer Apple
+Intelligence for analysis" + "Toggle to switch between Apple and rb grid". All behind AI mode.
+
+- **Beat grids** (Settings → AI mode, `cb.ai.grid`, `AppleGridMode` in AppleMusic.swift): 0 off, 1 prefer (Apple's grid
+  instead of Cratebox's own; rekordbox's stay), 2 only (Apple's over rekordbox's too). Applied in `AppModel.load()`, so
+  at the next load of a track. Hand-fixed grids (`gridManual`, incl. rekordbox XML imports) always stay. The grid is
+  `AppleFeatures.grid(near:range:)` (Kit): least-squares line through Apple's beats, nil when under 16 beats or the
+  tempo wanders (then the track keeps its grid), octave folded to rekordbox's / the track's BPM, else Settings BPM range.
+  `TrackInfo.appleGrid` (saved as `TrackRecord.appleGrid`) marks it; the pre-Apple grid stays in autoBpm/autoFirst and
+  comes back when the setting is turned off. Deck label says APPLE GRID. Keys and cues are not touched.
+- **MATCH** sort (`SortKey.match`; LibraryView column, BrowserView chip): `Suggest` (AppleMusic.swift) scores every
+  track against the playing deck with Kit `NextTrack` (tempo fit on the free deck's range, key, plus energy from LUFS
+  and vocal/drum/bass shares when Apple analysed both). Stamps in AppleMusic's index now keep lufs + shares (`backfill`
+  reads old results once). Untuned: `NextTrack.energy(lufs:)` is a guess; played-this-session isn't tracked; pace unused.
+- **MIX IN / MIX OUT** markers (`MixPoints.suggest`, Kit; drawn in WaveformView + OverviewView, green): 8-bar phrase
+  lines on the deck's grid; in = first phrase in the first half with drums and no vocals, out = start of the last
+  vocal-free stretch. Suggestions only, nothing is cued.
+- Test tracks: Jonah's USB backup is at `C:\Users\zonah\Desktop\usb backup` on his PC (out of date, fine for reference).
+- Next: device check by Jonah; then maybe markers → hot cues, "More like this" similarity list, transition warnings.
+- Shipped: ios.yml run 61 green (988438f), TestFlight run 52 uploaded 17:16Z (build 52.1 expected). Untested on a device.
+
+## 2026-11-11 22:10Z: AI mode performance + Touch mode toggle (Jonah: AI mode slows app and phone; Touch mode doesn't swap layout)
+
+- Touch mode: Settings → Look → Touch mode did nothing on Xcode 27 builds: `compactPref` (@AppStorage in PhoneScreen) was
+  read inside the GeometryReader closure (same redraw bug as 49.1's buttons). Now PhoneFrame owns the @AppStorage;
+  islandLeft is read in PhoneScreen's body. (Tap-to-cut EQ is in the full layout too whenever no controller is
+  connected, which is why it looked like "only adds tap to the EQs".) iPad `pad` still calls mix() inside its reader.
+- AI mode speed (nothing measured on a device, reasoning from the code): Apple's analysis ran back to back whenever no
+  deck played. Now it also waits for 20 s without a touch (`TouchWatch`, a look-only recogniser on the window),
+  for thermalState below serious, and for Low Power Mode off; a track load cancels the running one (`yield()`); 5 s rest
+  between tracks when the phone isn't thermally nominal. MATCH sort computes each row's score once per sort, not per
+  comparison. Not done: features JSON is still decoded on the main thread at load (a few hundred kB).
+- Shipped: ios.yml run 62 green (263608d), TestFlight run 53 uploaded 22:30Z (build 53.1). Untested on a device.

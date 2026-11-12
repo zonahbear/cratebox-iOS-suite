@@ -341,7 +341,8 @@ struct PhoneLane: View {
                             phaseTag(deck)
                             // whose beat grid this is: rekordbox's (beat by beat) or Cratebox's analysis
                             let rb = (deck.track?.rbGrid ?? false) && !(deck.track?.gridManual ?? false)
-                            Text(deck.ana?.beats != nil ? "RB GRID · VAR" : rb ? "RB GRID" : "AUTO GRID").font(.system(size: 8, weight: .heavy)).foregroundStyle(rb ? Theme.ok : Theme.cue)
+                            let ag = deck.track?.appleGrid ?? false
+                            Text(ag ? "APPLE GRID" : deck.ana?.beats != nil ? "RB GRID · VAR" : rb ? "RB GRID" : "AUTO GRID").font(.system(size: 8, weight: .heavy)).foregroundStyle(ag ? Theme.loop : rb ? Theme.ok : Theme.cue)
                             // the beat counter, bar.beat like the web app's: 1.1 1.2 1.3 1.4 2.1 …
                             Text(deck.barBeat()).font(.system(size: 12, weight: .heavy, design: .monospaced)).foregroundStyle(color).lineLimit(1).fixedSize()
                                 .accessibilityLabel("Bar and beat \(deck.barBeat())")
@@ -456,6 +457,17 @@ struct WaveformView: View {
             ctx.fill(Path(CGRect(x: hx - 1, y: 0, width: 2, height: H)), with: .color(Theme.hot))
             ctx.draw(Text(String(UnicodeScalar(65 + k)!)).font(.system(size: 9, weight: .bold)).foregroundColor(.white), at: CGPoint(x: hx + 6, y: H - 8))
         }
+        // AI mode: where Apple's drums and vocals say to bring the track in and start taking it out (suggestions
+        // only: nothing is cued)
+        if let m = AppleMusic.shared.mixPoints(deck.track, bpm: a.bpm, first: a.firstBeat, duration: deck.duration) {
+            for (t, label, bars) in [(m.mixIn, "MIX IN", m.inBars), (m.mixOut, "MIX OUT", m.outBars)] {
+                guard let t else { continue }
+                let mx = (t - t0) * pps
+                if mx < -80 || mx > W { continue }
+                ctx.fill(Path(CGRect(x: mx - 1, y: 0, width: 2, height: H)), with: .color(Theme.ok))
+                ctx.draw(Text(label + (bars > 0 ? " · \(bars)" : "")).font(.system(size: 9, weight: .heavy)).foregroundColor(Theme.ok), at: CGPoint(x: mx + 4, y: 11), anchor: .leading)
+            }
+        }
         // playhead
         ctx.fill(Path(CGRect(x: W / 2 - 1, y: 0, width: 2, height: H)), with: .color(color))
     }
@@ -483,6 +495,10 @@ struct OverviewView: View {
                         ctx.fill(Path(CGRect(x: p.start / deck.duration * W, y: 0, width: Double(p.bars) * 4 * deck.spb / deck.duration * W, height: 3)), with: .color(Theme.phrase[p.label] ?? Theme.muted))
                     }
                     for h in deck.hot.compactMap({ $0 }) { ctx.fill(Path(CGRect(x: h / deck.duration * W, y: 0, width: 1.5, height: H)), with: .color(Theme.hot)) }
+                    // AI mode's mix-in and mix-out suggestions
+                    if let m = AppleMusic.shared.mixPoints(deck.track, bpm: a.bpm, first: a.firstBeat, duration: deck.duration) {
+                        for t in [m.mixIn, m.mixOut].compactMap({ $0 }) { ctx.fill(Path(CGRect(x: t / deck.duration * W, y: 0, width: 1.5, height: H)), with: .color(Theme.ok)) }
+                    }
                     let px = deck.now() / deck.duration * W
                     ctx.fill(Path(CGRect(x: 0, y: 0, width: px, height: H)), with: .color(Color.black.opacity(0.35)))
                     ctx.fill(Path(CGRect(x: px - 1, y: 0, width: 2, height: H)), with: .color(color))

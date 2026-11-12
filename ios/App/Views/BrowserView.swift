@@ -56,6 +56,7 @@ struct BrowserOverlay: View {
                     Spacer()
                     // sort this list by BPM or key (again: the other way round, tap the lit one's ✕ for the list's own order)
                     sortChip("BPM", .bpm); sortChip("KEY", .key)
+                    if AIMode.on { sortChip("MATCH", .match) }      // what would follow the playing track best
                     Button { app.hideBrowser() } label: { Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).frame(width: 30, height: 24) }.buttonStyle(.plain)
                 }
                 ScrollViewReader { proxy in
@@ -108,6 +109,7 @@ struct BrowserOverlay: View {
                 Text(t.info.title).font(.system(size: 13, weight: sel ? .bold : .medium)).lineLimit(1)
                 Text(t.info.artist).font(.system(size: 10)).foregroundStyle(Theme.muted).lineLimit(1)
             }.frame(maxWidth: .infinity, alignment: .leading)
+            if AIMode.on { Text(Suggest.label(t)).font(.system(size: 12, weight: .semibold, design: .monospaced)).foregroundStyle(Theme.ok).frame(width: 26, alignment: .trailing) }
             Text((t.info.bpm ?? 0) > 0 ? String(format: "%.1f", t.info.bpm!) : (t.analysed ? "?" : "…")).font(.system(size: 12, design: .monospaced)).frame(width: 46, alignment: .trailing)
             if let c = Keys.camelot(t.info.key) {
                 let match = ref >= 0 && Keys.mixes(t.info.key, ref)

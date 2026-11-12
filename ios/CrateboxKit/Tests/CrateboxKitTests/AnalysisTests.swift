@@ -5,7 +5,7 @@ import XCTest
 /// synthetic test tracks. CI makes the tracks with tests/make_tracks.py and checks they're the same files
 /// (Fixtures/music.md5); the folder comes in as CRATEBOX_MUSIC.
 final class AnalysisTests: XCTestCase {
-    func wav(_ url: URL) throws -> (chs: [[Float]], sr: Double) {
+    static func wav(_ url: URL) throws -> (chs: [[Float]], sr: Double) {
         let b = [UInt8](try Data(contentsOf: url))
         func u16(_ o: Int) -> Int { Int(b[o]) | Int(b[o + 1]) << 8 }
         func u32(_ o: Int) -> Int { u16(o) | u16(o + 2) << 16 }
@@ -29,7 +29,7 @@ final class AnalysisTests: XCTestCase {
         XCTAssertEqual(want.count, 4)
         for name in want.keys.sorted() {
             let w = want[name]!
-            let (chs, sr) = try wav(URL(fileURLWithPath: dir).appendingPathComponent(name))
+            let (chs, sr) = try Self.wav(URL(fileURLWithPath: dir).appendingPathComponent(name))
             let ptrs = chs.map { c -> UnsafeMutablePointer<Float> in let p = UnsafeMutablePointer<Float>.allocate(capacity: c.count); p.initialize(from: c, count: c.count); return p }
             defer { ptrs.forEach { $0.deallocate() } }
             let t0 = Date()

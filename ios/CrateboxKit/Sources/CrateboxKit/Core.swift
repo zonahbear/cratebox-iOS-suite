@@ -23,6 +23,7 @@ public final class TrackInfo: Identifiable, Equatable {
     public var rbBeats: [Double]?
     public var rbBeat0 = 0
     public var rbGrid = false            // the grid came from rekordbox
+    public var appleGrid = false         // the grid in use came from Apple's analysis (AI mode's grid setting)
     public init(id: String, title: String, artist: String = "", bpm: Double? = nil, firstBeat: Double? = nil, key: Int = -1, duration: Double = 0, phrases: [Phrase] = []) {
         self.id = id; self.title = title; self.artist = artist; self.bpm = bpm; self.firstBeat = firstBeat; self.key = key; self.duration = duration; self.phrases = phrases
     }
@@ -160,11 +161,11 @@ public final class DeckModel: ObservableObject, Identifiable {
     // ---- beat grid editing: every edit keeps the beat under the playhead, and firstBeat on a bar line ----
     public func setGrid(_ bpm: Double, _ firstBeat0: Double, _ why: String? = nil) {
         guard var a = ana, bpm > 20, bpm < 400 else { return }
-        if let t = track, !t.gridManual { t.autoBpm = a.bpm; t.autoFirst = a.firstBeat }
+        if let t = track, !t.gridManual, !t.appleGrid { t.autoBpm = a.bpm; t.autoFirst = a.firstBeat }
         let bar = 4 * 60 / bpm
         let firstBeat = firstBeat0 - jsFloor(firstBeat0 / bar) * bar
         a.bpm = bpm; a.firstBeat = firstBeat; a.beats = nil; ana = a
-        if let t = track { t.bpm = bpm; t.firstBeat = firstBeat; t.gridManual = true; core.trackChanged(t) }
+        if let t = track { t.bpm = bpm; t.firstBeat = firstBeat; t.gridManual = true; t.appleGrid = false; core.trackChanged(t) }
         rephrase()
         if sync { syncTick() }
         for d in core.decks where d !== self && d.sync { d.syncTick() }
@@ -654,7 +655,7 @@ public final class Core: ObservableObject {
     /// how far what you hear is behind `clock` (the output's latency); the app sets it, tests can
     public var lag: () -> Double = { 0 }
     public var wallMs: () -> Double = { hostSeconds() * 1000 }
-    public var status: (String, Double) -> Void = { _, _ in }
+    public var onStatus: (String, Double) -> Void = { _, _ in }   // set by the app; `status(_:_:)` calls it
     public var trackChanged: (TrackInfo) -> Void = { _ in }
     public var reanalyse: (TrackInfo) -> Void = { _ in }
     public var playStarted: () -> Void = {}
@@ -681,7 +682,7 @@ public final class Core: ObservableObject {
         engine.post(.mixer(mixer))
         for d in decks { engine.post(.deck(d.i, .mt(d.mt))) }
     }
-    public func status(_ s: String, _ secs: Double = 4) { status(s, secs) }
+    public func status(_ s: String, _ secs: Double = 4) { onStatus(s, secs) }   // was `status(s, secs)`: Swift 6.3 (Xcode 27) resolves that to this method, an endless loop
     /// 2, 3 or 4
     public var deckCount: Int { four ? (three ? 3 : 4) : 2 }
     /// the decks in play, in order (0, 1, then 2 and 3)

@@ -242,6 +242,11 @@ public final class PCMTrack {
         left = .allocate(capacity: max(count, 1)); right = .allocate(capacity: max(count, 1))
         left.initialize(repeating: 0, count: max(count, 1)); right.initialize(repeating: 0, count: max(count, 1))
     }
+    /// Takes over two buffers filled elsewhere (the decoder writes straight into them); they may be longer than
+    /// `count`, the rest is never read.
+    public init(adopting l: UnsafeMutablePointer<Float>, _ r: UnsafeMutablePointer<Float>, count: Int, sampleRate: Double) {
+        self.count = count; self.sampleRate = sampleRate; left = l; right = r
+    }
     public convenience init(left l: [Float], right r: [Float], sampleRate: Double) {
         self.init(count: min(l.count, r.count), sampleRate: sampleRate)
         for i in 0..<count { left[i] = l[i]; right[i] = r[i] }

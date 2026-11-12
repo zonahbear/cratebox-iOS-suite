@@ -25,6 +25,9 @@ targets:
     sources: [App]
     dependencies:
       - package: CrateboxKit
+      # Ask the library (SmartSearch.swift): iOS 26+ only, so weak, or the app wouldn't start on iOS 17/18
+      - sdk: FoundationModels.framework
+        weak: true
     info:
       path: App/Info.plist
       properties:
@@ -54,3 +57,7 @@ targets:
         CODE_SIGN_IDENTITY: $(CB_IDENTITY)
         PROVISIONING_PROFILE_SPECIFIER: $(CB_PROFILE_NAME)
         ENABLE_PREVIEWS: "NO"
+        # AI mode's Music Understanding (AppleMusic.swift) exists only in the iOS 27 SDK: weak-link it there, so the
+        # app still starts on iOS 17-26. With an older SDK the code compiles it out and there's nothing to link.
+        "OTHER_LDFLAGS[sdk=iphoneos27*]": ["$(inherited)", "-weak_framework", "MusicUnderstanding"]
+        "OTHER_LDFLAGS[sdk=iphonesimulator27*]": ["$(inherited)", "-weak_framework", "MusicUnderstanding"]

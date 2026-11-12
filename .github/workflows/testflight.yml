@@ -11,12 +11,20 @@ on:
     branches: [main, preview/truecurve-usb]   # this branch too: Jonah asked for its build on TestFlight
     paths: ["ios/**", ".github/workflows/testflight.yml"]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: "Mac: xcode-27 = Apple Silicon, iOS 27 SDK (AI mode's Apple music analysis is built in); macos-15-intel = Xcode 26, without it"
+        type: choice
+        options: [macos-15-intel, xcode-27]
+        default: macos-15-intel
 permissions:
   contents: write
 concurrency: { group: testflight, cancel-in-progress: false }
 jobs:
   upload:
-    runs-on: macos-15-intel   # GitHub's arm64 Mac pool has not been picking jobs up (Nov 2026); the archive is still arm64 for iPhones
+    # pushes still build on Intel (Xcode 26: no Apple music analysis) until the Apple Silicon pool is reliable again;
+    # Run workflow → xcode-27 makes a build with it
+    runs-on: ${{ inputs.runner || 'macos-15-intel' }}   # the archive is arm64 for iPhones either way
     env:
       P12: ${{ secrets.IOS_DIST_P12_BASE64 }}
       P12_PASSWORD: ${{ secrets.IOS_DIST_P12_PASSWORD }}

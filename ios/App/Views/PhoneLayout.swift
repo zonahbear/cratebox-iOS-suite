@@ -11,7 +11,6 @@ struct PhoneScreen: View {
     @EnvironmentObject var core: Core
     @Binding var settings: Bool
     @State private var islandLeft = PhoneScreen.islandOnLeft()
-    @AppStorage("cb.compact") private var compactPref = false
 
     /// Touch mode (CompactPhone.swift) is the only layout on a phone without an island (SE: the strips only cost width) or a
     /// screen too small for the full one (Display Zoom); Settings → Look can turn it on anywhere else
@@ -40,35 +39,14 @@ struct PhoneScreen: View {
         let ins = PhoneScreen.windowInsets()
         // the strips use the island's inset; a phone without one (SE) gets narrower strips
         let band = max(40, min(ins.left, ins.right))
-        let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
-        // the whole screen: a reader that itself ignores the safe area gets the full size
+        // the whole screen: a reader that itself ignores the safe area gets the full size.
+        // What's shown lives in PhoneFrame, a view of its own: built with Xcode 27, state read inside this reader's
+        // closure no longer redrew it (LIBRARY, WAVE and DECKS changed nothing on screen), a view's own body does
+        // (the same went for Settings → Look → Touch mode, which is why PhoneFrame reads that setting itself, and
+        // for the island's side, read here in the body)
+        let left = islandLeft
         return GeometryReader { g in
-        let m = PhoneMetrics.make(width: g.size.width - 2 * band, height: g.size.height - ins.top)
-        if compactPref || PhoneScreen.autoCompact(size: g.size, insets: ins) {
-            CompactScreen(settings: $settings, size: g.size, insets: ins)
-        } else {
-        HStack(spacing: 0) {
-            EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
-            VStack(spacing: 4) {
-                PhoneTopBar(settings: $settings).frame(height: 30).zIndex(1)     // EJECT's 44 pt touch area overhangs it
-                if app.tab == 0 {
-                    Group { if app.waveMode { WaveStack() } else { mix(l, r, m) } }.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
-                } else { LibraryPane() }
-                // the home-bar strip: text only, so a swipe home never lands on a control
-                HStack {
-                    StripInfo(deck: core.decks[l])
-                    Spacer()
-                    StripInfo(deck: core.decks[r])
-                }.frame(height: max(ins.bottom, 12))
-            }
-            .frame(width: max(0, g.size.width - 2 * band))
-            .clipped()          // a fixed width: nothing in the middle may spill over or push away the edge strips
-            EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
-        }
-        .padding(.top, ins.top)
-        .frame(width: g.size.width, height: g.size.height)
-        .environment(\.phoneMetrics, m)
-        }
+            PhoneFrame(settings: $settings, size: g.size, ins: ins, band: band, islandLeft: left)
         }
         .background(Theme.bg)
         .ignoresSafeArea()
@@ -79,6 +57,46 @@ struct PhoneScreen: View {
         .defersSystemGestures(on: .all)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             DispatchQueue.main.async { islandLeft = PhoneScreen.islandOnLeft() }
+        }
+    }
+}
+
+/// everything PhoneScreen shows, sized by it. Reads the app's state in its own body, so a change redraws it
+struct PhoneFrame: View {
+    @EnvironmentObject var app: AppModel
+    @EnvironmentObject var core: Core
+    @Binding var settings: Bool
+    let size: CGSize, ins: UIEdgeInsets, band: CGFloat, islandLeft: Bool
+    @AppStorage("cb.compact") private var compactPref = false       // Settings → Look → Touch mode
+
+    var body: some View {
+        let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
+        let m = PhoneMetrics.make(width: size.width - 2 * band, height: size.height - ins.top)
+        let tab = app.tab, wave = app.waveMode, browser = app.browserShown
+        if compactPref || PhoneScreen.autoCompact(size: size, insets: ins) {
+            CompactScreen(settings: $settings, size: size, insets: ins)
+        } else {
+        HStack(spacing: 0) {
+            EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
+            VStack(spacing: 4) {
+                PhoneTopBar(settings: $settings).frame(height: 30).zIndex(1)     // EJECT's 44 pt touch area overhangs it
+                if tab == 0 {
+                    Group { if wave { WaveStack() } else { mix(l, r, m) } }.overlay { if browser { BrowserOverlay().transition(.opacity) } }
+                } else { LibraryPane() }
+                // the home-bar strip: text only, so a swipe home never lands on a control
+                HStack {
+                    StripInfo(deck: core.decks[l])
+                    Spacer()
+                    StripInfo(deck: core.decks[r])
+                }.frame(height: max(ins.bottom, 12))
+            }
+            .frame(width: max(0, size.width - 2 * band))
+            .clipped()          // a fixed width: nothing in the middle may spill over or push away the edge strips
+            EdgeStrip(deck: core.decks[r], side: 1, center: islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
+        }
+        .padding(.top, ins.top)
+        .frame(width: size.width, height: size.height)
+        .environment(\.phoneMetrics, m)
         }
     }
 

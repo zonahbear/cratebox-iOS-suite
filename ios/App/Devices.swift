@@ -172,7 +172,7 @@ final class Devices: ObservableObject {
     }
     /// puts it on the track (main thread: the screen reads TrackInfo)
     static func apply(_ x: RBRead, to t: LibTrack) {
-        if !t.info.gridManual { t.info.bpm = x.bpm; t.info.firstBeat = x.firstBeat; t.info.autoBpm = x.bpm; t.info.autoFirst = x.firstBeat }
+        if !t.info.gridManual { t.info.bpm = x.bpm; t.info.firstBeat = x.firstBeat; t.info.autoBpm = x.bpm; t.info.autoFirst = x.firstBeat; t.info.appleGrid = false }
         t.info.rbGrid = true
         t.info.rbBeats = x.beats; t.info.rbBeat0 = x.beat0
         if let ph = x.phrases { t.info.phrases = ph }

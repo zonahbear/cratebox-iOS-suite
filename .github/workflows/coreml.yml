@@ -1,0 +1,40 @@
+# Beat This! small -> Core ML (ios/tools/coreml/convert.py). Ubuntu (cheap minutes): coremltools converts on
+# Linux, and Windows' coremltools can't save an mlprogram. Runs only when the script changes on a claude/ branch,
+# or by hand; the model comes out as an artifact.
+name: Core ML model
+on:
+  push:
+    branches: ["claude/**"]
+    paths: ["ios/tools/coreml/**", ".github/workflows/coreml.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  convert:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - name: Install
+        run: |
+          pip install --quiet --index-url https://download.pytorch.org/whl/cpu torch==2.7.0 torchaudio==2.7.0
+          pip install --quiet "numpy<2.3" coremltools==9.0 beat-this==1.1.0 soundfile
+          pip list 2>/dev/null | grep -i -E "torch|coremltools|numpy|beat|rotary|einops"
+      - name: Convert
+        run: python ios/tools/coreml/convert.py out
+      - name: License
+        run: |
+          python - <<'PY'
+          import importlib.metadata as m
+          d = m.distribution("beat-this")
+          files = [f for f in (d.files or []) if "LICENSE" in str(f).upper()]
+          print(files)
+          for f in files:
+              p = d.locate_file(f)
+              if p.is_file(): open("out/LICENSE-beat_this.txt", "w").write(p.read_text()); break
+          PY
+          ls -la out
+      - uses: actions/upload-artifact@v4
+        with: { name: BeatThisSmall-coreml, path: out, retention-days: 30 }

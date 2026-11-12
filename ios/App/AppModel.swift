@@ -74,7 +74,7 @@ final class AppModel: ObservableObject, ControlTarget {
         core = Core(engine: audio.engine, prefs: DefaultsPrefs(), cues: UserCueStore())
         core.clock = { [unowned self] in self.smoothClock() }
         core.lag = { [unowned self] in self.audio.latency }
-        core.status = { [weak self] s, secs in self?.status(s, secs) }
+        core.onStatus = { [weak self] s, secs in self?.status(s, secs) }
         core.rangeChanged = { [weak self] d in self?.midi.holdPickup("tempo", deck: d) }
         core.trackChanged = { [weak self] t in if let lt = self?.library.track(t.id) { self?.library.changed(lt) } }
         core.reanalyse = { [weak self] t in if let lt = self?.library.track(t.id) { lt.rec.ver = 0; self?.library.enqueue(lt) } }
@@ -107,6 +107,7 @@ final class AppModel: ObservableObject, ControlTarget {
         Devices.shared.restore()
         DriveWatch.shared.app = self
         DriveWatch.shared.start()
+        AppleMusic.shared.attach(self)       // AI mode: Apple's Music Understanding in the background (iOS 27, off by default)
         restoreBrowse()
         if CommandLine.arguments.contains("-demo") { demo() }
     }
@@ -232,15 +233,22 @@ final class AppModel: ObservableObject, ControlTarget {
         let d = core.decks[deck]
         if let why = d.canLoad() { status(why); return }
         guard let url = Devices.shared.url(for: t) ?? library.fileURL(t) else { status("\(t.rec.title) isn't in a connected folder"); return }
+        AppleMusic.shared.yield()          // loading comes first: the background analysis lets go of the phone
         d.beginLoad(t.info)
         status("Loading \(t.info.title) into deck \(deck + 1)...", 0)
         let info = t.info
-        let analysedBefore = t.analysed && (t.info.bpm ?? 0) > 0 && t.info.firstBeat != nil
         // what the analysis needs from the track, read here: TrackInfo is the screen's, so the background task
         // works on copies and everything it finds is put back on the main thread
         let rbURL = t.device != nil ? Devices.shared.anlzURL(t) : nil, onStick = t.device != nil
         let manual = info.gridManual, keyRB = info.keyFromRekordbox
-        let had = (bpm: info.bpm, first: info.firstBeat, phrases: info.phrases, key: info.key, beats: info.rbBeats, beat0: info.rbBeat0)
+        // Settings → AI mode → Beat grids: Apple's grid instead of Cratebox's own (prefer), or of rekordbox's too
+        // (only). A grid fixed by hand stays. A track that had Apple's grid with the setting now off goes back to
+        // what it had before
+        let gridMode = AppleGridMode.now, apple = manual ? nil : AppleMusic.shared.gridSource(t)
+        let wasApple = info.appleGrid, back = wasApple && apple == nil && !manual
+        let had = (bpm: back ? info.autoBpm : info.bpm, first: back ? info.autoFirst : info.firstBeat, phrases: info.phrases, key: info.key, beats: info.rbBeats, beat0: info.rbBeat0)
+        let ownBpm = wasApple ? info.autoBpm : info.bpm, bpmRange = Settings.bpmRange
+        let analysedBefore = t.analysed && (had.bpm ?? 0) > 0 && had.first != nil
         Task.detached(priority: .userInitiated) {
             do {
                 // a rekordbox USB track: rekordbox's own grid, phrases and cues (read first, so they're used
@@ -253,7 +261,18 @@ final class AppModel: ObservableObject, ControlTarget {
                     if let ph = rb.phrases { phrases = ph }
                 }
                 let fromRekordbox = onStick && (bpm ?? 0) > 0 && first != nil
-                let cached = analysedBefore || fromRekordbox
+                var useApple = false, regrid = false
+                if let f = apple, gridMode == .only || !fromRekordbox {
+                    // the octave: rekordbox's tempo, else the one the track had, else the BPM range
+                    let ref = rb?.bpm ?? ownBpm
+                    if let g = f.grid(near: (ref ?? 0) > 0 ? ref : nil, range: bpmRange) {
+                        if rb?.phrases == nil && (g.bpm != bpm || g.firstBeat != first) { regrid = true }
+                        bpm = g.bpm; first = g.firstBeat; beats = nil; useApple = true
+                    }
+                }
+                if wasApple && !useApple && rb?.phrases == nil { regrid = true }
+                let usedApple = useApple, redo = regrid
+                let cached = analysedBefore || fromRekordbox || usedApple
                 let pcm = try AudioDecoder.decode(url)
                 let m = AudioDecoder.mono(pcm, 11025), w = AudioDecoder.mono(pcm, 22050)
                 let dur = Double(pcm.count) / pcm.sampleRate
@@ -261,12 +280,12 @@ final class AppModel: ObservableObject, ControlTarget {
                 var auto: (bpm: Double, first: Double)?
                 if cached || manual {
                     let wave = Analysis.waveform(w.x, w.fs)
-                    let ph = cached && !phrases.isEmpty ? phrases : Analysis.phraseAnalysis(m.x, m.fs, bpm ?? 120, first ?? 0)
+                    let ph = cached && !phrases.isEmpty && !redo ? phrases : Analysis.phraseAnalysis(m.x, m.fs, bpm ?? 120, first ?? 0)
                     var key = had.key
-                    if !cached { key = Analysis.detectKey(m.x, m.fs).key }
+                    if !cached || key < 0 { key = Analysis.detectKey(m.x, m.fs).key }
                     a = DeckAnalysis(bpm: bpm ?? 120, firstBeat: first ?? 0, key: key, phrases: ph, wave: wave, duration: dur)
                     // rekordbox's grid beat by beat (unless the grid was edited by hand here)
-                    if fromRekordbox && !manual, let b = beats, b.count >= 2 { a.beats = b; a.beat0 = beat0 }
+                    if fromRekordbox && !manual && !usedApple, let b = beats, b.count >= 2 { a.beats = b; a.beat0 = beat0 }
                 } else {
                     let r = Analysis.analyze(m.x, fs: m.fs, range: Settings.bpmRange, waveSource: w)
                     a = DeckAnalysis(bpm: r.bpm, firstBeat: r.firstBeat, key: keyRB && had.key >= 0 ? had.key : r.key, phrases: r.phrases, wave: r.wave, duration: dur)
@@ -276,6 +295,9 @@ final class AppModel: ObservableObject, ControlTarget {
                 await MainActor.run {
                     if let rb { Devices.apply(rb, to: t) }
                     if let g = autoGrid { info.autoBpm = g.bpm; info.autoFirst = g.first }
+                    // Apple's grid goes on top of the track's own, which is kept for when the setting is turned off
+                    if usedApple && !wasApple && info.autoBpm == nil && !onStick { info.autoBpm = had.bpm; info.autoFirst = had.first }
+                    if !manual { info.appleGrid = usedApple }
                     t.rec.ver = Library.ANALYSIS_VER
                     d.finishLoad(info, pcm: pcm, analysis: found, mono: m)
                     self.library.changed(t)

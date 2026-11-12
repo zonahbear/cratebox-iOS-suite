@@ -3,6 +3,9 @@
 // tested against the JS on the synthetic test tracks (Fixtures/analysis.json, ios/tools/analysis_oracle.js).
 // Where the JS keeps numbers in a Float32Array, this keeps them in [Float] (same rounding).
 import Foundation
+#if canImport(Accelerate)
+import Accelerate
+#endif
 
 public struct Phrase: Equatable, Codable { public var start: Double; public var bars: Int; public var label: String }
 
@@ -41,6 +44,46 @@ public enum Analysis {
             out[i] = Float(s * k)
         }
         return (out, sampleRate / Double(f))
+    }
+
+    /// `monoFor` fed a block at a time, for stereo (or mono sent as left = right): the same groups, the same sums in
+    /// the same order, so the same samples come out. The library analyses a track while it's decoded with this,
+    /// instead of holding the whole file as stereo floats first (~180 MB for 8 minutes at 48 kHz).
+    public struct MonoAccumulator {
+        public let f: Int, fs: Double
+        let k: Double
+        var pl = [Float](), pr = [Float]()          // a group cut in two by the end of the last block
+        public private(set) var out = [Float]()
+        public private(set) var frames = 0          // input frames seen, for the duration
+        public init(sampleRate: Double, target: Double = 11025) {
+            f = max(1, Int(jsRound(sampleRate / target))); fs = sampleRate / Double(f); k = 1 / Double(f * 2)
+        }
+        public mutating func reserve(frames n: Int) { out.reserveCapacity(n / f + 1) }
+        public mutating func add(_ l: UnsafePointer<Float>, _ r: UnsafePointer<Float>, count n: Int) {
+            frames += n
+            var i = 0
+            if !pl.isEmpty {
+                let take = min(f - pl.count, n)
+                pl.append(contentsOf: UnsafeBufferPointer(start: l, count: take))
+                pr.append(contentsOf: UnsafeBufferPointer(start: r, count: take))
+                i = take
+                if pl.count < f { return }
+                let (a, b) = (pl, pr)
+                a.withUnsafeBufferPointer { a in b.withUnsafeBufferPointer { b in emit(a.baseAddress!, b.baseAddress!) } }
+                pl.removeAll(keepingCapacity: true); pr.removeAll(keepingCapacity: true)
+            }
+            while i + f <= n { emit(l + i, r + i); i += f }
+            if i < n {
+                pl.append(contentsOf: UnsafeBufferPointer(start: l + i, count: n - i))
+                pr.append(contentsOf: UnsafeBufferPointer(start: r + i, count: n - i))
+            }
+        }
+        @inline(__always) mutating func emit(_ l: UnsafePointer<Float>, _ r: UnsafePointer<Float>) {
+            var s = 0.0
+            for j in 0..<f { s += Double(l[j]) }
+            for j in 0..<f { s += Double(r[j]) }
+            out.append(Float(s * k))
+        }
     }
 
     public static func analyze(_ x: [Float], fs: Double, range: (Double, Double) = (88, 176), waveSource: (x: [Float], fs: Double)? = nil,
@@ -226,7 +269,14 @@ public enum Analysis {
     }
 
     // ---- FFT (radix 2, tables per size) ----
+    // On Apple platforms the FFT is Accelerate's (vDSP_fft_zipD: same sign, unscaled, double precision), several
+    // times faster than the loop below on a phone; the results differ from the JS only in the last bits.
+    // The loop stays: it's the reference the tests compare vDSP against, and what runs where Accelerate isn't.
+    static var useAccelerate = true       // tests turn it off to compare
     final class FFTTables { let rev: [Int]; let cosT: [Double]; let sinT: [Double]
+        #if canImport(Accelerate)
+        let log2n: vDSP_Length; let setup: FFTSetupD?
+        #endif
         init(_ n: Int) {
             var rev = [Int](repeating: 0, count: n)
             var j = 0
@@ -234,10 +284,26 @@ public enum Analysis {
             self.rev = rev
             cosT = (0..<(n / 2)).map { cos(-2 * Double.pi * Double($0) / Double(n)) }
             sinT = (0..<(n / 2)).map { sin(-2 * Double.pi * Double($0) / Double(n)) }
+            #if canImport(Accelerate)
+            log2n = vDSP_Length(n.trailingZeroBitCount)
+            setup = n > 1 && n & (n - 1) == 0 ? vDSP_create_fftsetupD(log2n, FFTRadix(kFFTRadix2)) : nil
+            #endif
         }
+        #if canImport(Accelerate)
+        deinit { if let setup { vDSP_destroy_fftsetupD(setup) } }
+        #endif
     }
     static func fft(_ re: inout [Double], _ im: inout [Double], _ t: FFTTables) {
         let n = re.count
+        #if canImport(Accelerate)
+        if useAccelerate, let setup = t.setup, n == t.rev.count, im.count == n {
+            re.withUnsafeMutableBufferPointer { r in im.withUnsafeMutableBufferPointer { i in
+                var z = DSPDoubleSplitComplex(realp: r.baseAddress!, imagp: i.baseAddress!)
+                vDSP_fft_zipD(setup, &z, 1, t.log2n, FFTDirection(kFFTDirection_Forward))
+            } }
+            return
+        }
+        #endif
         re.withUnsafeMutableBufferPointer { re in im.withUnsafeMutableBufferPointer { im in
             for i in 0..<n { let j = t.rev[i]; if i < j { var x = re[i]; re[i] = re[j]; re[j] = x; x = im[i]; im[i] = im[j]; im[j] = x } }
             var len = 2

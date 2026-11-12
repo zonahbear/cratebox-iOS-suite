@@ -1,0 +1,457 @@
+// AI mode (Settings → AI mode) and Apple's Music Understanding analysis.
+//
+// AI mode is one switch for every AI feature in the app, off by default: Ask the library (SmartSearch.swift,
+// Apple Intelligence, iOS 26+) and Apple's Music Understanding (this file, iOS 27+). Both run on the device only;
+// nothing is sent anywhere.
+//
+// Music Understanding (Apple, iOS 27): beats, bars, BPM, key over time, sections/segments/phrases, pace, where the
+// vocals / drums / bass are, and loudness in LUFS. Here it runs in the background, one track at a time and only
+// while nothing is playing, and its results are kept BESIDE Cratebox's own analysis: they never change a track's
+// grid, key, phrases or cues (Cratebox's, rekordbox's or a hand-fixed grid stay in charge). Settings → AI mode →
+// Compare shows how Apple's beats and bars sit against those grids, and exports it as a CSV, so the two can be
+// judged on real tracks before Apple's results are used for anything.
+//
+// The framework is only in the iOS 27 SDK (Xcode 27). Built with an older Xcode, `canImport(MusicUnderstanding)`
+// is false, this part compiles to "not in this build" and Settings says so.
+import AVFoundation
+import Combine
+import CryptoKit
+import Foundation
+import UIKit
+import UIKit.UIGestureRecognizerSubclass
+import CrateboxKit
+#if canImport(MusicUnderstanding)
+import MusicUnderstanding
+#endif
+
+enum AIMode {
+    static let key = "cb.ai"
+    static var on: Bool { UserDefaults.standard.bool(forKey: key) }
+}
+
+/// Settings → AI mode → Beat grids: whose grid a track gets when it's loaded. A grid fixed by hand always stays.
+enum AppleGridMode: Int {
+    case off        // rekordbox's, or Cratebox's own analysis
+    case prefer     // Apple's instead of Cratebox's own; rekordbox's grids stay
+    case only       // Apple's instead of rekordbox's too
+    static let key = "cb.ai.grid"
+    static var now: AppleGridMode { AIMode.on && AppleMusic.usable ? AppleGridMode(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .off : .off }
+}
+
+/// The library's MATCH sort: how well each track would follow what's playing, onto the deck that's free
+enum Suggest {
+    struct Context { let now: NextTrack.Item, opts: NextTrack.Options, target: Int }
+    static weak var app: AppModel?
+    private static var memo: (at: Double, ctx: Context?)?
+    /// what's heard now (the playing deck started last, else any loaded deck) and the deck a track would go on.
+    /// Kept for half a second: every row of the list asks
+    static func context() -> Context? {
+        let t = ProcessInfo.processInfo.systemUptime
+        if let m = memo, t - m.at < 0.5 { return m.ctx }
+        let ctx = build()
+        memo = (t, ctx)
+        return ctx
+    }
+    private static func build() -> Context? {
+        guard let app else { return nil }
+        let decks = app.core.activeDecks.map { app.core.decks[$0] }
+        let ready = decks.filter { $0.loaded && $0.bpm > 0 }
+        guard let on = ready.filter({ $0.playing }).max(by: { $0.startedAt < $1.startedAt }) ?? ready.first else { return nil }
+        let target = decks.first { $0 !== on && !$0.playing } ?? decks.first { $0 !== on } ?? on
+        var now = NextTrack.Item(id: on.track?.id ?? "", bpm: on.effBpm(), key: on.keyNow())
+        if let l = AppleMusic.shared.lite(now.id) { now.energy = l.lufs.map { NextTrack.energy(lufs: $0) }; now.shares = l.shares }
+        return Context(now: now, opts: NextTrack.Options(range: target.range, keylock: target.mt), target: target.i)
+    }
+    static func score(_ t: LibTrack, _ c: Context) -> NextTrack.Result? {
+        guard let b = t.info.bpm, b > 0 else { return nil }
+        var it = NextTrack.Item(id: t.id, bpm: b, key: t.info.key)
+        if let l = AppleMusic.shared.lite(t.id) { it.energy = l.lufs.map { NextTrack.energy(lufs: $0) }; it.shares = l.shares }
+        return NextTrack.score(now: c.now, cand: it, c.opts)
+    }
+    /// "87" for a row, "" when there's nothing playing to match or the track can't follow on that deck
+    static func label(_ t: LibTrack?) -> String {
+        guard AIMode.on, let t, let c = context(), let r = score(t, c) else { return "" }
+        return String(Int(r.score.rounded()))
+    }
+}
+
+/// When the screen was last touched, so the background analysis stays out of the way while the app is in use.
+/// A recogniser on the window that only looks: it fails at once, so no touch is delayed or taken.
+final class TouchWatch: UIGestureRecognizer {
+    static var last = ProcessInfo.processInfo.systemUptime
+    private static var installed = false
+    static func install() {
+        guard !installed else { return }
+        let windows = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.flatMap { $0.windows }
+        guard !windows.isEmpty else { return }
+        for w in windows {
+            let g = TouchWatch(target: nil, action: nil)
+            g.cancelsTouchesInView = false; g.delaysTouchesBegan = false; g.delaysTouchesEnded = false
+            w.addGestureRecognizer(g)
+        }
+        installed = true
+    }
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent) {
+        TouchWatch.last = ProcessInfo.processInfo.systemUptime
+        state = .failed
+    }
+}
+
+final class AppleMusic: ObservableObject {
+    static let shared = AppleMusic()
+    /// this build has the framework (made with the iOS 27 SDK)
+    static var builtIn: Bool {
+        #if canImport(MusicUnderstanding)
+        return true
+        #else
+        return false
+        #endif
+    }
+    static var osSupports: Bool { if #available(iOS 27, *) { return true } else { return false } }
+    static var usable: Bool { builtIn && osSupports }
+    /// why it can't run here, for Settings (nil when it can)
+    static var unavailableReason: String? {
+        if !builtIn { return "Not in this build: it was made with an Xcode older than 27, which doesn't have Apple's Music Understanding." }
+        if !osSupports { return "Needs iOS 27 or later." }
+        return nil
+    }
+
+    @Published private(set) var progress = ""
+    @Published private(set) var analysed = 0
+    weak var app: AppModel?
+    /// what's been analysed (or failed): the file's size and date, and the format version
+    struct Stamp: Codable {
+        var size: Int64, mtime: Double, ver: Int, failed: String?
+        /// the little the library's MATCH sort needs, kept here so sorting doesn't open every track's results
+        var lufs: Double? = nil, shares: [Double]? = nil, lite: Bool? = nil
+    }
+    private var index = [String: Stamp]()
+    private var cache = [String: AppleFeatures]()
+    private var job: Task<Void, Never>?
+    private var jobId: String?
+    private var watch: Timer?
+    private var retry: DispatchWorkItem?
+    private var subs = Set<AnyCancellable>()
+    private var deadFolder = [String: Double]()   // music folders found unreachable, and when
+    private var saveWork: DispatchWorkItem?
+    private var mixCache = [String: (bpm: Double, first: Double, r: MixPoints.Result)]()
+    private let dir: URL
+
+    private init() {
+        dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Cratebox/apple", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        if let d = try? Data(contentsOf: dir.appendingPathComponent("index.json")), let i = try? JSONDecoder().decode([String: Stamp].self, from: d) { index = i }
+        analysed = index.values.filter { $0.failed == nil && $0.ver == AppleFeatures.VER }.count
+    }
+    func attach(_ app: AppModel) {
+        self.app = app
+        Suggest.app = app
+        // new folders, a stick plugged in: look for tracks to analyse a few seconds after the list settles
+        app.library.$tracks.debounce(for: .seconds(4), scheduler: RunLoop.main).sink { [weak self] _ in self?.kick() }.store(in: &subs)
+        kick()
+        backfill()
+    }
+
+    // ---- results ----
+    private func file(_ id: String) -> URL {
+        let h = SHA256.hash(data: Data(id.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+        return dir.appendingPathComponent(h + ".json")
+    }
+    /// Apple's results for a track, if they're for the file as it is now
+    func features(_ t: LibTrack) -> AppleFeatures? {
+        guard let s = index[t.id], s.failed == nil, current(s, t) else { return nil }
+        if let f = cache[t.id] { return f }
+        guard let d = try? Data(contentsOf: file(t.id)), let f = try? JSONDecoder().decode(AppleFeatures.self, from: d) else { return nil }
+        if cache.count > 200 { cache.removeAll() }      // a few hundred kB each: keep the memory bounded
+        cache[t.id] = f
+        return f
+    }
+    /// a stamp still describes the track's file (same size, same date when the library knows it, same format)
+    private func current(_ s: Stamp, _ t: LibTrack) -> Bool {
+        s.ver == AppleFeatures.VER && s.size == t.rec.size && (t.rec.mtime == 0 || s.mtime == 0 || abs(s.mtime - t.rec.mtime) < 1)
+    }
+    private func saveIndex() { if let d = try? JSONEncoder().encode(index) { try? d.write(to: dir.appendingPathComponent("index.json"), options: .atomic) } }
+
+    // ---- for the decks and the library: Apple's grid, mix points, and what MATCH needs ----
+    /// Apple's results for a track when Settings → AI mode → Beat grids asks for Apple's grid (nil: off, or not
+    /// analysed yet). The grid itself is made at load (AppModel.load), once rekordbox's tempo is known for the octave
+    func gridSource(_ t: LibTrack) -> AppleFeatures? { AppleGridMode.now == .off ? nil : features(t) }
+    /// loudness and vocal / drum / bass shares for a track, if Apple has analysed it
+    func lite(_ id: String) -> (lufs: Double?, shares: [Double]?)? {
+        guard AIMode.on, let s = index[id], s.failed == nil, s.ver == AppleFeatures.VER else { return nil }
+        return (s.lufs, s.shares)
+    }
+    /// where to mix a loaded track in and out, on the deck's grid (nil without Apple's results). Asked for by the
+    /// waveforms many times a second, so the answer is kept until the grid changes
+    func mixPoints(_ info: TrackInfo?, bpm: Double, first: Double, duration: Double) -> MixPoints.Result? {
+        guard AIMode.on, let info, bpm > 0 else { return nil }
+        if let c = mixCache[info.id], c.bpm == bpm, c.first == first { return c.r }
+        guard let t = app?.library.track(info.id), let f = features(t) else { return nil }
+        let r = MixPoints.suggest(f, bpm: bpm, firstBeat: first, duration: duration)
+        if mixCache.count > 64 { mixCache.removeAll() }
+        mixCache[info.id] = (bpm, first, r)
+        return r
+    }
+    /// tracks analysed before the stamps kept loudness and shares: read their results once, off the main thread
+    private func backfill() {
+        let todo = index.filter { $0.value.failed == nil && $0.value.ver == AppleFeatures.VER && $0.value.lite != true }.map { ($0.key, file($0.key)) }
+        guard !todo.isEmpty else { return }
+        DispatchQueue.global(qos: .utility).async {
+            var found = [String: (Double?, [Double]?)]()
+            for (id, u) in todo {
+                guard let d = try? Data(contentsOf: u), let f = try? JSONDecoder().decode(AppleFeatures.self, from: d) else { continue }
+                found[id] = (f.lufs, f.shares)
+            }
+            DispatchQueue.main.async {
+                for (id, v) in found where self.index[id] != nil { self.index[id]!.lufs = v.0; self.index[id]!.shares = v.1; self.index[id]!.lite = true }
+                self.saveIndex()
+                self.objectWillChange.send()
+            }
+        }
+    }
+
+    // ---- the background queue ----
+    private var playing: Bool { app?.core.decks.contains { $0.playing } ?? false }
+    /// start the next track if AI mode is on, it's supported, nothing plays and nothing's running
+    func kick() {
+        retry?.cancel(); retry = nil
+        guard AIMode.on, AppleMusic.usable, let app else { if !AIMode.on { stop() }; return }
+        guard job == nil else { return }
+        if playing {
+            progress = "Waits while a deck plays"
+            later(5); return
+        }
+        // Apple's analysis keeps the phone's processors busy for the whole track: it only starts when the app has
+        // been left alone for a while, the phone isn't hot, and Low Power Mode is off
+        TouchWatch.install()
+        if ProcessInfo.processInfo.systemUptime - TouchWatch.last < AppleMusic.idleSecs {
+            if index.count < app.library.tracks.count { progress = "Waits until the app is left alone for \(Int(AppleMusic.idleSecs)) seconds" }
+            later(5); return
+        }
+        let heat = ProcessInfo.processInfo.thermalState
+        if heat == .serious || heat == .critical { progress = "Waits for the phone to cool down"; later(30); return }
+        if ProcessInfo.processInfo.isLowPowerModeEnabled { progress = "Waits while Low Power Mode is on"; later(30); return }
+        let todo = app.library.tracks.filter { t in index[t.id].map { !current($0, t) } ?? true }
+        // a folder whose drive isn't there is asked once a minute, not once per track (resolving a bookmark to a
+        // missing drive can take seconds, and this runs on the main thread)
+        let now = Date().timeIntervalSince1970
+        var found: (LibTrack, URL)?
+        for t in todo {
+            if t.device == nil, let since = deadFolder[t.rec.folder], now - since < 60 { continue }
+            if let u = url(of: t) { found = (t, u); break }
+            if t.device == nil { deadFolder[t.rec.folder] = now }
+        }
+        guard let next = found else {
+            progress = todo.isEmpty ? "" : "\(todo.count) to do when their drives are connected"
+            if !todo.isEmpty { later(60) }
+            return
+        }
+        let (t, u) = next
+        progress = "Analysing \(todo.count) track\(todo.count == 1 ? "" : "s") (Apple)…"
+        let id = t.id, size = t.rec.size, mtime = t.rec.mtime
+        jobId = id
+        job = Task.detached(priority: .utility) { [weak self] in
+            let r = await AppleMusic.run(u)
+            await MainActor.run { self?.finished(id, size: size, mtime: mtime, r) }
+        }
+        // a deck starts playing: stop this track (it's done again later), so analysis never competes with the audio
+        watch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            if let self, self.playing { self.job?.cancel() }
+        }
+    }
+    /// how long the screen must go untouched before a track is analysed
+    static let idleSecs = 20.0
+    /// a track is being loaded (or something else needs the phone now): the track being analysed is put back
+    func yield() {
+        TouchWatch.last = ProcessInfo.processInfo.systemUptime
+        job?.cancel()
+    }
+    private func later(_ s: Double) {
+        let w = DispatchWorkItem { [weak self] in self?.kick() }
+        retry = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + s, execute: w)
+    }
+    func stop() {
+        job?.cancel()
+        progress = ""
+    }
+    private func finished(_ id: String, size: Int64, mtime: Double, _ r: Result<AppleFeatures, Error>) {
+        let cancelled = job?.isCancelled ?? false
+        watch?.invalidate(); watch = nil
+        job = nil; jobId = nil
+        switch r {
+        case .success(var f):
+            if f.size == 0 { f.size = size }
+            if f.mtime == 0 { f.mtime = mtime }
+            // the library's size and date win for the stamp (that's what `current` compares against)
+            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: nil, lufs: f.lufs, shares: f.shares, lite: true)
+            mixCache[id] = nil
+            if let d = try? JSONEncoder().encode(f) { try? d.write(to: file(id), options: .atomic) }
+            cache[id] = f
+            analysed += 1
+        case .failure(let e):
+            if e is CancellationError || cancelled { progress = AIMode.on ? "Paused while a deck plays" : ""; later(5); return }
+            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: e.localizedDescription)
+        }
+        // the index is written a couple of seconds after the last change, not after every track
+        saveWork?.cancel()
+        let w = DispatchWorkItem { [weak self] in self?.saveIndex() }
+        saveWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: w)
+        objectWillChange.send()
+        // a short breather between tracks (longer after a failure, or when the phone is getting warm), so a run of
+        // quick failures can't keep the main thread busy and a long run doesn't heat the phone up
+        if case .failure = r { later(1) } else { later(ProcessInfo.processInfo.thermalState == .nominal ? 0.3 : 5) }
+    }
+    private func url(of t: LibTrack) -> URL? { Devices.shared.url(for: t) ?? app?.library.fileURL(t) }
+    /// forget everything (Settings), so it's all analysed again
+    func clear() {
+        job?.cancel()
+        index = [:]; cache = [:]; analysed = 0; deadFolder = [:]
+        try? FileManager.default.removeItem(at: dir)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        objectWillChange.send()
+        kick()
+    }
+    var failedCount: Int { index.values.filter { $0.failed != nil }.count }
+
+    // ---- the framework ----
+    enum Failure: LocalizedError {
+        case unsupported
+        var errorDescription: String? { AppleMusic.unavailableReason ?? "Not available" }
+    }
+    static func run(_ url: URL) async -> Result<AppleFeatures, Error> {
+        #if canImport(MusicUnderstanding)
+        if #available(iOS 27, *) {
+            do { return .success(try await analyse(url)) } catch { return .failure(error) }
+        }
+        #endif
+        return .failure(Failure.unsupported)
+    }
+
+    #if canImport(MusicUnderstanding)
+    @available(iOS 27, *)
+    static func analyse(_ url: URL) async throws -> AppleFeatures {
+        var f = AppleFeatures()
+        let v = try? url.resourceValues(forKeys: [.fileSizeKey, .contentModificationDateKey])
+        f.size = Int64(v?.fileSize ?? 0); f.mtime = v?.contentModificationDate?.timeIntervalSince1970 ?? 0
+        f.analysedAt = Date().timeIntervalSince1970
+        f.os = ProcessInfo.processInfo.operatingSystemVersionString
+        let t0 = Date()
+        // Apple: precise timing, or the results can be slightly off on compressed files
+        let asset = AVURLAsset(url: url, options: [AVURLAssetPreferPreciseDurationAndTimingKey: true])
+        let duration = (try? await asset.load(.duration))?.seconds ?? 0
+        let session = try await MusicUnderstandingSession(asset: asset)
+        let r = try await withTaskCancellationHandler {
+            try await session.analyze(for: [.rhythm, .key, .structure, .pace, .instrumentActivity, .loudness])
+        } onCancel: {
+            Task { await session.cancel() }
+        }
+        try Task.checkCancellation()
+        func sec(_ t: CMTime) -> Double { t.isNumeric ? t.seconds : 0 }
+        func span(_ r: CMTimeRange, _ x: Double = 0) -> AppleFeatures.Span { .init(sec(r.start), sec(r.end), x) }
+        if let rh = r.rhythm {
+            f.bpm = rh.beatsPerMinute.map { Double($0) }
+            f.beats = rh.beats.map(sec); f.bars = rh.bars.map(sec)
+        }
+        if let k = r.key { f.keys = k.ranges.map { span($0.range, Double(keyNumber($0.value))) } }
+        if let st = r.structure {
+            f.sections = st.sections.map { span($0) }; f.segments = st.segments.map { span($0) }; f.phrases = st.phrases.map { span($0) }
+        }
+        if let p = r.pace { f.pace = p.ranges.map { span($0.range, $0.value) } }
+        let dur = duration > 0 ? duration : max(f.beats.last ?? 0, f.sections.last?.end ?? 0)
+        if let ia = r.instrumentActivity {
+            for (inst, rs) in ia.ranges { f.present[name(inst)] = rs.map { span($0) } }
+            for (inst, vs) in ia.activity {
+                f.activity[name(inst)] = AppleFeatures.bin(vs.map { (sec($0.time), $0.value) }, step: f.activityStep, duration: dur)
+            }
+        }
+        if let l = r.loudness {
+            f.lufs = Double(l.integrated.value); f.peakDb = Double(l.peak.value)
+            f.shortTerm = AppleFeatures.bin(l.shortTerm.map { (sec($0.time), $0.value) }, step: 1, duration: dur)
+        }
+        f.seconds = Date().timeIntervalSince(t0)
+        return f
+    }
+    @available(iOS 27, *)
+    static func name(_ i: InstrumentActivityResult.Instrument) -> String {
+        if i == .vocal { return "vocal" }
+        if i == .drum { return "drum" }
+        if i == .bass { return "bass" }
+        if i == .other { return "other" }
+        return i.rawValue
+    }
+    /// Apple's key → Cratebox's key number (0-11 major C...B, 12-23 minor)
+    @available(iOS 27, *)
+    static func keyNumber(_ k: KeyResult.KeySignature) -> Int {
+        let pc: Int
+        switch k.tonic {
+        case .c: pc = 0
+        case .cSharp, .dFlat: pc = 1
+        case .d: pc = 2
+        case .dSharp, .eFlat: pc = 3
+        case .e: pc = 4
+        case .f: pc = 5
+        case .fSharp, .gFlat: pc = 6
+        case .g: pc = 7
+        case .gSharp, .aFlat: pc = 8
+        case .a: pc = 9
+        case .aSharp, .bFlat: pc = 10
+        case .b: pc = 11
+        @unknown default: return -1
+        }
+        return pc + (k.mode == .minor ? 12 : 0)
+    }
+    #endif
+
+    // ---- comparing with the grids we trust ----
+    struct Row: Identifiable {
+        let id: String, title: String, artist: String
+        let source: String                 // whose grid it's compared with: Cratebox, rekordbox or "hand-fixed"
+        let bpm: Double?, appleBpm: Double?
+        let key: Int, appleKey: Int
+        let cmp: GridCompare.Result
+        let vocals: Double?, lufs: Double?, seconds: Double
+    }
+    func rows() -> [Row] {
+        guard let app else { return [] }
+        return app.library.tracks.compactMap { t in
+            guard let f = features(t) else { return nil }
+            // a stick's track has rekordbox's BPM from the start but its grid only once the analysis file is read
+            // (normally at load): read it now, or there's no first beat to compare with
+            if t.info.firstBeat == nil, t.device != nil { Devices.shared.readAnalysis(t) }
+            let i = t.info
+            var src = i.gridManual ? "hand-fixed" : i.rbGrid ? "rekordbox" : "Cratebox"
+            var cmp = GridCompare.Result()
+            // a track whose grid in use is Apple's own: compare with what it had before (rekordbox's, or Cratebox's)
+            var refBpm = i.bpm, refFirst = i.firstBeat, refBeats = i.gridManual ? nil : i.rbBeats, refBeat0 = i.rbBeat0
+            if i.appleGrid {
+                if let u = Devices.shared.anlzURL(t), let x = Devices.readAnalysis(at: u) { refBpm = x.bpm; refFirst = x.firstBeat; refBeats = x.beats; refBeat0 = x.beat0 }
+                else { refBpm = i.autoBpm; refFirst = i.autoFirst; refBeats = nil; src = "Cratebox" }
+            }
+            if let b = refBpm, b > 0, let fb = refFirst {
+                cmp = GridCompare.compare(.init(bpm: b, firstBeat: fb, beats: refBeats, beat0: refBeat0), apple: f)
+            } else if let b = i.bpm, b > 0, let tempo = f.tempo {
+                // a BPM but no grid (a stick that isn't plugged in, or a tag's BPM): only the tempos can be compared
+                src = "BPM only"
+                cmp.tempoRatio = tempo / b
+                cmp.tempoMult = [1.0, 0.5, 2.0].first { abs(tempo / b / $0 - 1) < 0.02 }
+            }
+            return Row(id: t.id, title: i.title, artist: i.artist, source: src, bpm: refBpm ?? i.bpm, appleBpm: f.tempo, key: i.key, appleKey: f.key, cmp: cmp,
+                       vocals: f.share("vocal", duration: i.duration), lufs: f.lufs, seconds: f.seconds)
+        }
+    }
+    /// the comparison as a CSV in Files → On My iPhone → Cratebox Suite
+    func exportCSV() -> URL? {
+        func q(_ s: String) -> String { "\"" + s.replacingOccurrences(of: "\"", with: "\"\"") + "\"" }
+        func n(_ x: Double?, _ d: Int = 2) -> String { x.map { String(format: "%.\(d)f", $0) } ?? "" }
+        var out = "title,artist,grid,bpm,apple_bpm,tempo_ratio,tempo_mult,beat_offset_beats,beat_offset_ms,beats_on_grid,bar1_shift_beats,bar1_share,key,apple_key,vocals_share,lufs,apple_seconds\n"
+        for r in rows() {
+            out += [q(r.title), q(r.artist), r.source, n(r.bpm), n(r.appleBpm), n(r.cmp.tempoRatio, 3), n(r.cmp.tempoMult, 1), n(r.cmp.beatOffset, 3), n(r.cmp.beatOffsetMs, 0),
+                    n(r.cmp.beatsOnGrid, 2), r.cmp.barShift.map(String.init) ?? "", n(r.cmp.barShare, 2),
+                    Keys.camelot(r.key)?.label ?? "", Keys.camelot(r.appleKey)?.label ?? "", n(r.vocals, 2), n(r.lufs, 1), n(r.seconds, 1)].joined(separator: ",") + "\n"
+        }
+        let u = Recorder.folder.appendingPathComponent("Apple analysis vs grids.csv")
+        do { try out.write(to: u, atomically: true, encoding: .utf8); return u } catch { return nil }
+    }
+}

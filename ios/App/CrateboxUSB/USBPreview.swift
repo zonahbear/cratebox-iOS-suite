@@ -37,7 +37,7 @@ final class USBPreview: ObservableObject {
         core.mixer = m
         core.clock = { [unowned self] in self.smoothClock() }
         core.lag = { [unowned audio] in audio.latency }          // jumps start from the playhead, as on the decks
-        core.status = { [weak self] s, _ in self?.session?.message = s }
+        core.onStatus = { [weak self] s, _ in self?.session?.message = s }
         // the grid tools edit the track's grid: record it as the staged edit
         core.trackChanged = { [weak self] t in
             guard let self, t.gridManual, let k = self.key, t.id == k else { return }
