@@ -153,4 +153,77 @@ final class AutoMixTests: XCTestCase {
         o.flow = -1
         XCTAssertEqual(AutoMix.choose(after: a, aRate: 1, pool: [up, down], o).first?.track.id, "down")
     }
+
+    // ---- AI DJ v2: kinds, lengths, mix points, mix now ----
+    func testEveryKindKeepsOneBassLineAndEndsClean() {
+        for kd in AutoMix.Transition.allCases {
+            for n in kd.lengths {
+                for k in 0...(n * 20) {
+                    let l = kd.levels(atBar: Double(k) / 20, of: n)
+                    XCTAssertLessThanOrEqual(l.inLow + l.outLow, 0.5 + 1e-9, "\(kd) \(n) bars at \(Double(k) / 20)")
+                }
+                let s = kd.levels(atBar: 0, of: n), e = kd.levels(atBar: Double(n), of: n)
+                XCTAssertEqual(s.inFader, 0, accuracy: 1e-9, "\(kd)"); XCTAssertEqual(s.outFader, 1, accuracy: 1e-9, "\(kd)")
+                XCTAssertEqual(e.outFader, 0, accuracy: 1e-9, "\(kd)"); XCTAssertEqual(e.inFader, 1, accuracy: 1e-9, "\(kd)")
+                // the next track ends up flat: full bass, EQ centred, COLOR off
+                XCTAssertEqual(e.inLow, 0.5, accuracy: 1e-9, "\(kd)"); XCTAssertEqual(e.inMid, 0.5, accuracy: 1e-9, "\(kd)")
+                XCTAssertEqual(e.inHi, 0.5, accuracy: 1e-9, "\(kd)"); XCTAssertEqual(e.inCfx, 0.5, accuracy: 1e-9, "\(kd)")
+            }
+        }
+    }
+    func testHighsAndLowsHandOffSeparately() {
+        let t = AutoMix.Transition.eqHandoff
+        let early = t.levels(atBar: 4, of: 32), mid = t.levels(atBar: 15.5, of: 32)
+        XCTAssertLessThan(early.inHi, 0.3)                              // the next track's hats held back at first
+        XCTAssertGreaterThan(mid.inHi, 0.45); XCTAssertLessThan(mid.outHi, 0.2)    // highs handed over before…
+        XCTAssertEqual(mid.inLow, 0, accuracy: 1e-9)                    // …the lows, which wait for the halfway downbeat
+        XCTAssertEqual(t.levels(atBar: 16.5, of: 32).inLow, 0.5, accuracy: 1e-9)
+    }
+    func testColorSweepFiltersBothSides() {
+        let t = AutoMix.Transition.colorSweep
+        XCTAssertGreaterThan(t.levels(atBar: 0, of: 16).inCfx, 0.53)     // in through the high-pass
+        XCTAssertLessThan(t.levels(atBar: 15, of: 16).outCfx, 0.47)      // out through the low-pass
+        XCTAssertEqual(t.levels(atBar: 4, of: 16).outCfx, 0.5, accuracy: 1e-9)
+    }
+    func testSkipsALongIntroAtTheMixInPoint() {
+        var b = track("b"); b.mixIn = b.time(ofBeat: 128)               // Apple: comes in at bar 33
+        let p = AutoMix.plan(from: track("a"), aRate: 1, to: b, after: 0)!
+        XCTAssertEqual(p.inStart, 128)
+        var o = AutoMix.PlanOptions(); o.skipIntros = false
+        XCTAssertEqual(AutoMix.plan(from: track("a"), aRate: 1, to: b, after: 0, options: o)!.inStart, 0)
+    }
+    func testYourCueWinsOverApplesPoint() {
+        var b = track("b"); b.mixIn = b.time(ofBeat: 128)
+        b.setCue(b.time(ofBeat: 72))                                     // your CUE at bar 19
+        XCTAssertEqual(AutoMix.plan(from: track("a"), aRate: 1, to: b, after: 0)!.inStart, 72)
+        // a CUE on the first beat is rekordbox's auto cue: Apple's point stays
+        var c = track("c"); c.mixIn = c.time(ofBeat: 128)
+        c.setCue(c.time(ofBeat: 0))
+        XCTAssertEqual(c.mixIn!, c.time(ofBeat: 128), accuracy: 1e-9)
+    }
+    func testMixNowStartsWithinTwoBars() {
+        var o = AutoMix.PlanOptions(); o.within = 8
+        let p = AutoMix.plan(from: track("a"), aRate: 1, to: track("b"), after: 101, step: 4, options: o)!
+        XCTAssertGreaterThanOrEqual(p.outStart, 101); XCTAssertLessThanOrEqual(p.outStart, 109)
+        // what MIX NOW did before: any bar, and the planner likes playing the track out, so minutes later
+        XCTAssertGreaterThan(AutoMix.plan(from: track("a"), aRate: 1, to: track("b"), after: 101, step: 4)!.outStart, 200)
+    }
+    func testKindAndLengthChosenPerPair() {
+        var o = AutoMix.PlanOptions(); o.kinds = AutoMix.Transition.allCases; o.variableLength = true
+        // nothing in the way: the usual long bass swap
+        let q = AutoMix.plan(from: track("a"), aRate: 1, to: track("b"), after: 0, options: o)!
+        XCTAssertEqual(q.kind, .bassSwap); XCTAssertEqual(q.bars, 32)
+        // vocals all the way through both: any blend puts them on top of each other, so a cut
+        let p = AutoMix.plan(from: track("a", vocals: [(0, 360)]), aRate: 1, to: track("b", vocals: [(0, 360)]), after: 0, options: o)!
+        XCTAssertEqual(p.kind, .cut)
+        XCTAssertLessThan(p.clash!, 1)
+        // a kind that's turned off is never used
+        o.kinds = [.colorSweep]
+        XCTAssertEqual(AutoMix.plan(from: track("a"), aRate: 1, to: track("b"), after: 0, options: o)!.kind, .colorSweep)
+    }
+    func testOutroAwareStart() {
+        var a = track("a"); a.mixOut = a.time(ofBeat: 512)               // outro from bar 129
+        let p = AutoMix.plan(from: a, aRate: 1, to: track("b"), after: 0)!
+        XCTAssertEqual(p.outStart, 512)
+    }
 }

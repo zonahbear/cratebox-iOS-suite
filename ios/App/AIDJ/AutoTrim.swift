@@ -1,4 +1,4 @@
-// Auto trim (Settings → Sound): every track loaded on a deck gets the TRIM that brings it to one loudness, so a quiet
+// Auto trim (Settings → Audio): every track loaded on a deck gets the TRIM that brings it to one loudness, so a quiet
 // old master and a loud new one come in at the same level. Measured with ITU-R BS.1770 (CrateboxKit Loudness) on the
 // audio the deck already decoded for its analysis; nothing else is read. AI DJ always does this, with or without
 // the setting. Turning a TRIM knob afterwards still works: auto trim only sets it when a track loads.

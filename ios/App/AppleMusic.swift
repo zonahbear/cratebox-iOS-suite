@@ -6,8 +6,9 @@
 //
 // Music Understanding (Apple, iOS 27): beats, bars, BPM, key over time, sections/segments/phrases, pace, where the
 // vocals / drums / bass are, and loudness in LUFS. Here it runs in the background, one track at a time and only
-// while nothing is playing, and its results are kept BESIDE Cratebox's own analysis: they never change a track's
-// grid, key, phrases or cues (Cratebox's, rekordbox's or a hand-fixed grid stay in charge). Settings → AI mode →
+// while nothing is playing, and its results are kept beside Cratebox's own analysis. Its grid is used at load in the
+// order Settings → Library & USB → Beat grids says (by default: a grid you set, then Apple's, then rekordbox's, then
+// Cratebox's); key, phrases and cues are never changed. Settings → Library & USB → Beat grids →
 // Compare shows how Apple's beats and bars sit against those grids, and exports it as a CSV, so the two can be
 // judged on real tracks before Apple's results are used for anything.
 //
@@ -29,13 +30,23 @@ enum AIMode {
     static var on: Bool { UserDefaults.standard.bool(forKey: key) }
 }
 
-/// Settings → AI mode → Beat grids: whose grid a track gets when it's loaded. A grid fixed by hand always stays.
+/// Settings → Library & USB → Beat grids: whose grid a track gets when it's loaded. Jonah's order (2026-11-12): a grid
+/// you set here always wins (gridManual), then Apple's (AI mode on a device that has it), then rekordbox's, then
+/// Cratebox's own analysis. `cb.grid.order`: 0 = that order (default), 1 = rekordbox before Apple, 2 = no Apple grids.
+/// Replaces `cb.ai.grid` (off by default), so the order holds without anyone changing a setting.
 enum AppleGridMode: Int {
     case off        // rekordbox's, or Cratebox's own analysis
     case prefer     // Apple's instead of Cratebox's own; rekordbox's grids stay
     case only       // Apple's instead of rekordbox's too
-    static let key = "cb.ai.grid"
-    static var now: AppleGridMode { AIMode.on && AppleMusic.usable ? AppleGridMode(rawValue: UserDefaults.standard.integer(forKey: key)) ?? .off : .off }
+    static let key = "cb.grid.order"
+    static var now: AppleGridMode {
+        guard AIMode.on && AppleMusic.usable else { return .off }
+        switch UserDefaults.standard.integer(forKey: key) {
+        case 1: return .prefer
+        case 2: return .off
+        default: return .only
+        }
+    }
 }
 
 /// The library's MATCH sort: how well each track would follow what's playing, onto the deck that's free
@@ -173,7 +184,7 @@ final class AppleMusic: ObservableObject {
     private func saveIndex() { if let d = try? JSONEncoder().encode(index) { try? d.write(to: dir.appendingPathComponent("index.json"), options: .atomic) } }
 
     // ---- for the decks and the library: Apple's grid, mix points, and what MATCH needs ----
-    /// Apple's results for a track when Settings → AI mode → Beat grids asks for Apple's grid (nil: off, or not
+    /// Apple's results for a track when Settings → Library & USB → Beat grids asks for Apple's grid (nil: off, or not
     /// analysed yet). The grid itself is made at load (AppModel.load), once rekordbox's tempo is known for the octave
     func gridSource(_ t: LibTrack) -> AppleFeatures? { AppleGridMode.now == .off ? nil : features(t) }
     /// loudness and vocal / drum / bass shares for a track, if Apple has analysed it

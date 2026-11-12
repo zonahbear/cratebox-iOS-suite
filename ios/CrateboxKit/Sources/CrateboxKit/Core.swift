@@ -588,6 +588,13 @@ public final class DeckModel: ObservableObject, Identifiable {
         loop.b = a + len
         sendLoop()
     }
+    /// a loop of `beats` from beat `x` of the grid (AI DJ's loop bridge)
+    public func setLoop(fromBeat x: Double, beats: Double) {
+        guard loaded, ana != nil, beats > 0 else { return }
+        loop = Loop(on: true, a: timeOfBeat(x), b: timeOfBeat(x + beats))
+        sendLoop()
+    }
+    public func exitLoop() { if loop.on { loop.on = false; sendLoop() } }
     public func loopBeats() -> Double { if let a = loop.a, let b = loop.b { return (b - a) / spb }; return 0 }
     public func beatJump(_ beats: Double) {
         guard loaded else { return }

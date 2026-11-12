@@ -99,7 +99,7 @@ struct BridgeEdge: View {
                     VStack(spacing: 2) {
                         Text("FX").font(.system(size: 11, weight: .heavy)).foregroundStyle(bridge.fxOn ? Color.black : Theme.hot)
                         Text("BEAT").font(.system(size: 7, weight: .bold)).foregroundStyle(bridge.fxOn ? Color.black : Theme.muted)
-                    }.frame(maxWidth: .infinity, minHeight: 48).background(RoundedRectangle(cornerRadius: 7).fill(bridge.fxOn ? Theme.hot : Theme.raise))
+                    }.frame(maxWidth: .infinity, minHeight: 48).background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(bridge.fxOn ? Theme.hot : Theme.raise))
                 }.buttonStyle(.plain)
                 .popover(isPresented: $fx, arrowEdge: .trailing) { BridgeFXPanel(bridge: bridge).padding(10).presentationCompactAdaptation(.popover) }
             } else {
@@ -174,8 +174,8 @@ struct BridgeDeckBody: View {
         }
         .padding(6)
         .frame(width: size.width, height: size.height, alignment: .top)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(color.opacity(0.7), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(color.opacity(0.7), lineWidth: 1))
     }
     /// tempo fader (full height of jog and loops), the jog with CUE / PLAY beside it, IN / OUT / RELOOP under them
     func topBlock(_ jog: CGFloat) -> some View {
@@ -217,7 +217,7 @@ struct BridgeDeckBody: View {
         return Button { bridge.setPadBank(b, side: side) } label: {
             Text(b.title).font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: BridgeDeck.tabsH)
                 .foregroundStyle(on ? Theme.fg : Theme.muted)
-                .background(RoundedRectangle(cornerRadius: 6).fill(on ? Theme.line2 : Theme.raise))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? Theme.line2 : Theme.raise))
         }.buttonStyle(.plain)
     }
     func padsGrid(_ h: CGFloat) -> some View {
@@ -299,10 +299,10 @@ struct BridgeTempo: View {
                         Rectangle().fill(k == 4 ? Theme.muted : Theme.line2).frame(width: k == 4 ? w - 4 : w - 12, height: 1)
                             .offset(y: 9 + (h - 18) * CGFloat(k) / 8)
                     }
-                    RoundedRectangle(cornerRadius: 2).fill(Theme.bg).frame(width: 4, height: h - 18).offset(y: 9)
-                    RoundedRectangle(cornerRadius: 4)
+                    RoundedRectangle(cornerRadius: 2, style: .continuous).fill(Theme.bg).frame(width: 4, height: h - 18).offset(y: 9)
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
                         .fill(LinearGradient(colors: [Theme.line2, Theme.raise], startPoint: .top, endPoint: .bottom))
-                        .overlay(RoundedRectangle(cornerRadius: 4).stroke(Theme.dim, lineWidth: 1))
+                        .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(Theme.dim, lineWidth: 1))
                         .overlay(Rectangle().fill(color).frame(height: 2).padding(.horizontal, 3))
                         .frame(width: w, height: 18)
                         .offset(y: CGFloat(v) * (h - 18))
@@ -363,7 +363,7 @@ struct BridgeMixerBody: View {
         }
         .padding(4)
         .frame(width: size.width, height: size.height, alignment: .top)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
     func row(_ label: String, _ c: BridgeControl, _ k: CGFloat, _ get: (BridgeDeckState) -> Double, cfx: Bool = false) -> some View {
         HStack(spacing: 0) {

@@ -31,8 +31,8 @@ struct BridgeKey: View {
         Text(label).font(.system(size: fontSize ?? (big ? 15 : 11), weight: plain ? .semibold : .bold)).lineLimit(1).minimumScaleFactor(0.5)
             .frame(maxWidth: .infinity, minHeight: height, maxHeight: height)
             .foregroundStyle(lit ? Color.black : (textColor ?? Theme.fg))
-            .background(RoundedRectangle(cornerRadius: radius).fill(lit ? color : Theme.raise))
-            .overlay(RoundedRectangle(cornerRadius: radius).stroke(down ? color : (plain ? Color.clear : Theme.line2), lineWidth: down ? 2 : (plain ? 0 : 1)))
+            .background(RoundedRectangle(cornerRadius: radius, style: .continuous).fill(lit ? color : Theme.raise))
+            .overlay(RoundedRectangle(cornerRadius: radius, style: .continuous).stroke(down ? color : (plain ? Color.clear : Theme.line2), lineWidth: down ? 2 : (plain ? 0 : 1)))
             .opacity(down && !lit ? 0.85 : 1)
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 0)
@@ -98,7 +98,7 @@ struct HFader: View {
             ZStack(alignment: .leading) {
                 Capsule().fill(Theme.raise).frame(height: 6)
                 Rectangle().fill(Theme.line2).frame(width: 1, height: 14).offset(x: w / 2)
-                RoundedRectangle(cornerRadius: 3).fill(Theme.fg).frame(width: 16, height: 26).offset(x: CGFloat(value) * (w - 16))
+                RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Theme.fg).frame(width: 16, height: 26).offset(x: CGFloat(value) * (w - 16))
             }
             .frame(maxHeight: .infinity)
             .contentShape(Rectangle())

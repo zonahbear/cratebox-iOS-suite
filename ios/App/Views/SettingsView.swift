@@ -2,34 +2,42 @@ import SwiftUI
 import CrateboxKit
 
 /// Settings, in tabs: a rail of icon tabs down the left edge, filling it top to bottom, and one short page per tab beside
-/// it under a title bar with Done. Was one long page, then a strip across the top. Sized for the smallest screen the app
-/// gets, an iPhone SE at Display Zoom (568 × 320 pt, safe area 0 / 0 / 0, docs/device-sizes.md): seven tabs share the
-/// 320 pt height, 45.7 pt each, above Apple's 44 pt minimum. Shorter than 7 × 44 pt (no listed device is), the rail scrolls.
-/// Same grouping idea as the Linux app's SETTINGS_TABS. The open tab is remembered (`cb.settingsTab`, also a CI launch
-/// argument: `-settings -cb.settingsTab ai` opens Settings on AI mode).
+/// it under a title bar with Done. Sized for the smallest screen the app gets, an iPhone SE at Display Zoom (568 × 320 pt,
+/// safe area 0 / 0 / 0, docs/device-sizes.md): six tabs share the 320 pt height, 53.3 pt each, above Apple's 44 pt
+/// minimum. Shorter than 6 × 44 pt (no listed device is), the rail scrolls. Six since 2026-11-12 (Jonah): Sound and
+/// Recording became Audio, USB became Library & USB (with the grid order), AI got AI DJ's moves. The open tab is
+/// remembered (`cb.settingsTab`, also a CI launch argument: `-settings -cb.settingsTab ai` opens Settings on AI).
 enum SettingsTab: String, CaseIterable, Identifiable {
-    case sound, decks, controller, look, recording, usb, ai
+    case audio, decks, controller, look, library, ai
     var id: String { rawValue }
+    /// a stored tab from before the six (sound, recording, usb) opens where its settings went
+    init(stored: String) {
+        switch stored {
+        case "sound", "recording": self = .audio
+        case "usb": self = .library
+        default: self = SettingsTab(rawValue: stored) ?? .audio
+        }
+    }
     var title: String {
         switch self {
-        case .sound: return "Sound"
+        case .audio: return "Audio"
         case .decks: return "Decks"
         case .controller: return "Controller"
         case .look: return "Look"
-        case .recording: return "Recording"
-        case .usb: return "USB"
-        case .ai: return "AI mode"
+        case .library: return "Library & USB"
+        case .ai: return "AI"
         }
     }
+    /// the rail's shorter label
+    var short: String { self == .library ? "Library" : title }
     /// SF Symbols that all exist on iOS 17, the app's minimum
     var icon: String {
         switch self {
-        case .sound: return "speaker.wave.2.fill"
+        case .audio: return "speaker.wave.2.fill"
         case .decks: return "opticaldisc"
         case .controller: return "slider.horizontal.3"
         case .look: return "paintpalette"
-        case .recording: return "record.circle"
-        case .usb: return "externaldrive"
+        case .library: return "externaldrive"
         case .ai: return "sparkles"
         }
     }
@@ -40,7 +48,7 @@ struct SettingsView: View {
     @EnvironmentObject var core: Core
     @EnvironmentObject var devices: Devices
     @Environment(\.dismiss) var dismiss
-    @AppStorage("cb.settingsTab") var tabRaw = SettingsTab.sound.rawValue
+    @AppStorage("cb.settingsTab") var tabRaw = SettingsTab.audio.rawValue
     @AppStorage("cb.bpmRange") var bpmRange = "88-175"
     @AppStorage("cb.bpmLo") var bpmLo = 70
     @AppStorage("cb.bpmHi") var bpmHi = 180
@@ -50,14 +58,15 @@ struct SettingsView: View {
     @AppStorage("cb.wave") var waveStyle = "rgb"
     @AppStorage("cb.compact") var compact = false
     @AppStorage(AIMode.key) var aiMode = false
+    @AppStorage(Haptics.key) var haptics = true
     @AppStorage(AutoTrim.key) var autoTrim = false
     @AppStorage(AutoTrim.targetKey) var autoTrimTarget = -9.0
-    @AppStorage(AppleGridMode.key) var appleGrid = 0
+    @AppStorage(AppleGridMode.key) var gridOrder = 0
     @ObservedObject var apple = AppleMusic.shared
     @State private var warn = false
     @ObservedObject var usbCopy = UsbCopy.shared
 
-    var tab: SettingsTab { SettingsTab(rawValue: tabRaw) ?? .sound }
+    var tab: SettingsTab { SettingsTab(stored: tabRaw) }
 
     /// auto trim turned on or its loudness changed: the loaded decks too (a playing one glides)
     func retrim() { for i in core.activeDecks where core.decks[i].loaded { app.autoTrim(core.decks[i]) } }
@@ -104,10 +113,10 @@ struct SettingsView: View {
     }
 
     func tabButton(_ k: SettingsTab, on: Bool) -> some View {
-        Button { tabRaw = k.rawValue } label: {
+        Button { if tabRaw != k.rawValue { Haptics.step() }; tabRaw = k.rawValue } label: {
             VStack(spacing: 3) {
                 Image(systemName: k.icon).font(.system(size: 20, weight: .medium)).frame(height: 24)
-                Text(k.title).font(.system(size: 11, weight: on ? .bold : .medium)).lineLimit(1).minimumScaleFactor(0.8)
+                Text(k.short).font(.system(size: 11, weight: on ? .bold : .medium)).lineLimit(1).minimumScaleFactor(0.8)
             }
             .foregroundStyle(on ? Theme.accent : Theme.muted)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -136,12 +145,15 @@ struct SettingsView: View {
 
     @ViewBuilder func page(_ t: SettingsTab) -> some View {
         switch t {
-        case .sound: sound
+        case .audio:
+            sound
+            recording
         case .decks: decks
         case .controller: controller
         case .look: look
-        case .recording: recording
-        case .usb: usb
+        case .library:
+            grids
+            usb
         case .ai: ai
         }
     }
@@ -253,6 +265,9 @@ struct SettingsView: View {
             }
         }
         Section {
+            Toggle("Haptics", isOn: $haptics)
+        } footer: { Text("A light tap under your finger for buttons, and a click when a knob or the crossfader passes its centre. Only for your touches: a controller or AI DJ moving the same control stays silent.") }
+        Section {
             Button("Show the walkthrough") { dismiss(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { app.tourShown = true } }
         } footer: { Text("The short tour offered the first time the app opens.") }
     }
@@ -260,7 +275,7 @@ struct SettingsView: View {
     @ViewBuilder var recording: some View {
         Section {
             Picker("Format", selection: $recFmt) { Text("WAV (lossless, ~650 MB per hour)").tag("wav"); Text("AAC 256 kbps (~115 MB per hour)").tag("aac") }
-        } footer: { Text("REC records the master. Recordings and their tracklists go to Files → On My iPhone/iPad → \(Recorder.filesName).") }
+        } header: { Text("Recording") } footer: { Text("REC records the master. Recordings and their tracklists go to Files → On My iPhone/iPad → \(Recorder.filesName).") }
     }
 
     @ViewBuilder var usb: some View {
@@ -291,6 +306,28 @@ struct SettingsView: View {
         } header: { Text("rekordbox USB playlists") } footer: { Text("Off: sticks are read-only. On: playlist changes are written into the stick's export.pdb.") }
     }
 
+    /// whose grid a track plays on (Jonah, 2026-11-12): one you set here, then Apple's (AI mode on a device that has
+    /// it), then rekordbox's, then Cratebox's own analysis
+    @ViewBuilder var grids: some View {
+        Section {
+            Picker("Order", selection: $gridOrder) {
+                Text("Yours, Apple, rekordbox, Cratebox").tag(0)
+                Text("Yours, rekordbox, Apple, Cratebox").tag(1)
+                Text("Yours, rekordbox, Cratebox (no Apple)").tag(2)
+            }
+            Text(AppleMusic.unavailableReason.map { "Apple's grids: \($0)" } ?? (!aiMode ? "Apple's grids need AI mode (Settings → AI); until then it's rekordbox, then Cratebox." :
+                 gridOrder == 0 ? "Every track gets Apple's beats and bar 1 when it's loaded, rekordbox USB tracks too (nothing is written to the stick). Tracks Apple hasn't analysed keep rekordbox's, else Cratebox's." :
+                 gridOrder == 1 ? "rekordbox's grids stay; tracks without one get Apple's, else Cratebox's." : "Apple's analysis is only kept beside your grids."))
+                .font(.caption).foregroundStyle(Theme.muted)
+            if aiMode && AppleMusic.unavailableReason == nil {
+                NavigationLink("Compare with the grids…") { AppleCompareView() }
+                Button("Analyse everything again", role: .destructive) { apple.clear() }
+            }
+        } header: { Text("Beat grids") } footer: {
+            Text("Used from a track's next load, for playing and for AI DJ's mix points. A grid you fix here (TAP · GRID) always wins; so does a CUE you set, as AI DJ's mix-in point. rekordbox doesn't say which of its grids were fixed by hand, so they count as rekordbox's: nudge one here once to make it yours. Apple's half-time counts are doubled to match.")
+        }
+    }
+
     @ViewBuilder var ai: some View {
         Section {
             Toggle("AI mode", isOn: $aiMode).onChange(of: aiMode) { _, _ in apple.kick() }
@@ -310,22 +347,51 @@ struct SettingsView: View {
                     if !apple.progress.isEmpty { Text(apple.progress).font(.caption).foregroundStyle(Theme.muted) }
                 }
             } header: { Text("Apple music analysis") } footer: {
-                Text("iOS 27+. Finds beats, bars, key, phrases, vocals and loudness in the background, only while nothing plays. It also sorts the library by MATCH (what would follow the playing track best) and marks MIX IN and MIX OUT on a loaded track's waveform.")
+                Text("iOS 27+. Finds beats, bars, key, phrases, vocals and loudness in the background, only while nothing plays. It also sorts the library by MATCH (what would follow the playing track best) and marks MIX IN and MIX OUT on a loaded track's waveform. Whose grid wins: Library & USB → Beat grids.")
             }
-            if AppleMusic.unavailableReason == nil {
-                Section {
-                    Picker("Beat grids", selection: $appleGrid) {
-                        Text("rekordbox, then Cratebox").tag(0)
-                        Text("rekordbox, then Apple").tag(1)
-                        Text("Apple, even over rekordbox").tag(2)
-                    }
-                    Text(appleGrid == 0 ? "Apple's analysis is only kept beside your grids." : appleGrid == 1 ? "Tracks without a rekordbox grid get Apple's beats and bar 1 when they're loaded. rekordbox's grids stay." : "Every track gets Apple's beats and bar 1 when it's loaded, rekordbox USB tracks too (nothing is written to the stick).")
-                        .font(.caption).foregroundStyle(Theme.muted)
-                    NavigationLink("Compare with the grids…") { AppleCompareView() }
-                    Button("Analyse everything again", role: .destructive) { apple.clear() }
-                } header: { Text("Beat grids") } footer: {
-                    Text("Chooses whose grid a track gets at its next load. A grid you fixed by hand always stays, a track Apple hasn't analysed yet or whose tempo wanders keeps the grid it has, and Apple's half-time counts are doubled to match. Keys and cues are never changed.")
+            Section {
+                ForEach(AutoMix.Transition.allCases, id: \.self) { k in
+                    MoveToggle(key: AIDJMoves.key(k), title: k.name, detail: Self.moveDetail(k))
                 }
+            } header: { Text("AI DJ: transitions") } footer: {
+                Text("AI DJ picks one of these for each pair of tracks. With all of them off it uses the bass swap.")
+            }
+            Section {
+                MoveToggle(key: AIDJMoves.variableLength, title: "Variable length", detail: "Shorter or longer per pair (4 to 32 bars), not only each transition's usual length.")
+                MoveToggle(key: AIDJMoves.skipIntros, title: "Skip long intros", detail: "Bring the next track in at your CUE, else Apple's mix-in point, instead of its first beat.")
+                MoveToggle(key: AIDJMoves.outro, title: "Mix out at the outro", detail: "Start the transition near where the playing track's outro begins (Apple's mix-out point).")
+                MoveToggle(key: AIDJMoves.vocals, title: "Keep vocals apart", detail: "Plan around Apple's vocals so two singers aren't heard at once.")
+                MoveToggle(key: AIDJMoves.loopBridge, title: "Loop bridge", detail: "A track too short to mix out of loops its last 8 bars until the next one is in.", def: false)
+                MoveToggle(key: AIDJMoves.thirdDeck, title: "Third deck", detail: "Deck 3 loads the track after next while a transition runs, so the next mix can come sooner. Never more than two tracks heard at once.", def: false)
+            } header: { Text("AI DJ: moves") } footer: {
+                Text("Always on: the next track runs beat-matched with its fader down for a bar before it's heard, only one bass line plays at a time, and the tempo glides to the new track's own. MIX NOW mixes within two bars. Changes apply from the next transition; the third deck from the next START.")
+            }
+        }
+    }
+
+    static func moveDetail(_ k: AutoMix.Transition) -> String {
+        switch k {
+        case .bassSwap: return "The next track comes in with its bass cut; the basses swap on the halfway downbeat. 8 to 32 bars."
+        case .eqHandoff: return "The highs swap first, then the basses on the halfway downbeat, then the mids. 16 or 32 bars."
+        case .colorSweep: return "In through COLOR's high-pass, out through its low-pass, the basses swapped halfway. 8 or 16 bars."
+        case .cut: return "Beat-matched and silent, then a clean cut on a downbeat. Used when vocals would clash or there's no room."
+        }
+    }
+}
+
+/// one AI DJ move on or off (UserDefaults key, on by default unless `def` says otherwise)
+struct MoveToggle: View {
+    let title: String, detail: String
+    @AppStorage var on: Bool
+    init(key: String, title: String, detail: String, def: Bool = true) {
+        self.title = title; self.detail = detail
+        _on = AppStorage(wrappedValue: def, key)
+    }
+    var body: some View {
+        Toggle(isOn: $on) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(detail).font(.caption).foregroundStyle(Theme.muted)
             }
         }
     }

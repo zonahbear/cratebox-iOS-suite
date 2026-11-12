@@ -258,8 +258,8 @@ final class AppModel: ObservableObject, ControlTarget {
         // works on copies and everything it finds is put back on the main thread
         let rbURL = t.device != nil ? Devices.shared.anlzURL(t) : nil, onStick = t.device != nil
         let manual = info.gridManual, keyRB = info.keyFromRekordbox
-        // Settings → AI mode → Beat grids: Apple's grid instead of Cratebox's own (prefer), or of rekordbox's too
-        // (only). A grid fixed by hand stays. A track that had Apple's grid with the setting now off goes back to
+        // Settings → Library & USB → Beat grids: Apple's grid instead of rekordbox's too (only, the default: Jonah's
+        // order), or only instead of Cratebox's own (prefer). A grid fixed by hand stays. A track that had Apple's grid with the setting now off goes back to
         // what it had before
         let gridMode = AppleGridMode.now, apple = manual ? nil : AppleMusic.shared.gridSource(t)
         let wasApple = info.appleGrid, back = wasApple && apple == nil && !manual
@@ -326,7 +326,7 @@ final class AppModel: ObservableObject, ControlTarget {
             }
         }
     }
-    // ---- auto trim (Settings → Sound → Auto trim, and AI DJ) ----
+    // ---- auto trim (Settings → Audio → Auto trim, and AI DJ) ----
     private var loudness = [String: (lufs: Double, peak: Double?)]()       // per track id, measured once per launch
     /// TRIM so a loaded track plays at the target loudness: BS.1770 integrated loudness of the deck's analysis
     /// audio, measured off the main thread. A deck that's heard glides there over two seconds instead of jumping.

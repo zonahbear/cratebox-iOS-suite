@@ -105,7 +105,7 @@ struct CompactTopBar: View {
                 Button { settings = true } label: { Label("Settings", systemImage: "gearshape") }
             } label: {
                 Image(systemName: "ellipsis").font(.system(size: 17, weight: .bold)).frame(width: 44, height: 32)
-                    .background(RoundedRectangle(cornerRadius: 7).fill(Theme.raise))
+                    .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.raise))
                     .overlay(alignment: .topTrailing) { if rec.recording || fx.on { Circle().fill(Theme.hot).frame(width: 8, height: 8).offset(x: 2, y: -2) } }
                     .accessibilityLabel("More")
             }
@@ -134,8 +134,8 @@ struct CompactDeck: View {
         }
         .padding(6)
         .frame(width: c.deckW)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
         .onAppear { if side == 1 && CommandLine.arguments.contains("-pads") { pads = true } }   // CI screenshots of the PADS face
     }
     var player: some View {
@@ -145,7 +145,7 @@ struct CompactDeck: View {
                     // 4 decks: the number swaps this side between its two decks (1 ⇄ 3, 2 ⇄ 4); 3 decks: the left side only
                     Button { let o = deck.i < 2 ? deck.i + 2 : deck.i - 2; app.midi.setSide(side, o); app.objectWillChange.send() } label: {
                         Text("\(deck.i + 1)⇄\(deck.i < 2 ? deck.i + 3 : deck.i - 1)").font(.system(size: 12, weight: .heavy)).frame(width: 44, height: c.header)
-                            .foregroundStyle(Color.black).background(RoundedRectangle(cornerRadius: 6).fill(color))
+                            .foregroundStyle(Color.black).background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(color))
                     }.buttonStyle(.plain)
                 }
                 face("PLAY", !pads) { pads = false }
@@ -154,12 +154,12 @@ struct CompactDeck: View {
                 if !(app.core.four && (side == 0 || app.core.deckCount == 4)) {
                     Button { _ = app.scratch.insert(deck.i) } label: {
                         Text("SCR").font(.system(size: 11, weight: .heavy)).frame(width: 40, height: c.header).foregroundStyle(color)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
+                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.raise))
                     }.buttonStyle(.plain).accessibilityLabel("Scratch deck \(deck.i + 1)")
                 }
                 Button { tools = true } label: {
                     Image(systemName: "ellipsis").font(.system(size: 15, weight: .bold)).frame(width: 40, height: c.header)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.raise))
                 }.buttonStyle(.plain).accessibilityLabel("Deck \(deck.i + 1) tools")
                 .popover(isPresented: $tools, arrowEdge: .top) { toolPanel.presentationCompactAdaptation(.popover) }
             }
@@ -170,7 +170,7 @@ struct CompactDeck: View {
         Button(action: act) {
             Text(s).font(.system(size: 12, weight: .heavy)).frame(maxWidth: .infinity, minHeight: c.header)
                 .foregroundStyle(on ? Color.black : Theme.muted)
-                .background(RoundedRectangle(cornerRadius: 6).fill(on ? color : Theme.raise))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? color : Theme.raise))
         }.buttonStyle(.plain)
     }
     /// tempo fader on the outside; the platter as big as the deck allows, over CUE / PLAY / SYNC
@@ -197,7 +197,7 @@ struct CompactDeck: View {
             Button { deck.syncPressed() } label: {
                 Text("SYNC").font(.system(size: 12, weight: .bold)).frame(maxWidth: .infinity, minHeight: c.btn, maxHeight: c.btn)
                     .foregroundStyle(deck.sync ? Color.black : Theme.fg)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(deck.sync ? color : Theme.raise))
+                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(deck.sync ? color : Theme.raise))
             }.buttonStyle(.plain)
             .simultaneousGesture(LongPressGesture(minimumDuration: 0.5).onEnded { _ in deck.makeMaster() })
         }
@@ -214,7 +214,7 @@ struct CompactDeck: View {
                     HStack(spacing: 2) {
                         Text(modeName).font(.system(size: 11, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.7)
                         Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
-                    }.foregroundStyle(Theme.fg).frame(maxWidth: .infinity, minHeight: c.btn).background(RoundedRectangle(cornerRadius: 7).fill(Theme.line2))
+                    }.foregroundStyle(Theme.fg).frame(maxWidth: .infinity, minHeight: c.btn).background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.line2))
                 }
                 loopBtn("IN", deck.loop.a != nil && deck.loop.b == nil) { deck.loopIn() }
                 loopBtn("OUT", deck.loop.on) { deck.loopOut() }
@@ -232,7 +232,7 @@ struct CompactDeck: View {
         Button(action: act) {
             Text(s).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7).frame(maxWidth: .infinity, minHeight: c.btn)
                 .foregroundStyle(on ? Color.black : Theme.fg)
-                .background(RoundedRectangle(cornerRadius: 7).fill(on ? Theme.loop : Theme.raise))
+                .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Theme.loop : Theme.raise))
         }.buttonStyle(.plain)
     }
     /// the deck's ⋯: tempo range, TAP, beat grid, tempo reset, MT, Q, SCRATCH and VINYL, all 44 pt
@@ -241,7 +241,7 @@ struct CompactDeck: View {
             HStack(spacing: 8) {
                 tool("RANGE ±\(deck.range == 100 ? "W" : String(Int(deck.range)))", false) { deck.cycleRange() }
                 Button { deck.tap() } label: {
-                    Text("TAP").font(.system(size: 15, weight: .heavy)).frame(width: 84, height: 44).background(RoundedRectangle(cornerRadius: 8).fill(color.opacity(0.85))).foregroundStyle(Color.black)
+                    Text("TAP").font(.system(size: 15, weight: .heavy)).frame(width: 84, height: 44).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(color.opacity(0.85))).foregroundStyle(Color.black)
                 }.buttonStyle(.plain)
                 tool("TEMPO 0", false) { deck.setPitch(0) }
             }
@@ -260,7 +260,7 @@ struct CompactDeck: View {
         Button(action: act) {
             Text(s).font(.system(size: 12, weight: .bold)).lineLimit(1).padding(.horizontal, 10).frame(minWidth: 84, minHeight: 44)
                 .foregroundStyle(on ? Color.black : Theme.fg)
-                .background(RoundedRectangle(cornerRadius: 8).fill(on ? color : Theme.raise))
+                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? color : Theme.raise))
         }.buttonStyle(.plain)
     }
 }
@@ -288,7 +288,7 @@ struct CompactMixer: View {
         }
         .padding(6)
         .frame(width: c.mixW, height: c.deckH)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
     func eq(_ i: Int) -> some View {
         VStack(spacing: 0) {

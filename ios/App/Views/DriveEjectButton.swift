@@ -44,8 +44,8 @@ struct DriveEjectButton: View {
         }
         .foregroundStyle(Theme.fg)
         .frame(minWidth: 44).padding(.horizontal, eject ? 0 : 8).frame(height: 30)
-        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
-        .overlay(RoundedRectangle(cornerRadius: 6).stroke(Theme.line2, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.raise))
+        .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(Theme.line2, lineWidth: 1))
         .frame(height: 44).contentShape(Rectangle())
         .padding(.vertical, -7)
     }

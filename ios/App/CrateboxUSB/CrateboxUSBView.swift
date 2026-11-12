@@ -136,8 +136,8 @@ struct EjectButton: View {
             }
             .foregroundStyle(usb.writing ? Theme.hot : Theme.fg)
             .padding(.horizontal, 9).frame(height: 30)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(usb.writing ? Theme.hot : Theme.line2))
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.raise))
+            .overlay(RoundedRectangle(cornerRadius: 6, style: .continuous).stroke(usb.writing ? Theme.hot : Theme.line2))
         }.buttonStyle(.plain).disabled(usb.writing)
         .accessibilityLabel(usb.writing ? "Writing to the stick, don't unplug" : "Eject the stick")
     }
@@ -168,7 +168,7 @@ struct USBSidebar: View {
                 LitButton(label: "+ FOLDER", wide: true) { creating = (true, folderOfSelection); newName = "" }
             }.padding(6)
         }
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
         .alert("Rename", isPresented: Binding(get: { renaming != nil }, set: { if !$0 { renaming = nil } })) {
             TextField("Name", text: $renameText)
             Button("OK") { if let r = renaming { usb.rename(r, renameText) }; renaming = nil }
@@ -255,7 +255,7 @@ struct USBTrackList: View {
             .listStyle(.plain).scrollContentBackground(.hidden)
             .environment(\.editMode, $editMode)
         }
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
     func row(_ t: USBTrack, _ i: Int) -> some View {
         let issues = usb.issues(for: t.key)

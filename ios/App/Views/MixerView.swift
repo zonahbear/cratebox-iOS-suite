@@ -51,7 +51,7 @@ struct MixerView: View {
         }
         .padding(4)
         .frame(width: m.mixW)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
     func mixKnob(_ key: String, _ i: Int, _ k: CGFloat) -> some View {
         let v: Double = key == "trim" ? core.mixer.trim[i] : key == "hi" ? core.mixer.hi[i] : key == "mid" ? core.mixer.mid[i] : key == "low" ? core.mixer.low[i] : core.mixer.cfx[i]
@@ -64,7 +64,7 @@ struct MixerView: View {
     func cueBtn(_ i: Int) -> some View {
         Button { core.togglePfl(i) } label: {
             Text("CUE").font(.system(size: 10, weight: .heavy)).frame(width: 40, height: m.cueH).foregroundStyle(core.mixer.pfl[i] ? Color.black : Theme.deck[i])
-                .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.pfl[i] ? Theme.cue : Theme.raise))
+                .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(core.mixer.pfl[i] ? Theme.cue : Theme.raise))
         }.buttonStyle(.plain)
     }
     func faderCol(_ i: Int) -> some View {
@@ -82,7 +82,7 @@ struct MixerView: View {
             }
             Button { core.toggleMasterCue() } label: {
                 Text("MST").font(.system(size: 10, weight: .bold)).fixedSize().padding(.horizontal, 6).frame(height: 24).foregroundStyle(core.mixer.masterCue ? Color.black : Theme.fg)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.masterCue ? Theme.cue : Theme.raise))
+                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(core.mixer.masterCue ? Theme.cue : Theme.raise))
             }.buttonStyle(.plain)
             if app.midi.hasAction("master") || app.controllerName.isEmpty {
                 VStack(spacing: 0) {
@@ -113,7 +113,7 @@ struct MixerView: View {
             if presented { dismiss(); DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { app.eqShown = true } } else { app.eqShown = true }
         } label: {
             Text("EQ").font(.system(size: 10, weight: .bold)).fixedSize().padding(.horizontal, 6).frame(height: 24).foregroundStyle(core.mixer.eq.on ? Color.black : Theme.fg)
-                .background(RoundedRectangle(cornerRadius: 4).fill(core.mixer.eq.on ? Theme.accent : Theme.raise))
+                .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(core.mixer.eq.on ? Theme.accent : Theme.raise))
         }.buttonStyle(.plain).accessibilityLabel("Master EQ, \(core.mixer.eq.on ? "on" : "off")")
     }
 
@@ -138,7 +138,7 @@ struct MixerView: View {
         }
         .padding(8)
         .frame(width: core.four ? 300 : 210)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
 
     var layers: some View {
@@ -148,7 +148,7 @@ struct MixerView: View {
                 Button { app.midi.setSide(d % 2, d); app.objectWillChange.send() } label: {
                     Text("\(d + 1)").font(.system(size: 13, weight: .bold)).frame(maxWidth: .infinity, minHeight: 24)
                         .foregroundStyle(on ? Color.black : Theme.deck[d])
-                        .background(RoundedRectangle(cornerRadius: 5).fill(on ? Theme.deck[d] : Theme.raise))
+                        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(on ? Theme.deck[d] : Theme.raise))
                 }.buttonStyle(.plain)
             }
         }
@@ -204,7 +204,7 @@ struct BeatFXView: View {
                     ForEach(0..<FX_LIST.count, id: \.self) { k in Button(FX_LIST[k].0.rawValue) { fx.select(FX_LIST[k].0) } }
                 } label: {
                     Text(fx.fx.rawValue).font(.system(size: 12, weight: .bold)).frame(maxWidth: .infinity, minHeight: 28)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.raise))
                 }
                 if fx.spec.beats != nil {
                     LitButton(label: "◀") { fx.beatStep(-1) }

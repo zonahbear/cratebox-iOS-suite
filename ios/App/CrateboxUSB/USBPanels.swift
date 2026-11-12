@@ -19,7 +19,7 @@ struct USBInspector: View {
                 }.frame(maxWidth: .infinity, maxHeight: .infinity).padding()
             }
         }
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
 }
 
@@ -71,18 +71,18 @@ struct USBTrackPanel: View {
             } else {
                 Button { preview.load(t) } label: {
                     Label("Load to preview", systemImage: "play.circle").frame(maxWidth: .infinity, minHeight: 60)
-                        .background(RoundedRectangle(cornerRadius: 8).fill(Theme.raise))
+                        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raise))
                 }.buttonStyle(.plain)
             }
             if onDeck {
                 HStack(spacing: 8) {
                     HoldButton(down: { deck.cueDown() }, up: { deck.cueUp() }) {
                         Text("CUE").font(.system(size: 13, weight: .heavy)).frame(maxWidth: .infinity, minHeight: 40)
-                            .foregroundStyle(Theme.cue).background(RoundedRectangle(cornerRadius: 8).fill(Theme.raise))
+                            .foregroundStyle(Theme.cue).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Theme.raise))
                     }
                     Button { deck.togglePlay() } label: {
                         Text(deck.playing ? "PAUSE" : "PLAY").font(.system(size: 13, weight: .heavy)).frame(maxWidth: .infinity, minHeight: 40)
-                            .foregroundStyle(deck.playing ? Color.black : Theme.ok).background(RoundedRectangle(cornerRadius: 8).fill(deck.playing ? Theme.ok : Theme.raise))
+                            .foregroundStyle(deck.playing ? Color.black : Theme.ok).background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(deck.playing ? Theme.ok : Theme.raise))
                     }.buttonStyle(.plain)
                     VStack(alignment: .trailing, spacing: 0) {
                         Text(deck.loading ? "Loading…" : clock(deck.now())).font(.system(size: 12, design: .monospaced))
@@ -101,7 +101,7 @@ struct USBTrackPanel: View {
                     Text(String(UnicodeScalar(65 + k)!) + (set ? String(format: " %.1f", deck.hot[k]!) : "")).font(.system(size: 12, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity, minHeight: 34)
                         .foregroundStyle(set ? Color.black : Theme.fg)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(set ? Theme.hot : Theme.raise))
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(set ? Theme.hot : Theme.raise))
                         .onTapGesture { deck.hotcue(k); usb.log("Edit \(t.fileName): hot cue \(String(UnicodeScalar(65 + k)!))") }
                         .onLongPressGesture { deck.clearHot(k); usb.log("Edit \(t.fileName): delete hot cue \(String(UnicodeScalar(65 + k)!))") }
                 }
@@ -251,7 +251,7 @@ struct IssueRow: View {
             }
         }
         .padding(6)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Theme.raise.opacity(0.6)))
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(Theme.raise.opacity(0.6)))
     }
 }
 
@@ -272,8 +272,8 @@ struct USBScanView: View {
                                     Text(m.blurb).font(.system(size: 10)).foregroundStyle(Theme.muted).multilineTextAlignment(.leading)
                                 }
                                 .frame(maxWidth: .infinity, minHeight: 58, alignment: .topLeading).padding(8)
-                                .background(RoundedRectangle(cornerRadius: 8).fill(usb.mode == m ? Theme.accent.opacity(0.2) : Theme.raise))
-                                .overlay(RoundedRectangle(cornerRadius: 8).stroke(usb.mode == m ? Theme.accent : Theme.line2))
+                                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(usb.mode == m ? Theme.accent.opacity(0.2) : Theme.raise))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(usb.mode == m ? Theme.accent : Theme.line2))
                             }.buttonStyle(.plain)
                         }
                     }
@@ -291,7 +291,7 @@ struct USBScanView: View {
                                     }
                                     .frame(maxWidth: .infinity, minHeight: 28)
                                     .foregroundStyle(on ? Color.black : Theme.fg)
-                                    .background(RoundedRectangle(cornerRadius: 6).fill(on ? Theme.accent : Theme.raise))
+                                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? Theme.accent : Theme.raise))
                                 }.buttonStyle(.plain)
                             }
                         }

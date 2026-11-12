@@ -37,7 +37,7 @@ struct BrowserOverlay: View {
                                 let cur = s.view == app.view, cursor = app.browseFocusTree && s.view == (app.treeCursor ?? app.view)
                                 Text(s.name).font(.system(size: 13, weight: cur ? .bold : .regular)).lineLimit(1)
                                     .padding(.leading, 8 + CGFloat(s.depth) * 12).frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
-                                    .background(RoundedRectangle(cornerRadius: 5).fill(cursor ? Theme.loop.opacity(0.35) : cur ? Theme.raise : .clear))
+                                    .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(cursor ? Theme.loop.opacity(0.35) : cur ? Theme.raise : .clear))
                                     .contentShape(Rectangle())
                                     .onTapGesture { app.view = s.view; app.browseFocusTree = false; app.treeCursor = nil; app.showBrowser() }
                                     .id(s.id)
@@ -72,8 +72,8 @@ struct BrowserOverlay: View {
             }
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.bg.opacity(0.97)))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Theme.line2))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.bg.opacity(0.97)))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(Theme.line2))
     }
 
     func heading(_ s: String, on: Bool) -> some View {
@@ -88,7 +88,7 @@ struct BrowserOverlay: View {
             Button { LibraryPane.setStoredSort(app.view, k); app.showBrowser(); app.objectWillChange.send() } label: {
                 Text(label + (on ? (desc ? " ▾" : " ▴") : "")).font(.system(size: 10, weight: .heavy))
                     .frame(minWidth: 44, minHeight: 24).foregroundStyle(on ? Color.black : Theme.fg)
-                    .background(RoundedRectangle(cornerRadius: 4).fill(on ? Theme.loop : Theme.raise))
+                    .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(on ? Theme.loop : Theme.raise))
             }.buttonStyle(.plain)
             if on {
                 Button { LibraryPane.setStoredSort(app.view, .none); app.showBrowser(); app.objectWillChange.send() } label: {
@@ -103,7 +103,7 @@ struct BrowserOverlay: View {
         let deckOn = core.decks.firstIndex { $0.track === t.info }
         let decks = core.activeDecks
         return HStack(spacing: 8) {
-            if let d = deckOn { Text("\(d + 1)").font(.system(size: 10, weight: .heavy)).foregroundStyle(Color.black).frame(width: 16, height: 16).background(RoundedRectangle(cornerRadius: 3).fill(Theme.deck[d])) }
+            if let d = deckOn { Text("\(d + 1)").font(.system(size: 10, weight: .heavy)).foregroundStyle(Color.black).frame(width: 16, height: 16).background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(Theme.deck[d])) }
             else { Color.clear.frame(width: 16, height: 16) }
             ArtworkView(track: t).frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 0) {
@@ -115,7 +115,7 @@ struct BrowserOverlay: View {
             if let c = Keys.camelot(t.info.key) {
                 let match = ref >= 0 && Keys.mixes(t.info.key, ref)
                 Text(c.label).font(.system(size: 12, weight: match ? .heavy : .semibold, design: .monospaced)).foregroundStyle(Theme.keyColor(c.num, c.letter))
-                    .frame(width: 34).background(RoundedRectangle(cornerRadius: 3).stroke(match ? Theme.ok : .clear))
+                    .frame(width: 34).background(RoundedRectangle(cornerRadius: 3, style: .continuous).stroke(match ? Theme.ok : .clear))
             } else { Text("").frame(width: 34) }
             Text(t.info.duration > 0 ? String(format: "%d:%02d", Int(t.info.duration) / 60, Int(t.info.duration) % 60) : "").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.muted).frame(width: 38, alignment: .trailing)
             if sel {
@@ -123,13 +123,13 @@ struct BrowserOverlay: View {
                     Button { app.load(t, deck: d); app.hideBrowser() } label: {
                         Text(decks.count > 2 ? "\(d + 1)" : "LOAD \(d + 1)").font(.system(size: decks.count > 2 ? 12 : 10, weight: .bold))
                             .frame(width: decks.count > 2 ? 34 : 54, height: 24).foregroundStyle(Color.black)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(Theme.deck[d]))
+                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(Theme.deck[d]))
                     }.buttonStyle(.plain)
                 }
             }
         }
         .padding(.horizontal, 6).frame(minHeight: 34)
-        .background(RoundedRectangle(cornerRadius: 5).fill(sel ? (app.browseFocusTree ? Theme.raise : Theme.loop.opacity(0.3)) : .clear))
+        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(sel ? (app.browseFocusTree ? Theme.raise : Theme.loop.opacity(0.3)) : .clear))
         .contentShape(Rectangle())
         .onTapGesture { app.selection = t.id; app.browseFocusTree = false; app.showBrowser() }
         .contextMenu {

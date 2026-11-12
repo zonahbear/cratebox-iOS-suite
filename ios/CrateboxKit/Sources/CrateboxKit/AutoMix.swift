@@ -7,10 +7,12 @@
 //   (Apple's vocal / drum / bass shares), how cleanly the two can overlap without vocals on top of each other, and
 //   tempo. Tempo is a gate (at most `maxShift`, ½× and 2× counted) and only a mild preference beyond ±4 %, so the
 //   set isn't stuck at one BPM: the tempo glides to each new track's own over the transition.
-// - Plans: the transition starts on a phrase line (every 8 bars from bar 1) of the playing track and the next track
-//   comes in on one of its own, chosen so the vocals Apple found don't overlap where both are heard.
-// - Transitions: `Transition` is the list of kinds; for now the 32-bar bass swap. A new kind adds a case and its
-//   levels, and the planner and the app pick it up.
+// - Plans: the transition starts on a phrase line (every 8 bars from bar 1) of the playing track, near where its outro
+//   starts when that's known, and the next track comes in on one of its own phrases, near its mix-in point (your
+//   CUE, else Apple's suggestion, so long intros are skipped), chosen so the vocals Apple found don't overlap where
+//   both are heard. Kind and length are chosen per pair: every allowed kind at each of its lengths is costed.
+// - Transitions: `Transition` is the list of kinds (bass swap, highs-and-lows EQ handoff, COLOR sweep, cut), each
+//   with its levels for faders, EQs and COLOR. Only one bass line is ever full: the LOWs swap on a downbeat.
 // - Loudness: ITU-R BS.1770 integrated loudness (K-weighting, 400 ms blocks, absolute and relative gates) of the
 //   deck's analysis audio, and the trim that brings a track to the target.
 import Foundation
@@ -27,6 +29,10 @@ public enum AutoMix {
         public var energy: Double?
         /// share of the track with vocals, drums, bass (Apple)
         public var shares: [Double]?
+        /// where to bring it in (seconds): a CUE point you set wins, else Apple's suggested mix-in; nil = from the top
+        public var mixIn: Double?
+        /// where its outro starts (seconds, Apple's suggested mix-out); nil = unknown
+        public var mixOut: Double?
         public init(id: String, bpm: Double, firstBeat: Double, duration: Double, key: Int) {
             self.id = id; self.bpm = bpm; self.firstBeat = firstBeat; self.duration = duration; self.key = key
         }
@@ -37,6 +43,14 @@ public enum AutoMix {
             if !f.present.isEmpty { vocals = f.present["vocal"] ?? []; drums = f.present["drum"] ?? [] }
             shares = f.shares
             energy = AutoMix.energy(lufs: f.lufs, drumShare: shares?[1])
+            let m = MixPoints.suggest(f, bpm: bpm, firstBeat: firstBeat, duration: duration)
+            mixIn = m.mixIn; mixOut = m.mixOut
+        }
+        /// a CUE point you set (Cratebox or rekordbox) is where it comes in. One in the first two bars is taken as
+        /// rekordbox's auto cue (the first beat), not a choice, and leaves Apple's suggestion in place
+        public mutating func setCue(_ c: Double?) {
+            guard let c, c > firstBeat + 8 * 60 / max(1, bpm), c < duration * 0.75 else { return }
+            mixIn = c
         }
         public func time(ofBeat b: Double) -> Double { firstBeat + b * 60 / bpm }
         public func beat(at t: Double) -> Double { (t - firstBeat) * bpm / 60 }
@@ -56,53 +70,96 @@ public enum AutoMix {
 
     // ---- transitions ----
 
-    /// The kinds of transition. Only the bass swap for now; more go here (each with its own levels and length)
+    /// The kinds of transition. Each has its levels over its length; the planner tries every allowed kind at each of
+    /// its `lengths` and keeps the cheapest plan.
     public enum Transition: String, CaseIterable, Codable {
         /// the next track comes in with its bass cut, the basses swap halfway on a downbeat, the old track goes out
         case bassSwap
+        /// highs and lows handed over separately: the hi-hats swap in the second quarter, the basses on the halfway
+        /// downbeat, the mids in the third quarter
+        case eqHandoff
+        /// COLOR (CFX): the next track comes in through the high-pass, opening up over the first half; the old one
+        /// goes out through the low-pass over the second. The basses swap halfway
+        case colorSweep
+        /// beat-matched and silent, then a clean cut on the last bar's downbeat
+        case cut
         public var name: String {
             switch self {
             case .bassSwap: return "Bass swap"
+            case .eqHandoff: return "Highs and lows"
+            case .colorSweep: return "COLOR sweep"
+            case .cut: return "Cut"
             }
         }
-        /// its usual length in bars (shorter ones are used only when there isn't room)
-        public var bars: Int {
+        /// its usual length in bars
+        public var bars: Int { lengths[0] }
+        /// the lengths it can run at, longest (usual) first
+        public var lengths: [Int] {
             switch self {
-            case .bassSwap: return 32
+            case .bassSwap: return [32, 16, 8]
+            case .eqHandoff: return [32, 16]
+            case .colorSweep: return [16, 8]
+            case .cut: return [4]
             }
         }
-        /// faders and LOW EQs (mixer values: fader 0...1, EQ 0.5 = centre, 0 = cut) at `x` bars into a transition
-        /// `n` bars long
+        /// faders, EQs and COLOR (mixer values: fader 0...1, EQ and CFX 0.5 = centre, EQ 0 = cut) at `x` bars into a
+        /// transition `n` bars long
         public func levels(atBar x: Double, of n: Int) -> Levels {
             let n = Double(max(1, n)), x = min(max(0, x), n)
+            // the basses swap over one beat at the halfway downbeat (the last bar's for a cut)
+            let swap = self == .cut ? n - 1 : n / 2
+            let s = min(1, max(0, (x - swap) / 0.25))
             switch self {
             case .bassSwap:
                 // in: the fader up over the first quarter, its bass cut. Halfway: the basses swap over one beat.
                 // out: the fader down over the last quarter
-                let swap = n / 2, swapLen = 0.25
-                let s = min(1, max(0, (x - swap) / swapLen))
                 return Levels(outFader: 1 - ramp(x, 0.75 * n, n), outLow: 0.5 * (1 - s),
                               inFader: ramp(x, 0, 0.25 * n), inLow: 0.5 * s)
+            case .eqHandoff:
+                let hi = ramp(x, 0.25 * n, 0.5 * n), mid = ramp(x, 0.5 * n, 0.75 * n)
+                return Levels(outFader: 1 - ramp(x, 0.75 * n, n), outLow: 0.5 * (1 - s),
+                              inFader: ramp(x, 0, 0.25 * n), inLow: 0.5 * s,
+                              outMid: 0.5 - 0.15 * mid, outHi: 0.5 - 0.35 * hi,
+                              inMid: 0.35 + 0.15 * mid, inHi: 0.15 + 0.35 * hi)
+            case .colorSweep:
+                return Levels(outFader: 1 - ramp(x, 0.75 * n, n), outLow: 0.5 * (1 - s),
+                              inFader: ramp(x, 0, 0.25 * n), inLow: 0.5 * s,
+                              outCfx: 0.5 - 0.25 * ramp(x, 0.5 * n, n), inCfx: 0.85 - 0.35 * ramp(x, 0, 0.5 * n))
+            case .cut:
+                return Levels(outFader: 1 - s, outLow: 0.5 * (1 - s), inFader: s, inLow: 0.5 * s)
             }
         }
         /// the bar where the basses swap (shown on the screen)
-        public func swapBar(of n: Int) -> Double {
+        public func swapBar(of n: Int) -> Double { self == .cut ? Double(n - 1) : Double(n) / 2 }
+        /// the planner's lean: long blends first, the cut only when it saves a vocal clash or there's no room
+        var baseCost: Double {
             switch self {
-            case .bassSwap: return Double(n) / 2
+            case .bassSwap: return 0
+            case .eqHandoff: return 0.05
+            case .colorSweep: return 0.1
+            case .cut: return 0.6
             }
         }
     }
     public struct Levels: Equatable {
         public var outFader: Double, outLow: Double, inFader: Double, inLow: Double
+        public var outMid = 0.5, outHi = 0.5, inMid = 0.5, inHi = 0.5
+        /// COLOR: 0.5 = off, under = low-pass, over = high-pass
+        public var outCfx = 0.5, inCfx = 0.5
+        public init(outFader: Double, outLow: Double, inFader: Double, inLow: Double, outMid: Double = 0.5, outHi: Double = 0.5,
+                    inMid: Double = 0.5, inHi: Double = 0.5, outCfx: Double = 0.5, inCfx: Double = 0.5) {
+            self.outFader = outFader; self.outLow = outLow; self.inFader = inFader; self.inLow = inLow
+            self.outMid = outMid; self.outHi = outHi; self.inMid = inMid; self.inHi = inHi; self.outCfx = outCfx; self.inCfx = inCfx
+        }
     }
     static func ramp(_ x: Double, _ a: Double, _ b: Double) -> Double { b <= a ? (x >= b ? 1 : 0) : min(1, max(0, (x - a) / (b - a))) }
     /// 0...1 eased in and out
     public static func smooth(_ p: Double) -> Double { let q = min(1, max(0, p)); return q * q * (3 - 2 * q) }
 
     /// the playing track's speed (rate) `x` bars into the transition: from where it was to the rate that leaves the
-    /// next track at its own tempo, eased
+    /// next track at its own tempo, eased, and there by three quarters of the way so the last bars are steady
     public static func rate(atBar x: Double, _ p: Plan) -> Double {
-        p.fromRate + (p.toRate - p.fromRate) * smooth(x / Double(max(1, p.bars)))
+        p.fromRate + (p.toRate - p.fromRate) * smooth(x / (0.75 * Double(max(1, p.bars))))
     }
 
     // ---- plans ----
@@ -129,46 +186,85 @@ public enum AutoMix {
         return false
     }
 
+    /// What the planner may do (AI DJ's Settings → AI toggles) and how it leans
+    public struct PlanOptions {
+        /// the kinds it may use (at least one; empty = bass swap)
+        public var kinds: [Transition] = [.bassSwap]
+        /// shorter than a kind's usual length only when there isn't room (false), or whenever it fits better (true)
+        public var variableLength = false
+        /// bring the next track in at its mix-in point (your CUE or Apple's), skipping a long intro
+        public var skipIntros = true
+        /// start the transition near where the playing track's outro begins, when that's known
+        public var outroAware = true
+        /// extra cost per kind (taste, variety: the one used last costs a little more)
+        public var bias: [Transition: Double] = [:]
+        /// "mix now": the transition must start within this many beats of `after` (nil: any phrase line)
+        public var within: Double?
+        public init() {}
+    }
+
     /// The transition from `a` (playing at `aRate`, its playhead not before beat `after`) to `b`. Starts on a line
-    /// every `step` beats from a's bar 1 (32 = 8-bar phrases; 4 = the next bar, for "mix now"), brings b in on one
-    /// of its own 8-bar phrases in its first 64 bars, and picks the pair with the least vocal overlap, then the one
-    /// that plays more of a and starts b nearer its top. Falls back to shorter transitions (16, 8, 4 bars) when a
-    /// hasn't room left; nil when even that won't fit, or the tempos can't meet within ±`maxShift`.
+    /// every `step` beats from a's bar 1 (32 = 8-bar phrases; 4 = every bar, for "mix now"), brings b in on one of its
+    /// own 8-bar phrase lines (or exactly at your CUE), and keeps the cheapest of every kind and length allowed:
+    /// vocal overlap first, then how far b comes in from its mix-in point, how far a's outro is from the start, how
+    /// much of a is left unplayed, shorter than usual, and the kind's bias. nil when nothing fits, or the tempos can't
+    /// meet within ±`maxShift`.
     public static func plan(from a: Track, aRate: Double, to b: Track, after: Double, step: Double = 32,
-                            kind: Transition = .bassSwap, maxShift: Double = 0.12) -> Plan? {
+                            kind: Transition? = nil, maxShift: Double = 0.12, options o: PlanOptions = PlanOptions()) -> Plan? {
         guard a.bpm > 0, b.bpm > 0, aRate > 0, let fit = NextTrack.tempoFit(a.bpm * aRate, b.bpm, range: 100) else { return nil }
         let k = fit.mult
         let toRate = b.bpm / (k * a.bpm)
         guard abs(toRate / aRate - 1) <= maxShift + 1e-9 else { return nil }
+        let shift = abs(toRate / aRate - 1)
         let last = a.lastBeat, lastB = b.lastBeat
         let st = max(1, step)
-        for bars in [kind.bars, 16, 8, 4] where bars <= kind.bars {
-            let len = Double(bars * 4)
-            // a's starts: lines at or after `after`, ending before a does
-            var starts = [Double]()
-            var s = (max(0, after) / st).rounded(.up) * st
-            while s + len <= last { starts.append(s); s += st }
-            guard !starts.isEmpty else { continue }
-            // b's starts: its 8-bar phrase lines over its first 64 bars, leaving the transition room in b
-            var ins = [Double]()
-            var u = 0.0
-            while u <= 256 && u + len * k <= lastB { ins.append(u); u += 32 }
-            guard !ins.isEmpty else { continue }
-            var best: (cost: Double, plan: Plan)?
-            for s in starts {
-                for u in ins {
-                    let c = clash(a, s, b, u, bars: bars, mult: k, kind: kind, rate: aRate)
-                    // a little for every bar of a left unplayed after the transition, and for every phrase of b skipped
-                    let left = max(0, (last - (s + len)) / 4)
-                    let cost = (c ?? 0) * 4 + left * 0.05 + (u / 32) * 0.6
-                    if best == nil || cost < best!.cost - 1e-9 {
-                        best = (cost, Plan(outStart: s, inStart: u, bars: bars, kind: kind, mult: k, fromRate: aRate, toRate: toRate, clash: c))
+        let kinds = kind.map { [$0] } ?? (o.kinds.isEmpty ? [.bassSwap] : o.kinds)
+        // b's mix-in point and a's outro, in beats
+        let prefIn: Double = o.skipIntros ? max(0, b.mixIn.map { b.beat(at: $0) } ?? 0) : 0
+        let prefOut: Double? = o.outroAware ? a.mixOut.map { a.beat(at: $0) } : nil
+        var best: (cost: Double, plan: Plan)?
+        for kd in kinds {
+            var fitted = false
+            for bars in kd.lengths {
+                // without variable length: a shorter one only when the longer ones had no room at all
+                if !o.variableLength && fitted { break }
+                let len = Double(bars * 4)
+                // a's starts: lines at or after `after`, ending before a does (within `within` for mix now)
+                var starts = [Double]()
+                var s = (max(0, after) / st).rounded(.up) * st
+                while s + len <= last {
+                    if let w = o.within, s > after + w { break }
+                    starts.append(s); s += st
+                }
+                guard !starts.isEmpty else { continue }
+                // b's starts: its 8-bar phrase lines over its first 64 bars (or up to 64 bars past its mix-in
+                // point), plus the mix-in point itself on its bar, leaving the transition room in b
+                var ins = [Double]()
+                let reach = max(256, prefIn + 256)
+                var u = 0.0
+                while u <= reach && u + len * k <= lastB { ins.append(u); u += 32 }
+                let cueBar = (prefIn / 4).rounded() * 4
+                if prefIn > 0, cueBar + len * k <= lastB, !ins.contains(cueBar) { ins.append(cueBar) }
+                guard !ins.isEmpty else { continue }
+                fitted = true
+                for s in starts {
+                    for u in ins {
+                        let c = clash(a, s, b, u, bars: bars, mult: k, kind: kd, rate: aRate)
+                        let left = max(0, (last - (s + len)) / 4)          // bars of a left after the transition
+                        var cost = (c ?? 0) * 4
+                        cost += abs(u - prefIn) / 32 * 0.6                  // phrases away from b's mix-in point
+                        if let po = prefOut { cost += abs(s - po) / 32 * 0.3 + left * 0.01 } else { cost += left * 0.05 }
+                        cost += Double(kd.bars - bars) / Double(kd.bars) * 0.4   // shorter than usual
+                        if bars < 16 && shift > 0.03 { cost += 0.5 }        // a big tempo glide wants room
+                        cost += kd.baseCost + (o.bias[kd] ?? 0)
+                        if best == nil || cost < best!.cost - 1e-9 {
+                            best = (cost, Plan(outStart: s, inStart: u, bars: bars, kind: kd, mult: k, fromRate: aRate, toRate: toRate, clash: c))
+                        }
                     }
                 }
             }
-            if let best { return best.plan }
         }
-        return nil
+        return best?.plan
     }
 
     /// seconds of vocal on vocal over a transition (each beat counted at the quieter of the two levels); nil if
@@ -204,6 +300,8 @@ public enum AutoMix {
         public var played: Set<String> = []
         /// where the playing track's next transition could start at the earliest (its beat)
         public var after = 0.0
+        /// how transitions are planned (kinds, lengths, mix-in points)
+        public var plan = PlanOptions()
         public init() {}
     }
     static let weights: [String: Double] = ["key": 0.35, "tempo": 0.15, "energy": 0.2, "sound": 0.1, "mix": 0.2]
@@ -239,7 +337,7 @@ public enum AutoMix {
             var plan: Plan?
             if i < deep {
                 if let d = detail(t.id) { t = d }
-                plan = AutoMix.plan(from: a, aRate: aRate, to: t, after: o.after, maxShift: o.maxShift + 0.02)
+                plan = AutoMix.plan(from: a, aRate: aRate, to: t, after: o.after, maxShift: o.maxShift + 0.02, options: o.plan)
                 if let p = plan, let cl = p.clash { parts["mix"] = max(0, 1 - cl / 8) }
                 if plan == nil { parts["mix"] = 0 }
             }

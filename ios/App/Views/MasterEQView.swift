@@ -23,7 +23,7 @@ struct MasterEQView: View {
                             Text(eq.preset ?? "Custom").font(.system(size: 12, weight: .semibold)).lineLimit(1)
                             Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold))
                         }.foregroundStyle(Theme.fg).padding(.horizontal, 10).frame(minWidth: 120, minHeight: 30)
-                            .background(RoundedRectangle(cornerRadius: 6).fill(Theme.raise))
+                            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(Theme.raise))
                     }
                     Spacer(minLength: 4)
                     Button("Done") { dismiss() }

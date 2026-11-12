@@ -162,7 +162,7 @@ struct LibraryPane: View {
         HStack(spacing: 6) {
             Button { showSidebar.toggle() } label: { Image(systemName: "sidebar.left") }.buttonStyle(.plain)
             Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
-                .padding(.horizontal, 4).background(RoundedRectangle(cornerRadius: 4).stroke(app.browseFocusTree ? Theme.loop : .clear, lineWidth: 1.5))
+                .padding(.horizontal, 4).background(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(app.browseFocusTree ? Theme.loop : .clear, lineWidth: 1.5))
             TextField(canAsk ? "Search, or ask: 124–128 in 8A ✨" : "Search title, artist or key (8A)", text: $query)
                 .textFieldStyle(.roundedBorder).font(.system(size: 12)).frame(maxWidth: 260)
                 .onSubmit { if canAsk && query.split(separator: " ").count >= 3 { ask() } }
@@ -304,7 +304,7 @@ struct LibraryPane: View {
                 ForEach(core.activeDecks, id: \.self) { d in
                     Button { if let t { app.load(t, deck: d) } } label: {
                         Text("\(d + 1)").font(.system(size: 11, weight: .bold)).frame(width: 28, height: 22)
-                            .background(RoundedRectangle(cornerRadius: 4).fill(onDeck(t) == d ? Theme.deck[d] : Theme.raise)).foregroundStyle(onDeck(t) == d ? Color.black : Theme.deck[d])
+                            .background(RoundedRectangle(cornerRadius: 4, style: .continuous).fill(onDeck(t) == d ? Theme.deck[d] : Theme.raise)).foregroundStyle(onDeck(t) == d ? Color.black : Theme.deck[d])
                     }.buttonStyle(.borderless)
                 }
             }.frame(width: CGFloat(core.deckCount) * 31 + 8)
@@ -328,7 +328,7 @@ struct LibraryPane: View {
         guard let t, let c = Keys.camelot(t.info.key) else { return AnyView(Text(t.map { $0.analysed ? "?" : "…" } ?? "").foregroundStyle(Theme.dim)) }
         let match = ref >= 0 && Keys.mixes(t.info.key, ref)
         return AnyView(Text(c.label).font(.system(size: 12, weight: match ? .heavy : .semibold, design: .monospaced)).foregroundStyle(Theme.keyColor(c.num, c.letter))
-            .padding(.horizontal, 3).background(RoundedRectangle(cornerRadius: 3).stroke(match ? Theme.ok : .clear)))
+            .padding(.horizontal, 3).background(RoundedRectangle(cornerRadius: 3, style: .continuous).stroke(match ? Theme.ok : .clear)))
     }
     func onDeck(_ t: LibTrack?) -> Int? { guard let t else { return nil }; return core.decks.firstIndex { $0.track === t.info } }
     func clockShort(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }

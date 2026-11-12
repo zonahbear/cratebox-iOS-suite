@@ -56,7 +56,7 @@ struct DeckView: View {
                         Button { app.midi.setSide(d % 2, d); app.objectWillChange.send() } label: {
                             Text("DECK \(d + 1)").font(.system(size: 11, weight: .bold)).frame(maxWidth: .infinity, minHeight: 20)
                                 .foregroundStyle(on ? Color.black : Theme.deck[d])
-                                .background(RoundedRectangle(cornerRadius: 5).fill(on ? Theme.deck[d] : Theme.raise))
+                                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(on ? Theme.deck[d] : Theme.raise))
                         }.buttonStyle(.plain)
                     }
                 }
@@ -110,8 +110,8 @@ struct DeckView: View {
             }
         }
         .padding(6)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(app.core.four ? color.opacity(0.7) : Theme.line, lineWidth: 1))
     }
     var phoneTempo: some View {
         VFader(value: (deck.pitch + 1) / 2, color: color, height: app.core.four ? 92 : 104, inverted: true) { deck.setPitch($0 * 2 - 1) }
@@ -144,8 +144,8 @@ struct DeckView: View {
             }
         }
         .padding(8)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(app.core.four && app.midi.side.contains(deck.i) ? color : Theme.line, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(app.core.four && app.midi.side.contains(deck.i) ? color : Theme.line, lineWidth: 1))
     }
 
     var header: some View {
@@ -217,7 +217,7 @@ struct DeckView: View {
     func chip(_ s: String, _ on: Bool) -> some View {
         Text(s).font(.system(size: 12, weight: .semibold)).frame(minHeight: 30).padding(.horizontal, 8)
             .foregroundStyle(on ? Color.black : Theme.fg)
-            .background(RoundedRectangle(cornerRadius: 6).fill(on ? Theme.loop : Theme.raise))
+            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? Theme.loop : Theme.raise))
     }
     var pads: some View {
         VStack(spacing: 4) {
@@ -264,7 +264,7 @@ struct PadCell: View {
             Text(padLabel(p)).font(.system(size: 11, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.5)
                 .frame(maxWidth: .infinity, minHeight: height)
                 .foregroundStyle(on ? Color.black : Theme.fg)
-                .background(RoundedRectangle(cornerRadius: 6).fill(on ? c : Theme.raise))
+                .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? c : Theme.raise))
         }
         .contextMenu { if deck.padMode == .hotcue && deck.hot[p] != nil { Button("Clear hot cue \(String(UnicodeScalar(65 + p)!))", role: .destructive) { deck.clearHot(p) } } }
     }
@@ -350,7 +350,7 @@ struct PhoneLane: View {
                     HStack(spacing: 6) {
                         Button { if app.core.four { app.midi.setSide(deck.i % 2, deck.i); app.objectWillChange.send() } } label: {
                             Text("\(deck.i + 1)").font(.system(size: 12, weight: .heavy)).frame(width: 20, height: 16)
-                                .foregroundStyle(active ? Color.black : color).background(RoundedRectangle(cornerRadius: 3).fill(active ? color : Theme.raise))
+                                .foregroundStyle(active ? Color.black : color).background(RoundedRectangle(cornerRadius: 3, style: .continuous).fill(active ? color : Theme.raise))
                         }.buttonStyle(.plain)
                         if let badge {
                             Text(badge).font(.system(size: 9, weight: .heavy)).foregroundStyle(Color.black)
@@ -420,7 +420,7 @@ struct WaveformView: View {
             .onChange(of: dragging) { _, d in if !d && dragX != nil { dragX = nil; deck.jogTouch(false, noCoast: true) } }
         }
         .background(Theme.bg)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
     func draw(_ ctx: GraphicsContext, _ size: CGSize) {
         guard let a = deck.ana, let w = a.wave, !w.peak.isEmpty else { return }
@@ -538,6 +538,6 @@ struct OverviewView: View {
             .contentShape(Rectangle())
             .onTapGesture { p in if deck.loaded { deck.seekTo(Double(p.x / g.size.width) * deck.duration) } }
         }
-        .background(Theme.bg).clipShape(RoundedRectangle(cornerRadius: 4))
+        .background(Theme.bg).clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
     }
 }

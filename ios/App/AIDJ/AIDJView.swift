@@ -37,16 +37,16 @@ struct AIDJView: View {
 
     var subtitle: String {
         switch dj.phase {
-        case .idle: return "Picks, beat-matches and mixes on decks 1 and 2"
+        case .idle: return AIDJMoves.third ? "Picks, beat-matches and mixes on decks 1-3" : "Picks, beat-matches and mixes on decks 1 and 2"
         case .loading: return "Loading the first track…"
         case .playing, .preparing, .ready: return "On air: deck \(dj.onAir + 1)"
-        case .mixing: return "Mixing deck \(dj.onAir + 1) into deck \(2 - dj.onAir)"
+        case .mixing: return "Mixing deck \(dj.onAir + 1) into deck \(dj.nextDeck + 1)"
         }
     }
     @ViewBuilder var bar: some View {
         if aiMode {
             if dj.running {
-                LitButton(label: "MIX NOW", on: dj.phase == .ready, color: Theme.accent) { dj.mixNow() }.accessibilityHint("Start the transition at the next bar")
+                LitButton(label: "MIX NOW", on: dj.phase == .ready || dj.mixAsap, color: Theme.accent) { dj.mixNow() }.accessibilityHint("Start the transition within two bars, beat-matched")
                 LitButton(label: "SKIP", on: false) { dj.skipNext() }.accessibilityHint("Pick another next track")
                 LitButton(label: "STOP", on: true, color: Theme.hot) { dj.stop() }
             } else {
@@ -59,7 +59,7 @@ struct AIDJView: View {
         VStack(spacing: 14) {
             Image(systemName: "sparkles").font(.system(size: 40)).foregroundStyle(Theme.accent)
             Text("AI DJ is part of AI mode").font(.title3.weight(.bold))
-            Text("It picks tracks from your library, a playlist or tracks you choose, matches their loudness, beat-matches them with a tempo glide and mixes them with 32-bar bass swaps, keeping vocals apart using Apple's analysis. Everything runs on this device.")
+            Text("It picks tracks from your library, a playlist or tracks you choose, matches their loudness, beat-matches them before they're heard, glides the tempo and mixes them with bass swaps, EQ handoffs, COLOR sweeps or cuts, coming in at your CUE or Apple's mix-in point and keeping vocals apart. Everything runs on this device.")
                 .font(.callout).foregroundStyle(Theme.muted).multilineTextAlignment(.center).frame(maxWidth: 520)
             Toggle("AI mode", isOn: $aiMode).frame(width: 200).tint(Theme.accent)
         }.frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -69,11 +69,11 @@ struct AIDJView: View {
     var decks: some View {
         HStack(spacing: 8) {
             deckCard(dj.onAir, label: "ON AIR")
-            deckCard(1 - dj.onAir, label: dj.phase == .mixing ? "COMING IN" : "NEXT")
+            deckCard(dj.nextDeck, label: dj.phase == .mixing ? "COMING IN" : "NEXT")
         }
     }
     func deckCard(_ i: Int, label: String) -> some View {
-        AIDJDeckCard(deck: core.decks[i], label: label, trim: dj.trims[i], active: dj.running)
+        AIDJDeckCard(deck: core.decks[i], label: label, trim: i < dj.trims.count ? dj.trims[i] : nil, active: dj.running)
     }
 
     var transition: some View {
@@ -88,7 +88,7 @@ struct AIDJView: View {
                 Text("\((p?.kind ?? .bassSwap).name) · \(n) bars").font(.system(size: 11, weight: .semibold))
                 Spacer()
                 if let p, dj.phase == .ready, a.bpm > 0 {
-                    let left = max(0, Int(((p.outStart - a.beatAt(a.now())) / 4).rounded(.up)))
+                    let left = max(0, Int(((p.outStart - dj.beatNow()) / 4).rounded(.up)))
                     Text("starts in \(left) bars").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.accent)
                 } else if dj.phase == .mixing {
                     Text("bar \(min(n, Int(x) + 1)) / \(n)").font(.system(size: 11, design: .monospaced)).foregroundStyle(Theme.accent)
@@ -107,11 +107,11 @@ struct AIDJView: View {
                     vocalLabel(p.clash)
                 }.font(.system(size: 11)).foregroundStyle(Theme.fg).lineLimit(1).minimumScaleFactor(0.7)
             } else {
-                Text(dj.running ? "Planning the next transition…" : "Bass swap: the next track comes in with its bass cut, the basses swap on the downbeat of bar 16, the old track fades out over the last 8 bars. More transition kinds later.")
+                Text(dj.running ? "Planning the next transition…" : "Each transition is planned for the pair: bass swap, highs and lows, COLOR sweep or cut, 4 to 32 bars, starting near the outro and bringing the next track in at its mix-in point. Settings → AI turns each move on or off.")
                     .font(.system(size: 11)).foregroundStyle(Theme.muted)
             }
         }
-        .padding(10).background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .padding(10).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
     @ViewBuilder func vocalLabel(_ c: Double?) -> some View {
         if let c {
@@ -143,7 +143,7 @@ struct AIDJView: View {
                     Text(isPlaylist ? dj.sourceName : "PLAYLIST ▾").font(.system(size: 12, weight: .semibold)).lineLimit(1).minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity, minHeight: 30).padding(.horizontal, 6)
                         .foregroundStyle(isPlaylist ? Color.black : Theme.fg)
-                        .background(RoundedRectangle(cornerRadius: 6).fill(isPlaylist ? Theme.accent : Theme.raise))
+                        .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(isPlaylist ? Theme.accent : Theme.raise))
                 }.disabled(lists.isEmpty)
                 LitButton(label: "SELECTED", on: dj.source == .selected, color: Theme.accent, wide: true) { dj.source = .selected; if dj.selected.isEmpty { picking = true } }
             }
@@ -158,7 +158,7 @@ struct AIDJView: View {
             if canAsk { vibe }
         }
         .disabled(dj.running && dj.phase == .mixing)
-        .padding(10).background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .padding(10).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
     var isPlaylist: Bool { if case .playlist = dj.source { return true }; return false }
 
@@ -208,7 +208,7 @@ struct AIDJView: View {
                     .font(.system(size: 11)).foregroundStyle(Theme.warn)
             }
         }
-        .padding(10).background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .padding(10).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
 
     var upNext: some View {
@@ -234,7 +234,7 @@ struct AIDJView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10).background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
+        .padding(10).background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
     }
 }
 
@@ -267,8 +267,8 @@ struct AIDJDeckCard: View {
             ProgressView(value: deck.duration > 0 ? min(1, deck.now() / deck.duration) : 0).tint(c)
         }
         .padding(10).frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Theme.panel))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(deck.playing ? c.opacity(0.7) : Theme.line, lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Theme.panel))
+        .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(deck.playing ? c.opacity(0.7) : Theme.line, lineWidth: 1))
     }
 }
 

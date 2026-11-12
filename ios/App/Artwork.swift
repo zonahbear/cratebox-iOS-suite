@@ -88,14 +88,14 @@ struct ArtworkView: View {
     var body: some View {
         let r = size == .deck ? 5.0 : 3.0
         ZStack {
-            RoundedRectangle(cornerRadius: r).fill(Theme.raise)
+            RoundedRectangle(cornerRadius: r, style: .continuous).fill(Theme.raise)
             if let img {
                 Image(uiImage: img).resizable().scaledToFill()
             } else {
                 RecordGlyph()
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: r))
+        .clipShape(RoundedRectangle(cornerRadius: r, style: .continuous))
         .task(id: track?.id) {
             guard let t = track else { img = nil; return }
             img = Artwork.shared.cached(t.id, size)

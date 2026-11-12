@@ -31,7 +31,7 @@ struct WaveLane: View {
         PhoneLane(deck: deck, badge: side)
             .padding(3)
             .overlay {
-                RoundedRectangle(cornerRadius: 7)
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
                     .stroke(color.opacity(driven ? (breathe && !reduceMotion ? 0.45 : 1) : 0), lineWidth: 1.5)
                     .shadow(color: color.opacity(driven ? (breathe && !reduceMotion ? 0.15 : 0.4) : 0), radius: 5)
                     .allowsHitTesting(false)
