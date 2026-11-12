@@ -213,6 +213,7 @@ struct LibraryPane: View {
     var header: some View {
         HStack(spacing: 0) {
             col("#", .none, 26)
+            Color.clear.frame(width: 28)
             col("Title", .title, nil)
             col("Artist", .artist, nil)
             col("BPM", .bpm, 54)
@@ -268,6 +269,8 @@ struct LibraryPane: View {
         let ref = refKey
         return HStack(spacing: 0) {
             Text("\(r.pos + 1)").frame(width: 26, alignment: .leading).foregroundStyle(Theme.dim)
+            // the cover: rekordbox's small artwork for stick tracks, the file's own picture for the rest
+            ArtworkView(track: t).frame(width: 22, height: 22).frame(width: 28, alignment: .leading)
             Text(r.title).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1).foregroundStyle(t == nil ? Theme.dim : Theme.fg)
             Text(r.artist).frame(maxWidth: .infinity, alignment: .leading).lineLimit(1).foregroundStyle(Theme.muted)
             Text(t.map { ($0.info.bpm ?? 0) > 0 ? String(format: "%.1f", $0.info.bpm!) : ($0.analysed ? "?" : "…") } ?? "").frame(width: 54, alignment: .leading).font(Theme.mono)

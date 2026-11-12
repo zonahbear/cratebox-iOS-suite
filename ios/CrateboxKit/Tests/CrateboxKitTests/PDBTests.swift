@@ -21,6 +21,24 @@ final class PDBTests: XCTestCase {
         let d1 = db.tracks.first { $0.title == "Demo Track 1" }!
         XCTAssertEqual(d1.artist, "Loopmasters"); XCTAssertEqual(d1.key, "Fm"); XCTAssertEqual(d1.bpm, 128)
         XCTAssertEqual(d1.path, "/Contents/Loopmasters/UnknownAlbum/Demo Track 1.mp3")
+        XCTAssertNil(d1.artwork, "the fixture's tracks have no artwork")
+    }
+
+    /// Album art: the track row's artwork id (bytes 28-31) points into the artwork table (13), whose rows are
+    /// an id and the image's path on the stick. The fixture has none, so give Demo Track 1 one.
+    func testReadsArtwork() throws {
+        var b = try fixture("export.pdb")
+        func le32(_ v: UInt32) -> [UInt8] { [UInt8(v & 0xff), UInt8((v >> 8) & 0xff), UInt8((v >> 16) & 0xff), UInt8(v >> 24)] }
+        try PDB.pack(&b, PDBPage.artwork.rawValue, [le32(1) + PDB.stringBytes("/PIONEER/Artwork/00001/a1.jpg"),
+                                                    le32(2) + PDB.stringBytes("/PIONEER/Artwork/00001/a2.jpg")], keepFlags: true)   // the table has no data page yet
+        var at: Int?
+        PDB.rows(Bytes(b: b), PDBPage.tracks.rawValue) { o in if Bytes(b: b).u32(o + 72) == 1 { at = o } }
+        let o = try XCTUnwrap(at)
+        b.replaceSubrange((o + 28)..<(o + 32), with: le32(2))
+        let db = PDB.parse(b)
+        XCTAssertEqual(db.tracks.first { $0.id == 1 }?.artwork, "/PIONEER/Artwork/00001/a2.jpg")
+        XCTAssertEqual(db.tracks.filter { $0.artwork != nil }.count, 1, "artwork id 0 = none")
+        XCTAssertEqual(PDBTrack.bigArtwork("/PIONEER/Artwork/00001/a2.jpg"), "/PIONEER/Artwork/00001/a2_m.jpg")
     }
 
     func testWritesByteForByteLikeTheWebApp() throws {

@@ -40,6 +40,7 @@ struct DeckView: View {
     var phone = false
     var chips = true                    // phone layout: the DECK 1 / DECK 3 switch (4-deck mode)
     var color: Color { Theme.deck[deck.i] }
+    var libTrack: LibTrack? { deck.track.flatMap { app.library.track($0.id) } }
 
     var body: some View {
         if phone { phoneBody } else { fullBody }
@@ -119,8 +120,16 @@ struct DeckView: View {
     var fullBody: some View {
         VStack(spacing: 6) {
             header
-            WaveformView(deck: deck, color: color).frame(height: compact ? 70 : 96)
-            OverviewView(deck: deck, color: color).frame(height: 22)
+            HStack(spacing: 6) {
+                if let t = libTrack {
+                    let side: CGFloat = compact ? 98 : 124          // the waveform, the gap and the overview below it
+                    ArtworkView(track: t, size: .deck).frame(width: side, height: side)
+                }
+                VStack(spacing: 6) {
+                    WaveformView(deck: deck, color: color).frame(height: compact ? 70 : 96)
+                    OverviewView(deck: deck, color: color).frame(height: 22)
+                }
+            }
             HStack(alignment: .top, spacing: 8) {
                 if deck.i % 2 == 0 { tempo }
                 VStack(spacing: 6) {
@@ -307,19 +316,32 @@ struct PhoneLane: View {
     var active = true
     var badge: String? = nil            // WAVE mode: "L" / "R" for the controller side driving this deck
     var color: Color { Theme.deck[deck.i] }
+    /// the loaded track's library entry, for its cover (none while the deck is empty)
+    var libTrack: LibTrack? { deck.track.flatMap { app.library.track($0.id) } }
     var body: some View {
         if active { full } else {
             // a deck the controller isn't on: its readouts, and the track overview under them
-            VStack(spacing: 1) { info.frame(height: 16); OverviewView(deck: deck, color: color).frame(height: 4) }
-                .opacity(0.75)
+            HStack(spacing: 3) {
+                if let t = libTrack { ArtworkView(track: t, size: .deck).frame(width: 21, height: 21) }
+                VStack(spacing: 1) { info.frame(height: 16); OverviewView(deck: deck, color: color).frame(height: 4) }
+            }
+            .opacity(0.75)
         }
     }
     var full: some View {
-        // the readouts get their own row above the waveform, so nothing covers it
-        VStack(spacing: 1) {
-            info.frame(height: 16)
-            WaveformView(deck: deck, color: color)
-            OverviewView(deck: deck, color: color).frame(height: 6)
+        // the cover (as tall as the lane, so square) left of the readouts and the waveform: it takes its width
+        // from the waveform. Higher priority so the stack sizes it first, from the lane's height.
+        HStack(spacing: 4) {
+            if let t = libTrack {
+                ArtworkView(track: t, size: .deck)
+                    .aspectRatio(1, contentMode: .fit).frame(maxWidth: 160).layoutPriority(1)
+            }
+            // the readouts get their own row above the waveform, so nothing covers it
+            VStack(spacing: 1) {
+                info.frame(height: 16)
+                WaveformView(deck: deck, color: color)
+                OverviewView(deck: deck, color: color).frame(height: 6)
+            }
         }
     }
     var info: some View {

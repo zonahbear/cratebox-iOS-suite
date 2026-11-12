@@ -105,6 +105,7 @@ struct BrowserOverlay: View {
         return HStack(spacing: 8) {
             if let d = deckOn { Text("\(d + 1)").font(.system(size: 10, weight: .heavy)).foregroundStyle(Color.black).frame(width: 16, height: 16).background(RoundedRectangle(cornerRadius: 3).fill(Theme.deck[d])) }
             else { Color.clear.frame(width: 16, height: 16) }
+            ArtworkView(track: t).frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 0) {
                 Text(t.info.title).font(.system(size: 13, weight: sel ? .bold : .medium)).lineLimit(1)
                 Text(t.info.artist).font(.system(size: 10)).foregroundStyle(Theme.muted).lineLimit(1)

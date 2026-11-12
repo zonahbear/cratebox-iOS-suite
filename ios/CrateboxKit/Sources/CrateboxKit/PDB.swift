@@ -28,6 +28,14 @@ public struct PDBTrack: Equatable, Codable {
     public var title: String, artist: String, album: String, genre: String, label: String, key: String
     public var bpm: Double, duration: Int, size: UInt32, sampleRate: UInt32, rating: Int, color: Int
     public var path: String, filename: String, anlzPath: String, comment: String, dateAdded: String
+    /// the track's artwork on the stick ("/PIONEER/Artwork/00001/a1.jpg", rekordbox's small one; the bigger one,
+    /// when exported, is next to it as a1_m.jpg). nil when the track has none. Optional so older JSON still reads.
+    public var artwork: String? = nil
+    /// rekordbox's larger copy of a small artwork path: "…/a1.jpg" → "…/a1_m.jpg"
+    public static func bigArtwork(_ path: String) -> String {
+        let ns = path as NSString, ext = ns.pathExtension
+        return (ns.deletingPathExtension + "_m") + (ext.isEmpty ? "" : "." + ext)
+    }
 }
 
 public struct PDBPlaylist: Equatable, Codable {
@@ -45,7 +53,7 @@ public struct PDBDatabase: Equatable {
     public var playlists: [PDBPlaylist]
 }
 
-public enum PDBPage: UInt32 { case tracks = 0, genres, artists, albums, labels, keys, colors, playlistTree, playlistEntries }
+public enum PDBPage: UInt32 { case tracks = 0, genres, artists, albums, labels, keys, colors, playlistTree, playlistEntries, artwork = 13 }
 
 struct Bytes {
     let b: [UInt8]
@@ -154,6 +162,7 @@ public enum PDB {
         let genres = named(.genres, 0) { string(d, $0 + 4) }
         let keys = named(.keys, 0) { string(d, $0 + 8) }
         let labels = named(.labels, 0) { string(d, $0 + 4) }
+        let artwork = named(.artwork, 0) { string(d, $0 + 4) }         // id, then the file's path on the stick
         var tracks = [PDBTrack]()
         rows(d, PDBPage.tracks.rawValue) { o in
             guard o + 94 + 2 * 21 <= d.count else { return }
@@ -163,7 +172,8 @@ public enum PDB {
                 genre: genres[d.u32(o + 60)] ?? "", label: labels[d.u32(o + 40)] ?? "", key: keys[d.u32(o + 32)] ?? "",
                 bpm: Double(d.u32(o + 56)) / 100, duration: Int(d.u16(o + 84)), size: d.u32(o + 16), sampleRate: d.u32(o + 8),
                 rating: Int(d.u8(o + 89)), color: Int(d.u8(o + 88)),
-                path: str(20), filename: str(19), anlzPath: str(14), comment: str(16), dateAdded: str(10)))
+                path: str(20), filename: str(19), anlzPath: str(14), comment: str(16), dateAdded: str(10),
+                artwork: artwork[d.u32(o + 28)].flatMap { $0.isEmpty ? nil : $0 }))
         }
         var tree = [PDBPlaylist]()
         rows(d, PDBPage.playlistTree.rawValue) { o in
