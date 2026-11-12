@@ -78,7 +78,7 @@ struct MixerView: View {
         HStack(spacing: 6) {
             VStack(spacing: 0) {
                 Knob(label: "", value: core.mixer.headMix, size: 20, center: 0) { core.mixer.headMix = $0 }
-                Text("CUE/MST").font(.system(size: 6.5, weight: .bold)).foregroundStyle(Theme.muted)
+                Text("CUE/MST").font(.system(size: 6.5, weight: .bold)).foregroundStyle(Theme.muted).fixedSize()   // wider than the knob: never "CU…"
             }
             Button { core.toggleMasterCue() } label: {
                 Text("MST").font(.system(size: 10, weight: .bold)).fixedSize().padding(.horizontal, 6).frame(height: 24).foregroundStyle(core.mixer.masterCue ? Color.black : Theme.fg)
@@ -87,13 +87,19 @@ struct MixerView: View {
             if app.midi.hasAction("master") || app.controllerName.isEmpty {
                 VStack(spacing: 0) {
                     Knob(label: "", value: core.mixer.master, size: 20, center: 0.8) { core.mixer.master = $0 }
-                    Text("MASTER").font(.system(size: 6.5, weight: .bold)).foregroundStyle(Theme.muted)
+                    Text("MASTER").font(.system(size: 6.5, weight: .bold)).foregroundStyle(Theme.muted).fixedSize()
                 }
             } else {
                 // the controller's MASTER LEVEL works in its own hardware (it sends nothing), so it's the master
                 Button { core.mixer.master = 0.8; app.status("Master volume: the MASTER LEVEL knob on the \(app.controllerName). Cratebox's own master stays at its default level.", 6) } label: {
-                    Text("MASTER\nON \(app.controllerName.contains("FLX4") ? "FLX4" : "CTRL")").font(.system(size: 7, weight: .bold)).multilineTextAlignment(.center).foregroundStyle(Theme.muted)
-                        .padding(.horizontal, 5).frame(height: 26).background(RoundedRectangle(cornerRadius: 4).stroke(Theme.line2))
+                    // one line at its own width: as two lines it got squeezed to a letter per line ("M A T E")
+                    HStack(spacing: 3) {
+                        Image(systemName: "speaker.wave.2.fill").font(.system(size: 8))
+                        Text(app.controllerName.contains("FLX4") ? "FLX4" : "CTRL").font(.system(size: 9, weight: .bold))
+                    }
+                    .foregroundStyle(Theme.muted).fixedSize()
+                    .padding(.horizontal, 6).frame(height: 24).background(Capsule().stroke(Theme.line2))
+                    .accessibilityLabel("Master volume is on the \(app.controllerName)")
                 }.buttonStyle(.plain)
             }
             eqButton

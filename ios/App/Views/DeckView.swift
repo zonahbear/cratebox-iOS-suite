@@ -330,11 +330,13 @@ struct PhoneLane: View {
     }
     var full: some View {
         // the cover (as tall as the lane, so square) left of the readouts and the waveform: it takes its width
-        // from the waveform. Higher priority so the stack sizes it first, from the lane's height.
+        // from the waveform. Higher priority so the stack sizes it first, from the lane's height. The square is
+        // worked out outside the 160 pt cap: capped outside, the frame took 160 pt and centred a smaller cover in
+        // it, leaving black on both sides (build 54.1).
         HStack(spacing: 4) {
             if let t = libTrack {
                 ArtworkView(track: t, size: .deck)
-                    .aspectRatio(1, contentMode: .fit).frame(maxWidth: 160).layoutPriority(1)
+                    .frame(maxWidth: 160).aspectRatio(1, contentMode: .fit).layoutPriority(1)
             }
             // the readouts get their own row above the waveform, so nothing covers it
             VStack(spacing: 1) {
@@ -354,7 +356,9 @@ struct PhoneLane: View {
                             Text(badge).font(.system(size: 9, weight: .heavy)).foregroundStyle(Color.black)
                                 .padding(.horizontal, 4).frame(height: 14).background(Capsule().fill(color))
                         }
+                        // the title gives way first (it truncates), so the readouts on the right never get squeezed
                         Text(deck.track.map { "\($0.title) · \($0.artist)" } ?? (deck.loading ? "Loading…" : "Empty")).font(.system(size: 11, weight: .semibold)).lineLimit(1)
+                            .layoutPriority(-1)
                         Spacer(minLength: 4)
                         if deck.loaded {
                             if let c = Keys.camelot(deck.keyNow()) { Text(c.label).font(.system(size: 11, weight: .bold, design: .monospaced)).foregroundStyle(Theme.keyColor(c.num, c.letter)) }
@@ -370,7 +374,8 @@ struct PhoneLane: View {
                             // the beat counter, bar.beat like the web app's: 1.1 1.2 1.3 1.4 2.1 …
                             Text(deck.barBeat()).font(.system(size: 12, weight: .heavy, design: .monospaced)).foregroundStyle(color).lineLimit(1).fixedSize()
                                 .accessibilityLabel("Bar and beat \(deck.barBeat())")
-                            Text("-" + clock(deck.duration - deck.now())).font(.system(size: 11, design: .monospaced))
+                            // one line, full width: squeezed, it wrapped inside the 16 pt row and the two lines drew over each other
+                            Text("-" + clock(deck.duration - deck.now())).font(.system(size: 11, design: .monospaced)).lineLimit(1).fixedSize()
                         }
                     }
                     .padding(.horizontal, 2)

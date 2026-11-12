@@ -27,6 +27,7 @@ struct LibraryPane: View {
     @State private var exported: URL?
     @State private var askBase = false
     @State private var basePath = ""
+    @ObservedObject private var usbCopy = UsbCopy.shared
 
     // ---- what the list shows ----
     var viewKey: String { LibraryPane.key(app.view) }
@@ -179,11 +180,33 @@ struct LibraryPane: View {
                 .accessibilityLabel("Clear: \(f.summary)")
             }
             Spacer()
+            if let d = shownDevice {
+                Button { UsbCopy.shared.copy(rows.compactMap { $0.t }, from: d, app: app, playlist: shownPlaylistName) } label: {
+                    Label("Copy", systemImage: "square.and.arrow.down").labelStyle(.titleAndIcon)
+                }.font(.system(size: 12)).buttonStyle(.bordered).disabled(usbCopy.busy != nil)
+                .accessibilityHint("Copies the tracks listed here from the USB to this device")
+            }
+            if !usbCopy.progress.isEmpty {
+                Text(usbCopy.progress).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1)
+                Button("Stop") { UsbCopy.shared.cancel() }.font(.system(size: 11))
+            }
             if !library.progress.isEmpty { Text(library.progress).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1) }
             if editable { EditButton().font(.system(size: 12)) }
         }.padding(6).environment(\.editMode, $editMode)
         .onAppear { canAsk = aiMode && SmartSearch.available }
         .onChange(of: aiMode) { _, on in canAsk = on && SmartSearch.available; if !on { smart = nil } }
+    }
+    /// the stick the list shows (all of it, or one of its playlists): the toolbar's Copy to device copies what's listed
+    var shownDevice: Device? {
+        switch app.view {
+        case .device(let d), .devicePlaylist(let d, _): return devices.list.first { $0.id == d }
+        default: return nil
+        }
+    }
+    /// a whole stick playlist on screen (no search): its copy also becomes one of your playlists
+    var shownPlaylistName: String? {
+        guard case .devicePlaylist(let d, let id) = app.view, query.isEmpty, smart == nil else { return nil }
+        return devices.list.first { $0.id == d }?.tree.first { $0.id == id }?.name
     }
     /// The search box's words → a filter, by Apple's on-device model. "What's playing" is the newest playing deck,
     /// at the tempo it plays at now.
@@ -290,7 +313,12 @@ struct LibraryPane: View {
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { if let t { app.load(t, deck: core.decks.firstIndex { core.deckActive($0.i) && !$0.playing } ?? 0) } }
         .onTapGesture { app.selection = t?.id }
-        .contextMenu { if let t { addToMenu([t]) } }
+        .contextMenu {
+            if let t {
+                addToMenu([t])
+                if let d = devices.device(of: t) { Button("Copy to this device") { UsbCopy.shared.copy([t], from: d, app: app) } }
+            }
+        }
     }
     var refKey: Int {
         let p = core.decks.filter { $0.playing && $0.loaded }.sorted { $0.startedAt > $1.startedAt }
@@ -394,6 +422,8 @@ struct LibraryPane: View {
             Text(d.name + (d.saving ? " · saving…" : d.unsaved ? " · not saved" : "")).lineLimit(1)
             Spacer()
             Text("\(d.byRbId.count)").font(Theme.mono).foregroundStyle(Theme.dim)
+            Button { UsbCopy.shared.sync(d, app: app) } label: { Image(systemName: "arrow.triangle.2.circlepath").font(.system(size: 12)) }
+                .buttonStyle(.borderless).disabled(usbCopy.busy != nil).accessibilityLabel("Sync \(d.name) to this device")
             Button { devices.eject(d) } label: { Image(systemName: "eject.fill").font(.system(size: 12)) }.buttonStyle(.borderless)
         }
         .font(.system(size: 12)).contentShape(Rectangle()).onTapGesture { app.view = .device(d.id) }
@@ -404,6 +434,8 @@ struct LibraryPane: View {
                 Button("New folder on \(d.name)") { let id = devices.newNode("Folder", folder: true, in: d); renaming = "dev:\(d.id):\(id)"; renameText = "Folder" }
                 if d.unsaved && !d.saving { Button("Try saving again") { devices.write(d) } }
             }
+            Button("Sync to this device (copy what's new)") { UsbCopy.shared.sync(d, app: app) }
+            Button("Copy all to this device") { UsbCopy.shared.copy(Array(d.byRbId.values), from: d, app: app) }
             Button("Name it in Cratebox…") { renaming = "devname:\(d.id)"; renameText = d.name }
             Button("Eject", role: .destructive) { devices.eject(d) }
         }
@@ -438,6 +470,7 @@ struct LibraryPane: View {
     /// everything you can do to a rekordbox playlist or folder on a stick (editing: Settings, behind the disclaimer)
     @ViewBuilder func devNodeMenu(_ n: PDBPlaylist, _ d: Device) -> some View {
         if !n.folder { Button("Copy to my playlists") { copy(n, d) } }
+        Button(n.folder ? "Copy its tracks to this device" : "Copy to this device (with the playlist)") { UsbCopy.shared.copyPlaylist(n, from: d, app: app) }
         if devices.editable {
             Button("Rename") { renaming = "dev:\(d.id):\(n.id)"; renameText = n.name }
             if n.folder {

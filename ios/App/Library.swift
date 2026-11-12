@@ -77,6 +77,8 @@ final class Library: ObservableObject {
     func url(of folder: MusicFolder) -> URL? {
         if offline[folder.id] != nil { return nil }
         if let u = open[folder.id] { return u }
+        // the copies from USB sticks live in the app's own Documents, whose path can change with an app update
+        if folder.id == UsbCopy.folderId { let u = UsbCopy.root; open[folder.id] = u; return u }
         var stale = false
         guard let u = try? URL(resolvingBookmarkData: folder.bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
         _ = u.startAccessingSecurityScopedResource()
@@ -185,6 +187,25 @@ final class Library: ObservableObject {
     func fileURL(_ t: LibTrack) -> URL? {
         guard let f = folders.first(where: { $0.id == t.rec.folder }), let root = url(of: f) else { return nil }
         return root.appendingPathComponent(t.rec.rel)
+    }
+    /// every track on this device (not on a stick) by "file name|size": a stick track with the same name and size is
+    /// already here, so a USB copy skips it (and a copied playlist uses the one that's here)
+    func twins() -> [String: LibTrack] {
+        Dictionary(tracks.filter { $0.device == nil }.map { (Library.twinKey(($0.rec.rel as NSString).lastPathComponent, $0.rec.size), $0) }, uniquingKeysWith: { a, _ in a })
+    }
+    static func twinKey(_ name: String, _ size: Int64) -> String { "\(name.lowercased())|\(size)" }
+    /// tracks UsbCopy just copied into one of the library's folders: they join straight away with rekordbox's title,
+    /// artist, grid and key (no rescan, no second analysis); ones without rekordbox's grid go to the analysis queue
+    func addCopied(_ recs: [TrackRecord]) -> [LibTrack] {
+        var out = [LibTrack]()
+        for r in recs {
+            if let t = byId[r.id] { out.append(t); continue }
+            let t = LibTrack(r)
+            tracks.append(t); byId[r.id] = t; out.append(t)
+            if !t.analysed { queue.append(t) }
+        }
+        save(); runQueue()
+        return out
     }
     /// tracks on a rekordbox stick join the library while it's open
     func setDeviceTracks(_ dev: String, _ list: [LibTrack]) {

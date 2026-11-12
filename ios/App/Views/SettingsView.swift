@@ -1,9 +1,10 @@
 import SwiftUI
 import CrateboxKit
 
-/// Settings, in tabs: a strip of icon tabs across the top (with Done), one short page per tab underneath. Was one long
-/// page. The strip fits the smallest screen the app gets, an iPhone SE at Display Zoom (568 × 320 pt, docs/device-sizes.md):
-/// seven 44 pt tall tabs and Done in one row, the page gets the rest. Narrower than that, the strip scrolls sideways.
+/// Settings, in tabs: a rail of icon tabs down the left edge, filling it top to bottom, and one short page per tab beside
+/// it under a title bar with Done. Was one long page, then a strip across the top. Sized for the smallest screen the app
+/// gets, an iPhone SE at Display Zoom (568 × 320 pt, safe area 0 / 0 / 0, docs/device-sizes.md): seven tabs share the
+/// 320 pt height, 45.7 pt each, above Apple's 44 pt minimum. Shorter than 7 × 44 pt (no listed device is), the rail scrolls.
 /// Same grouping idea as the Linux app's SETTINGS_TABS. The open tab is remembered (`cb.settingsTab`, also a CI launch
 /// argument: `-settings -cb.settingsTab ai` opens Settings on AI mode).
 enum SettingsTab: String, CaseIterable, Identifiable {
@@ -54,6 +55,7 @@ struct SettingsView: View {
     @AppStorage(AppleGridMode.key) var appleGrid = 0
     @ObservedObject var apple = AppleMusic.shared
     @State private var warn = false
+    @ObservedObject var usbCopy = UsbCopy.shared
 
     var tab: SettingsTab { SettingsTab(rawValue: tabRaw) ?? .sound }
 
@@ -63,13 +65,17 @@ struct SettingsView: View {
     var body: some View {
         let t = tab       // read here, in body, not only inside a closure (Xcode 27 redraws, AGENTS.md)
         NavigationStack {
-            VStack(spacing: 0) {
-                tabStrip(t)
+            HStack(spacing: 0) {
+                tabRail(t)
                 Divider()
-                Form { page(t) }
-                    .id(t)        // each tab opens at its top
+                VStack(spacing: 0) {
+                    titleBar(t)
+                    Divider()
+                    Form { page(t) }
+                        .id(t)        // each tab opens at its top
+                }
             }
-            .toolbar(.hidden, for: .navigationBar)      // the strip is the header; MIDI learn and Compare still get a back bar
+            .toolbar(.hidden, for: .navigationBar)      // the rail and title bar are the header; MIDI learn and Compare still get a back bar
             .alert("Edit playlists on rekordbox USB sticks?", isPresented: $warn) {
                 Button("Cancel", role: .cancel) {}
                 Button("I understand, turn it on", role: .destructive) { devices.editable = true }
@@ -80,43 +86,50 @@ struct SettingsView: View {
         .frame(maxWidth: ScreenOverride.size?.width, maxHeight: ScreenOverride.size?.height)
     }
 
-    // MARK: tab strip
+    // MARK: tab rail
 
-    func tabStrip(_ current: SettingsTab) -> some View {
-        HStack(spacing: 4) {
-            ViewThatFits(in: .horizontal) {
-                tabs(current)
-                ScrollView(.horizontal, showsIndicators: false) { tabs(current) }
+    /// the tabs down the left edge, each an equal share of the height (never under 44 pt)
+    func tabRail(_ current: SettingsTab) -> some View {
+        GeometryReader { g in
+            let n = CGFloat(SettingsTab.allCases.count)
+            let h = max(44, g.size.height / n)
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    ForEach(SettingsTab.allCases) { k in tabButton(k, on: k == current).frame(height: h) }
+                }
             }
+            .scrollDisabled(h * n <= g.size.height + 0.5)
+        }
+        .frame(width: 88)
+    }
+
+    func tabButton(_ k: SettingsTab, on: Bool) -> some View {
+        Button { tabRaw = k.rawValue } label: {
+            VStack(spacing: 3) {
+                Image(systemName: k.icon).font(.system(size: 20, weight: .medium)).frame(height: 24)
+                Text(k.title).font(.system(size: 11, weight: on ? .bold : .medium)).lineLimit(1).minimumScaleFactor(0.8)
+            }
+            .foregroundStyle(on ? Theme.accent : Theme.muted)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(on ? Theme.raise : Color.clear).padding(3))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(k.title)
+        .accessibilityAddTraits(on ? .isSelected : [])
+    }
+
+    /// the open tab's name and Done, over its page
+    func titleBar(_ current: SettingsTab) -> some View {
+        HStack(spacing: 4) {
+            Text(current.title).font(.system(size: 17, weight: .bold)).lineLimit(1)
             Spacer(minLength: 0)
             Button("Done") { dismiss() }
                 .font(.system(size: 16, weight: .semibold))
                 .frame(minWidth: 52, minHeight: 44)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 2)
-    }
-
-    func tabs(_ current: SettingsTab) -> some View {
-        HStack(spacing: 2) {
-            ForEach(SettingsTab.allCases) { k in
-                let on = k == current
-                Button { tabRaw = k.rawValue } label: {
-                    VStack(spacing: 2) {
-                        Image(systemName: k.icon).font(.system(size: 16, weight: .medium)).frame(height: 20)
-                        Text(k.title).font(.system(size: 10, weight: on ? .bold : .regular)).lineLimit(1).fixedSize()
-                    }
-                    .foregroundStyle(on ? Theme.accent : Theme.muted)
-                    .padding(.horizontal, 8)
-                    .frame(minWidth: 52, minHeight: 44)          // Apple's 44 pt minimum tap target
-                    .background(RoundedRectangle(cornerRadius: 8).fill(on ? Theme.raise : Color.clear))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(k.title)
-                .accessibilityAddTraits(on ? .isSelected : [])
-            }
-        }
+        .padding(.leading, 14)
+        .padding(.trailing, 8)
     }
 
     // MARK: pages
@@ -251,6 +264,28 @@ struct SettingsView: View {
     }
 
     @ViewBuilder var usb: some View {
+        Section {
+            if devices.list.isEmpty {
+                Text("Plug in a rekordbox USB and open it (Library → DEVICES → + USB) to copy its tracks here.").font(.caption).foregroundStyle(Theme.muted)
+            }
+            ForEach(devices.list) { d in
+                let missing = usbCopy.busy == nil ? UsbCopy.shared.missing(d, in: app.library).count : 0
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(d.name)
+                        Text(usbCopy.busy != nil ? "…" : missing == 0 ? "Everything's on this device" : "\(missing) track\(missing == 1 ? "" : "s") not on this device yet")
+                            .font(.caption).foregroundStyle(Theme.muted)
+                    }
+                    Spacer()
+                    Button("Sync") { UsbCopy.shared.sync(d, app: app) }.buttonStyle(.borderedProminent).disabled(usbCopy.busy != nil || missing == 0)
+                }
+            }
+            if !usbCopy.progress.isEmpty {
+                HStack { Text(usbCopy.progress).font(.caption); Spacer(); Button("Stop") { UsbCopy.shared.cancel() } }
+            }
+        } header: { Text("Copy to this device") } footer: {
+            Text("Sync copies the stick's tracks that aren't here yet, with rekordbox's grid and key, so they play without the stick. A track already in your library (same file name and size) is never copied twice. Nothing is deleted, here or on the stick. To copy one playlist or a few tracks: long-press it in the library, or open it and press Copy.")
+        }
         Section {
             Toggle("Editable (writes to the stick)", isOn: Binding(get: { devices.editable }, set: { v in if v { warn = true } else { devices.editable = false } }))
         } header: { Text("rekordbox USB playlists") } footer: { Text("Off: sticks are read-only. On: playlist changes are written into the stick's export.pdb.") }
