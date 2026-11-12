@@ -64,6 +64,7 @@ struct SettingsView: View {
     @AppStorage(AppleGridMode.key) var gridOrder = 0
     @ObservedObject var apple = AppleMusic.shared
     @State private var warn = false
+    @State private var confirmClear = false
     @ObservedObject var usbCopy = UsbCopy.shared
 
     var tab: SettingsTab { SettingsTab(stored: tabRaw) }
@@ -322,7 +323,11 @@ struct SettingsView: View {
                 .font(.caption).foregroundStyle(Theme.muted)
             if aiMode && AppleMusic.unavailableReason == nil {
                 NavigationLink("Compare with the grids…") { AppleCompareView() }
-                Button("Analyse everything again", role: .destructive) { apple.clear() }
+                Button("Analyse everything again", role: .destructive) { confirmClear = true }
+                    .confirmationDialog("Throw away Apple's analysis of all \(apple.analysed) tracks?", isPresented: $confirmClear, titleVisibility: .visible) {
+                        Button("Delete and analyse again", role: .destructive) { apple.clear() }
+                        Button("Cancel", role: .cancel) {}
+                    } message: { Text("There's no copy: every track is analysed again from scratch, only while nothing plays. Your grids, rekordbox's and Cratebox's aren't touched.") }
             }
         } header: { Text("Beat grids") } footer: {
             Text("Used from a track's next load, for playing and for AI DJ's mix points. A grid you fix here (TAP · GRID) always wins; so does a CUE you set, as AI DJ's mix-in point. rekordbox doesn't say which of its grids were fixed by hand, so they count as rekordbox's: nudge one here once to make it yours. Apple's half-time counts are doubled to match.")
