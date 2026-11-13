@@ -37,7 +37,7 @@ final class UsbCopy: ObservableObject {
 
     /// Copies `tracks` (all from stick `d`) to the device. `playlist`: also make a playlist of that name in your own
     /// playlists, in the stick's order, from the copies (or the copy that was already here).
-    func copy(_ tracks: [LibTrack], from d: Device, app: AppModel, playlist: String? = nil) {
+    func copy(_ tracks: [LibTrack], from d: Device, app: AppModel, playlist: String? = nil, mirror: Bool = false) {
         if let b = busy { app.status(b == d.id ? "Already copying from \(d.name)" : "Copying from another USB; one at a time", 5); return }
         let lib = app.library
         let folder = localFolder(lib)
@@ -110,7 +110,8 @@ final class UsbCopy: ObservableObject {
                 var copied = [String: LibTrack]()
                 for t in added { copied[Library.twinKey((t.rec.rel as NSString).lastPathComponent, t.rec.size)] = t }
                 if let playlist { self.makePlaylist(playlist, order, already, copied, app) }
-self.busy = nil; self.progress = ""
+                if mirror { self.mirrorPlaylists(d, app: app) }
+                self.busy = nil; self.progress = ""
                 if bg != .invalid { UIApplication.shared.endBackgroundTask(bg); bg = .invalid }
                 var msg = "\(stopped ? "Stopped: copied" : "Copied") \(added.count) track\(added.count == 1 ? "" : "s") from \(name) to this device"
                 if !already.isEmpty { msg += ", \(already.count) already here" }
@@ -123,8 +124,38 @@ self.busy = nil; self.progress = ""
     /// Sync: copy everything on the stick that isn't on the device yet
     func sync(_ d: Device, app: AppModel) {
         let m = missing(d, in: app.library)
-        if m.isEmpty { app.status("\(d.name): everything's already on this device", 5); return }
-        copy(m, from: d, app: app)
+        if m.isEmpty {
+            let n = mirrorPlaylists(d, app: app)
+            app.status("\(d.name): every track's already on this device; \(n) playlist\(n == 1 ? "" : "s") brought up to date", 6)
+            return
+        }
+        copy(m, from: d, app: app, mirror: true)
+    }
+
+    /// The stick's rekordbox playlists (and their folders) in your playlists, under a folder named after the stick,
+    /// made of the copies on this device. Run again, it adds what's new to each and never removes anything.
+    @discardableResult func mirrorPlaylists(_ d: Device, app: AppModel) -> Int {
+        let have = Self.liveTwins(app.library), pl = app.playlists
+        let top = pl.lists.first { $0.folder && $0.parent == nil && $0.name == d.name } ?? pl.new(d.name, folder: true)
+        var made = 0
+        func walk(_ parent: UInt32, _ into: String) {
+            for n in d.tree.filter({ $0.parent == parent }).sorted(by: { $0.sort < $1.sort }) {
+                let mine = pl.lists.first { $0.parent == into && $0.name == n.name && $0.folder == n.folder }
+                    ?? pl.new(n.name, folder: n.folder, parent: into)
+                if n.folder { walk(n.id, mine.id); continue }
+                let tracks = Devices.shared.tracks(of: n, in: d).compactMap { t -> LibTrack? in
+                    guard let r = t.rb else { return nil }
+                    return have[Library.twinKey(r.filename.isEmpty ? (r.path as NSString).lastPathComponent : r.filename, Int64(r.size))]
+                }
+                let cur = Set(pl.get(mine.id)?.items ?? [])
+                var seen = Set<String>()
+                let add = tracks.filter { !cur.contains($0.id) && seen.insert($0.id).inserted }
+                if !add.isEmpty { pl.add(add, to: mine.id) }
+                made += 1
+            }
+        }
+        walk(0, top.id)
+        return made
     }
 
     /// a playlist (or every playlist under a folder): copy its tracks, then make it in your playlists from the copies

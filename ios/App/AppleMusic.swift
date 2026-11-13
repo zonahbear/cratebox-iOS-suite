@@ -177,6 +177,9 @@ final class AppleMusic: ObservableObject {
     /// iOS 26+: the continued-processing task that lets a run carry on after you leave the app (Any: it's iOS 26 only)
     private var bgTask: AnyObject?
     private var bgTotal = 0, bgDone = 0
+    /// asked-for tracks whose file isn't there right now (a stick not plugged in, copies deleted): skipped, not
+    /// failed, and looked for again when the library changes
+    private var missingNow = Set<String>()
     private var subs = Set<AnyCancellable>()
     private var deadFolder = [String: Double]()   // music folders found unreachable, and when
     private var saveWork: DispatchWorkItem?
@@ -198,7 +201,7 @@ final class AppleMusic: ObservableObject {
         Suggest.app = app
         // new folders, a stick plugged in: look for tracks to analyse a few seconds after the list settles
         app.library.$tracks.sink { [weak self] _ in self?.twinStale = true }.store(in: &subs)
-        app.library.$tracks.debounce(for: .seconds(4), scheduler: RunLoop.main).sink { [weak self] _ in self?.kick(); self?.adoptGrids() }.store(in: &subs)
+        app.library.$tracks.debounce(for: .seconds(4), scheduler: RunLoop.main).sink { [weak self] _ in self?.missingNow = []; self?.kick(); self?.adoptGrids() }.store(in: &subs)
         NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification).sink { [weak self] _ in self?.wentBackground() }.store(in: &subs)
         NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification).sink { [weak self] _ in self?.cameBack() }.store(in: &subs)
         registerBackground()
@@ -422,14 +425,23 @@ final class AppleMusic: ObservableObject {
         // missing drive can take seconds, and this runs on the main thread)
         let now = Date().timeIntervalSince1970
         var found: (LibTrack, URL)?
+        var rescan = false
         for t in todo {
+            if missingNow.contains(t.id) { continue }
             if t.device == nil, let since = deadFolder[t.rec.folder], now - since < 60 { continue }
-            if let u = url(of: t) { found = (t, u); break }
+            if let u = url(of: t) {
+                if FileManager.default.fileExists(atPath: u.path) { found = (t, u); break }
+                missingNow.insert(t.id)
+                if t.rec.folder == UsbCopy.folderId { rescan = true }
+                continue
+            }
             if t.device == nil { deadFolder[t.rec.folder] = now }
         }
+        // copies deleted in Files: look at the folder again, so they leave the library (Sync copies them back)
+        if rescan, let f = app.library.folders.first(where: { $0.id == UsbCopy.folderId }) { app.library.scan(f) }
         guard let next = found else {
             if bgTask != nil { backgroundStep(finishedRun: true) }
-            progress = todo.isEmpty ? "" : "\(todo.count) to do when their drives are connected"
+            progress = todo.isEmpty ? "" : "\(todo.count) waiting for their files (plug the USB in, or Sync to copy them back)"
             if !todo.isEmpty { later(60) }
             return
         }

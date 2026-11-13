@@ -56,6 +56,7 @@ final class SuiteState: ObservableObject {
 /// The selector: a cyan capsule with the mode's name (just its icon when `compact`), opening the three modes
 struct ModeSwitcher: View {
     @ObservedObject var suite = SuiteState.shared
+    @EnvironmentObject var app: AppModel
     var compact = false
     var body: some View {
         Menu {
@@ -63,6 +64,11 @@ struct ModeSwitcher: View {
                 Button { withAnimation(.easeInOut(duration: 0.18)) { suite.mode = m } } label: {
                     Label { Text(m.title) } icon: { Image(systemName: m == suite.mode ? "checkmark" : m.icon) }
                 }
+            }
+            Divider()
+            // straight to the library from any mode (it lives in Performance Mode: LIBRARY on a phone)
+            Button { withAnimation(.easeInOut(duration: 0.18)) { app.hideBrowser(); app.tab = 1; suite.mode = .performance } } label: {
+                Label("Library", systemImage: "music.note.list")
             }
         } label: {
             HStack(spacing: 5) {

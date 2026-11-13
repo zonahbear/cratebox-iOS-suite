@@ -110,6 +110,7 @@ final class AppModel: ObservableObject, ControlTarget {
         Devices.shared.restore()
         DriveWatch.shared.app = self
         DriveWatch.shared.start()
+        CrashLog.shared.start()              // crash reports from iOS land in Files → Cratebox → Crash reports
         AppleMusic.shared.attach(self)       // AI mode: Apple's Music Understanding in the background (iOS 27, off by default)
         restoreBrowse()
         if CommandLine.arguments.contains("-demo") { demo() }

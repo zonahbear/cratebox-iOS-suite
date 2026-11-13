@@ -160,7 +160,8 @@ struct LibraryPane: View {
 
     var toolbar: some View {
         HStack(spacing: 6) {
-            Button { showSidebar.toggle() } label: { Image(systemName: "sidebar.left") }.buttonStyle(.plain)
+            Button { showSidebar.toggle() } label: { Image(systemName: "sidebar.left").frame(width: 32, height: 30).contentShape(Rectangle()) }.buttonStyle(.plain)
+                .accessibilityLabel(showSidebar ? "Hide playlists" : "Show playlists")
             Text(title).font(.system(size: 13, weight: .bold)).lineLimit(1)
                 .padding(.horizontal, 4).background(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(app.browseFocusTree ? Theme.loop : .clear, lineWidth: 1.5))
             TextField(canAsk ? "Search, or ask: 124–128 in 8A ✨" : "Search title, artist or key (8A)", text: $query)
@@ -444,7 +445,7 @@ struct LibraryPane: View {
             }
             Button("Sync to this device (copy what's new)") { UsbCopy.shared.sync(d, app: app) }
             Button("Re-sync grids to this device") { UsbCopy.shared.regrid(d, app: app) }
-            Button("Copy all to this device") { UsbCopy.shared.copy(Array(d.byRbId.values), from: d, app: app) }
+            Button("Copy all to this device (with its playlists)") { UsbCopy.shared.copy(Array(d.byRbId.values), from: d, app: app, mirror: true) }
             analyseButton(Array(d.byRbId.values))
             Button("Name it in Cratebox…") { renaming = "devname:\(d.id)"; renameText = d.name }
             Button("Eject", role: .destructive) { devices.eject(d) }

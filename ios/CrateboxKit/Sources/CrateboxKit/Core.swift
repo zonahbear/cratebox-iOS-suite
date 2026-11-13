@@ -731,7 +731,10 @@ public final class Core: ObservableObject {
     public private(set) var lastSnapshot = EngineSnapshot()
 
     // ---- mixer controls (the controller and the screen both come here) ----
+    /// a mixer control moved by you (screen or controller), not by AI DJ: AI DJ hands that control over to you
+    public var onUserMixer: ((String, Int) -> Void)?
     public func setMixer(_ name: String, _ deck: Int, _ v: Double) {
+        onUserMixer?(name, deck)
         switch name {
         case "fader": mixer.fader[deck] = v
         case "trim": mixer.trim[deck] = v

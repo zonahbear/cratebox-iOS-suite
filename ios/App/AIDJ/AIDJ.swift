@@ -93,6 +93,28 @@ final class AIDJ: ObservableObject {
         selected = u.stringArray(forKey: "cb.aidj.selected") ?? []
         keepOrder = u.bool(forKey: "cb.aidj.order")
         flow = u.object(forKey: "cb.aidj.flow") == nil ? 0 : u.integer(forKey: "cb.aidj.flow")
+        app.core.onUserMixer = { [weak self] n, i in self?.userMoved(n, i) }
+    }
+
+    // ---- hybrid (Jonah, 2026-11-13): your hands win ----
+    /// controls you've moved during this transition ("fader/1", "low/0", …): AI DJ stops moving them until it ends
+    private var held = Set<String>()
+    private func userMoved(_ n: String, _ i: Int) {
+        guard phase == .mixing, ["fader", "low", "mid", "hi", "cfx"].contains(n), i == onAir || i == nextDeck else { return }
+        if held.insert("\(n)/\(i)").inserted {
+            say("Deck \(i + 1) \(n == "fader" ? "fader" : n.uppercased()): yours until this mix ends")
+        }
+    }
+    private func put(_ m: inout MixerState, _ n: String, _ i: Int, _ v: Double) {
+        guard !held.contains("\(n)/\(i)") else { return }
+        switch n {
+        case "fader": m.fader[i] = v
+        case "low": m.low[i] = v
+        case "mid": m.mid[i] = v
+        case "hi": m.hi[i] = v
+        case "cfx": m.cfx[i] = v
+        default: break
+        }
     }
 
     private var core: Core { app.core }
@@ -485,11 +507,12 @@ final class AIDJ: ObservableObject {
         let l = p.kind.levels(atBar: x, of: p.bars)
         if l != lastLevels {
             var m = core.mixer
-            m.fader[A.i] = l.outFader; m.low[A.i] = l.outLow
-            m.fader[B.i] = l.inFader; m.low[B.i] = l.inLow
+            put(&m, "fader", A.i, l.outFader); put(&m, "low", A.i, l.outLow)
+            put(&m, "fader", B.i, l.inFader); put(&m, "low", B.i, l.inLow)
             switch p.kind {
-            case .eqHandoff: m.mid[A.i] = l.outMid; m.hi[A.i] = l.outHi; m.mid[B.i] = l.inMid; m.hi[B.i] = l.inHi
-            case .colorSweep: m.cfx[A.i] = l.outCfx; m.cfx[B.i] = l.inCfx
+            case .eqHandoff:
+                put(&m, "mid", A.i, l.outMid); put(&m, "hi", A.i, l.outHi); put(&m, "mid", B.i, l.inMid); put(&m, "hi", B.i, l.inHi)
+            case .colorSweep: put(&m, "cfx", A.i, l.outCfx); put(&m, "cfx", B.i, l.inCfx)
             case .bassSwap, .cut: break
             }
             core.mixer = m                                 // one engine message for all of them
@@ -507,9 +530,11 @@ final class AIDJ: ObservableObject {
         guard let p = plan else { return }
         var m = core.mixer
         m.fader[A.i] = 0
-        m.fader[B.i] = 1
-        for i in [A.i, B.i] { m.low[i] = 0.5; m.mid[i] = 0.5; m.hi[i] = 0.5; m.cfx[i] = 0.5 }
+        put(&m, "fader", B.i, 1)
+        m.low[A.i] = 0.5; m.mid[A.i] = 0.5; m.hi[A.i] = 0.5; m.cfx[A.i] = 0.5
+        for n in ["low", "mid", "hi", "cfx"] { put(&m, n, B.i, 0.5) }       // what you set on the new track stays
         core.mixer = m
+        held = []
         endBridge()
         if A.playing { A.setPlaying(false) }
         A.setPitch(0)

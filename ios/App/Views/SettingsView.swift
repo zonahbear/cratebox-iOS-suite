@@ -158,6 +158,12 @@ struct SettingsView: View {
             grids
             AnalysisProblems(library: app.library)
             usb
+            if let d = CrashLog.latest {
+                Section("Crash reports") {
+                    Text("Cratebox crashed \(d.formatted(date: .abbreviated, time: .shortened)). The report is in Files → On My iPhone → Cratebox → Crash reports: send it along with what you were doing.")
+                        .font(.caption)
+                }
+            }
         case .ai: ai
         }
     }
@@ -296,7 +302,7 @@ struct SettingsView: View {
                             .font(.caption).foregroundStyle(Theme.muted)
                     }
                     Spacer()
-                    Button("Sync") { UsbCopy.shared.sync(d, app: app) }.buttonStyle(.borderedProminent).disabled(usbCopy.busy != nil || missing == 0)
+                    Button("Sync") { UsbCopy.shared.sync(d, app: app) }.buttonStyle(.borderedProminent).disabled(usbCopy.busy != nil)
                 }
                 Button("Re-sync grids from \(d.name)") { UsbCopy.shared.regrid(d, app: app) }.disabled(usbCopy.busy != nil)
             }
@@ -304,7 +310,7 @@ struct SettingsView: View {
                 HStack { Text(usbCopy.progress).font(.caption); Spacer(); Button("Stop") { UsbCopy.shared.cancel() } }
             }
         } header: { Text("Copy to this device") } footer: {
-            Text("Sync copies the stick's tracks that aren't here yet, with rekordbox's grid and key, so they play without the stick. A track already in your library (same file name and size) is never copied twice. Nothing is deleted, here or on the stick. Re-sync grids puts rekordbox's grid, key and phrases back on every track here that's also on the stick (same file name and size), except grids you fixed yourself. To copy one playlist or a few tracks: long-press it in the library, or open it and press Copy.")
+            Text("Sync copies the stick's tracks that aren't here yet, with rekordbox's grid and key, so they play without the stick, and makes the stick's rekordbox playlists in your playlists (in a folder named after the stick). A track already in your library (same file name and size) is never copied twice. Nothing is deleted, here or on the stick. Re-sync grids puts rekordbox's grid, key and phrases back on every track here that's also on the stick (same file name and size), except grids you fixed yourself. To copy one playlist or a few tracks: long-press it in the library, or open it and press Copy.")
         }
         Section {
             Toggle("Editable (writes to the stick)", isOn: Binding(get: { devices.editable }, set: { v in if v { warn = true } else { devices.editable = false } }))
@@ -357,6 +363,10 @@ struct SettingsView: View {
                     if !aiMode { Text("Turn on AI mode above to analyse.").font(.caption).foregroundStyle(Theme.muted) }
                     Toggle("Analyse while tracks play", isOn: Binding(get: { analyseWhilePlaying }, set: { analyseWhilePlaying = $0; apple.kick() }))
                     Button("Analyse the whole library on this device") { apple.request(app.library.tracks.filter { $0.device == nil }) }.disabled(!aiMode)
+                    ForEach(devices.list) { d in
+                        Button("Analyse the USB \(d.name)") { apple.request(Array(d.byRbId.values)) }.disabled(!aiMode)
+                    }
+                    if devices.list.isEmpty { Text("Analyse USB: plug in and open a rekordbox USB first").font(.caption).foregroundStyle(Theme.muted) }
                     Menu("Analyse a playlist") {
                         ForEach(playlists.lists.filter { !$0.folder }) { p in
                             Button("\(playlists.path(p)) (\(p.items.count))") { apple.request(p.items.compactMap { app.library.track($0) }) }
