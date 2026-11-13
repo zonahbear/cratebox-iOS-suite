@@ -210,3 +210,28 @@ struct FaderCap: View {
             .overlay(RoundedRectangle(cornerRadius: 4, style: .continuous).stroke(Color.black.opacity(0.5), lineWidth: 0.5))
     }
 }
+
+/// The app's messages (app.status), floating over the top of the waveforms on a phone: the top bar only had room for
+/// a word of them (Jonah, 2026-11-13). Up to three lines; a tap puts it away
+struct StatusBubble: View {
+    @EnvironmentObject var app: AppModel
+    var body: some View {
+        let s = app.statusText
+        ZStack {
+            if !s.isEmpty {
+                Text(s).font(.system(size: 12, weight: .medium)).foregroundStyle(Theme.fg)
+                    .multilineTextAlignment(.center).lineLimit(3)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
+                    .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(Theme.raise.opacity(0.94)))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(Theme.line2, lineWidth: 1))
+                    .shadow(color: .black.opacity(0.5), radius: 6, y: 2)
+                    .frame(maxWidth: 520)
+                    .padding(.top, 4).padding(.horizontal, 12)
+                    .onTapGesture { app.status("", 0) }
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .accessibilityAddTraits(.updatesFrequently)
+            }
+        }
+        .animation(.easeOut(duration: 0.2), value: s)
+    }
+}

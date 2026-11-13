@@ -308,6 +308,8 @@ struct SettingsView: View {
             }
             if !usbCopy.progress.isEmpty {
                 HStack { Text(usbCopy.progress).font(.caption); Spacer(); Button("Stop") { UsbCopy.shared.cancel() } }
+            } else if !usbCopy.result.isEmpty {
+                Text(usbCopy.result).font(.caption).foregroundStyle(Theme.muted)        // what Sync / Re-sync just did
             }
         } header: { Text("Copy to this device") } footer: {
             Text("Sync copies the stick's tracks that aren't here yet, with rekordbox's grid and key, so they play without the stick, and makes the stick's rekordbox playlists in your playlists (in a folder named after the stick). A track already in your library (same file name and size) is never copied twice. Nothing is deleted, here or on the stick. Re-sync grids puts rekordbox's grid, key and phrases back on every track here that's also on the stick (same file name and size), except grids you fixed yourself. To copy one playlist or a few tracks: long-press it in the library, or open it and press Copy.")

@@ -13,6 +13,9 @@ final class UsbCopy: ObservableObject {
     /// the stick being copied from (eject waits for it), nil when idle
     @Published private(set) var busy: String?
     @Published private(set) var progress = ""
+    /// what the last copy / sync / re-sync said, kept for Settings (the top bar's message is hidden behind the sheet)
+    @Published private(set) var result = ""
+    private func say(_ app: AppModel, _ s: String, _ secs: Double) { result = s; app.status(s, secs) }
     private var cancelled = false
 
     /// where copies go: Documents/From USB/<stick name>/<the path on the stick>. One library folder holds every stick's copies.
@@ -38,10 +41,10 @@ final class UsbCopy: ObservableObject {
     /// Copies `tracks` (all from stick `d`) to the device. `playlist`: also make a playlist of that name in your own
     /// playlists, in the stick's order, from the copies (or the copy that was already here).
     func copy(_ tracks: [LibTrack], from d: Device, app: AppModel, playlist: String? = nil, mirror: Bool = false) {
-        if let b = busy { app.status(b == d.id ? "Already copying from \(d.name)" : "Copying from another USB; one at a time", 5); return }
+        if let b = busy { self.say(app, b == d.id ? "Already copying from \(d.name)" : "Copying from another USB; one at a time", 5); return }
         let lib = app.library
         let folder = localFolder(lib)
-        guard let folder, let dest = lib.url(of: folder) else { app.status("Couldn't make the From USB folder on this device", 7); return }
+        guard let folder, let dest = lib.url(of: folder) else { self.say(app, "Couldn't make the From USB folder on this device", 7); return }
         let have = Self.liveTwins(lib)
         let stick = Self.safe(d.name)
         var jobs = [Job](), already = [String: LibTrack](), order = [String]()
@@ -60,12 +63,12 @@ final class UsbCopy: ObservableObject {
         }
         if jobs.isEmpty {
             if let playlist { makePlaylist(playlist, order, already, [:], app) }
-            app.status(tracks.isEmpty ? "Nothing to copy" : "Already on this device: \(already.count) track\(already.count == 1 ? "" : "s"), nothing copied", 6)
+            self.say(app, tracks.isEmpty ? "Nothing to copy" : "Already on this device: \(already.count) track\(already.count == 1 ? "" : "s"), nothing copied", 6)
             return
         }
         let need = jobs.reduce(Int64(0)) { $0 + $1.size }
         if let free = (try? dest.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage, free < need + 200_000_000 {
-            app.status("Not enough space: \(Self.mb(need)) to copy, \(Self.mb(max(0, free))) free on this device", 9)
+            self.say(app, "Not enough space: \(Self.mb(need)) to copy, \(Self.mb(max(0, free))) free on this device", 9)
             return
         }
         busy = d.id; cancelled = false
@@ -116,7 +119,7 @@ final class UsbCopy: ObservableObject {
                 var msg = "\(stopped ? "Stopped: copied" : "Copied") \(added.count) track\(added.count == 1 ? "" : "s") from \(name) to this device"
                 if !already.isEmpty { msg += ", \(already.count) already here" }
                 if failed > 0 { msg += ", \(failed) couldn't be copied (stick unplugged?)" }
-                app.status(msg, 8)
+                self.say(app, msg, 8)
             }
         }
     }
@@ -126,7 +129,7 @@ final class UsbCopy: ObservableObject {
         let m = missing(d, in: app.library)
         if m.isEmpty {
             let n = mirrorPlaylists(d, app: app)
-            app.status("\(d.name): every track's already on this device; \(n) playlist\(n == 1 ? "" : "s") brought up to date", 6)
+            self.say(app, "\(d.name): every track's already on this device; \(n) playlist\(n == 1 ? "" : "s") brought up to date", 6)
             return
         }
         copy(m, from: d, app: app, mirror: true)
@@ -137,9 +140,9 @@ final class UsbCopy: ObservableObject {
     @discardableResult func mirrorPlaylists(_ d: Device, app: AppModel) -> Int {
         let have = Self.liveTwins(app.library), pl = app.playlists
         let top = pl.lists.first { $0.folder && $0.parent == nil && $0.name == d.name } ?? pl.new(d.name, folder: true)
-        var made = 0
+        var made = 0, visited = Set<UInt32>()
         func walk(_ parent: UInt32, _ into: String) {
-            for n in d.tree.filter({ $0.parent == parent }).sorted(by: { $0.sort < $1.sort }) {
+            for n in d.tree.filter({ $0.parent == parent && $0.id != parent }).sorted(by: { $0.sort < $1.sort }) where visited.insert(n.id).inserted {
                 let mine = pl.lists.first { $0.parent == into && $0.name == n.name && $0.folder == n.folder }
                     ?? pl.new(n.name, folder: n.folder, parent: into)
                 if n.folder { walk(n.id, mine.id); continue }
@@ -200,7 +203,7 @@ final class UsbCopy: ObservableObject {
     /// rekordbox's grid, phrases and key again, unless you set its grid yourself. Nothing is copied or deleted; fixes
     /// copies that came in without rekordbox's grid (a rescan raced the copy) and stops them being analysed again
     func regrid(_ d: Device, app: AppModel) {
-        if busy != nil { app.status("Wait for the copy to finish", 5); return }
+        if busy != nil { self.say(app, "Wait for the copy to finish", 5); return }
         let lib = app.library, have = Self.liveTwins(lib)
         var jobs = [(LibTrack, URL, TrackRecord)]()
         for t in d.byRbId.values {
@@ -209,7 +212,7 @@ final class UsbCopy: ObservableObject {
             guard let local = have[key], !local.rec.gridManual else { continue }
             jobs.append((local, a, t.rec))
         }
-        if jobs.isEmpty { app.status("No tracks on this device match \(d.name)", 6); return }
+        if jobs.isEmpty { self.say(app, "No tracks on this device match \(d.name)", 6); return }
         busy = d.id; progress = "Reading \(d.name)'s grids…"
         DispatchQueue.global(qos: .utility).async {
             var done = [(LibTrack, TrackRecord)]()
@@ -225,7 +228,7 @@ final class UsbCopy: ObservableObject {
                 for (t, r) in done { Library.applyRekordbox(r, to: t) }
                 lib.objectWillChange.send(); lib.save()
                 self.busy = nil; self.progress = ""
-                app.status("\(done.count) of \(jobs.count) tracks on this device now use \(d.name)'s rekordbox grids", 8)
+                self.say(app, "\(done.count) of \(jobs.count) tracks on this device now use \(d.name)'s rekordbox grids", 8)
             }
         }
     }

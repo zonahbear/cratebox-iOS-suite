@@ -29,6 +29,7 @@ struct CompactScreen: View {
         let l = core.four ? app.midi.side[0] : 0, r = core.four ? app.midi.side[1] : 1
         return VStack(spacing: 4) {
             CompactTopBar(settings: $settings).frame(height: 36).zIndex(1)     // EJECT's 44 pt touch area overhangs it
+            Group {
             if app.tab == 0 {
                 Group {
                     if app.waveMode { WaveStack() } else {
@@ -48,6 +49,7 @@ struct CompactScreen: View {
                     }
                 }.overlay { if app.browserShown { BrowserOverlay().transition(.opacity) } }
             } else { LibraryPane() }
+            }.overlay(alignment: .top) { StatusBubble() }
             // the home-bar strip: text only, so a swipe home never lands on a control
             HStack {
                 StripInfo(deck: core.decks[l])
@@ -86,7 +88,7 @@ struct CompactTopBar: View {
         HStack(spacing: 6) {
             ModeSwitcher(compact: true)
             Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: 132)
-            Text(rec.recording ? String(format: "● REC %d:%02d", Int(rec.seconds) / 60, Int(rec.seconds) % 60) : app.statusText)
+            Text(rec.recording ? String(format: "● REC %d:%02d", Int(rec.seconds) / 60, Int(rec.seconds) % 60) : "")
                 .font(.system(size: 11, weight: rec.recording ? .bold : .regular)).foregroundStyle(rec.recording ? Theme.hot : Theme.muted)
                 .lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
             MasterButton()

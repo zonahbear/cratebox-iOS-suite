@@ -80,9 +80,11 @@ struct PhoneFrame: View {
             EdgeStrip(deck: core.decks[l], side: 0, center: !islandLeft, top: 44, bottom: max(ins.bottom, 6) + 10).frame(width: band).zIndex(1)
             VStack(spacing: 4) {
                 PhoneTopBar(settings: $settings).frame(height: 30).zIndex(1)     // EJECT's 44 pt touch area overhangs it
-                if tab == 0 {
-                    Group { if wave { WaveStack() } else { mix(l, r, m) } }.overlay { if browser { BrowserOverlay().transition(.opacity) } }
-                } else { LibraryPane() }
+                Group {
+                    if tab == 0 {
+                        Group { if wave { WaveStack() } else { mix(l, r, m) } }.overlay { if browser { BrowserOverlay().transition(.opacity) } }
+                    } else { LibraryPane() }
+                }.overlay(alignment: .top) { StatusBubble() }
                 // the home-bar strip: text only, so a swipe home never lands on a control
                 HStack {
                     StripInfo(deck: core.decks[l])
@@ -131,7 +133,7 @@ struct PhoneTopBar: View {
                 Text(app.controllerName.isEmpty ? "No controller" : app.controllerName).font(.system(size: 11)).lineLimit(1)
             }.padding(.horizontal, 8).padding(.vertical, 4).background(Capsule().fill(Theme.raise)).frame(maxWidth: m.narrowBar ? 96 : 180)
             Picker("", selection: $app.tab) { Text("MIX").tag(0); Text("LIBRARY").tag(1) }.pickerStyle(.segmented).frame(width: m.narrowBar ? 132 : 150)
-            Text(app.statusText).font(.system(size: 11)).foregroundStyle(Theme.muted).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading).layoutPriority(-1)
+            Spacer(minLength: 0)          // messages float over the waveforms (StatusBubble): here they were cut to a word
             // a narrow phone: CUE/MST, MST and MASTER in a popover behind one button
             if m.narrowBar { MasterButton() } else { MixerView(masterBar: true) }
             LitButton(label: "WAVE", on: app.waveMode, color: Theme.accent) { withAnimation(.easeInOut(duration: 0.2)) { app.waveMode.toggle() } }
