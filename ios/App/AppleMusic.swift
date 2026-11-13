@@ -439,7 +439,7 @@ final class AppleMusic: ObservableObject {
         jobId = id
         job = Task.detached(priority: .utility) { [weak self] in
             let r = await AppleMusic.run(u)
-            await MainActor.run { self?.finished(id, size: size, mtime: mtime, r) }
+            await MainActor.run { self?.finished(id, size: size, mtime: mtime, r, url: u) }
         }
         // a deck starts playing: stop this track (it's done again later), so analysis never competes with the audio
         watch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -466,7 +466,7 @@ final class AppleMusic: ObservableObject {
         job?.cancel()
         progress = ""
     }
-    private func finished(_ id: String, size: Int64, mtime: Double, _ r: Result<AppleFeatures, Error>) {
+    private func finished(_ id: String, size: Int64, mtime: Double, _ r: Result<AppleFeatures, Error>, url: URL? = nil) {
         let cancelled = job?.isCancelled ?? false
         watch?.invalidate(); watch = nil
         job = nil; jobId = nil
@@ -498,7 +498,8 @@ final class AppleMusic: ObservableObject {
                 later(Double(n * 10)); return
             }
             tries[id] = nil
-            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: AppleMusic.reason(e))
+            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: url.map { FileManager.default.fileExists(atPath: $0.path) } == false
+                ? "The file isn't there any more (moved or deleted). If it came from a USB stick, Sync copies it again" : AppleMusic.reason(e))
             backgroundStep(finishedRun: false)
         }
         // the index is written a couple of seconds after the last change, not after every track
