@@ -64,6 +64,8 @@ struct SettingsView: View {
     @AppStorage(AutoTrim.targetKey) var autoTrimTarget = -9.0
     @AppStorage(AppleGridMode.key) var gridOrder = 0
     @AppStorage(AppleMusic.whilePlayingKey) var analyseWhilePlaying = false
+    @AppStorage(AppleMusic.stickBackupKey) var stickBackup = true
+    @State private var backupNote = ""
     @ObservedObject var apple = AppleMusic.shared
     @State private var warn = false
     @State private var confirmClear = false
@@ -373,6 +375,13 @@ struct SettingsView: View {
                         Button("Analyse the USB \(d.name)") { apple.request(Array(d.byRbId.values)) }.disabled(!aiMode)
                     }
                     if devices.list.isEmpty { Text("Analyse USB: plug in and open a rekordbox USB first").font(.caption).foregroundStyle(Theme.muted) }
+                    // a copy of Apple's results on the stick (<stick>/.cratebox/apple, hidden), and the way back
+                    Toggle("Back up Apple's analysis to the USB", isOn: $stickBackup)
+                    ForEach(devices.list) { d in
+                        Button("Back up to \(d.name) now") { apple.backup(to: d) { backupNote = $0 } }
+                        Button("Restore from \(d.name)'s backup") { apple.restore(from: d) { backupNote = $0 } }
+                    }
+                    if !backupNote.isEmpty { Text(backupNote).font(.caption).foregroundStyle(Theme.muted) }
                     Menu("Analyse a playlist") {
                         ForEach(playlists.lists.filter { !$0.folder }) { p in
                             Button("\(playlists.path(p)) (\(p.items.count))") { apple.request(p.items.compactMap { app.library.track($0) }) }

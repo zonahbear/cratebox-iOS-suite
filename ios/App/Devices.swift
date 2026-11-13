@@ -84,6 +84,11 @@ final class Devices: ObservableObject {
         app?.library.setDeviceTracks(id, tracks)
         list.append(dev)
         app?.status("\(dev.name): \(db.tracks.count) tracks, \(db.playlists.filter { !$0.folder }.count) playlists")
+        // Apple's analysis: take what the stick's backup has that this device lacks (a reinstall, a new phone), and
+        // give it what's new here; neither side loses anything
+        if AppleMusic.stickBackup {
+            AppleMusic.shared.restore(from: dev) { msg in if !msg.hasPrefix("No backup") { AppleMusic.shared.backup(to: dev) } }
+        }
     }
     /// a name for the stick in Cratebox only (the drive's own label is left alone)
     func nickname(_ d: Device, _ n: String) {

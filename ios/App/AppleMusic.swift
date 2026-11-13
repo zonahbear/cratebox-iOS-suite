@@ -280,9 +280,80 @@ final class AppleMusic: ObservableObject {
     }
 
     // ---- results ----
-    private func file(_ id: String) -> URL {
-        let h = SHA256.hash(data: Data(id.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
-        return dir.appendingPathComponent(h + ".json")
+    private func file(_ id: String) -> URL { dir.appendingPathComponent(Self.fileName(id)) }
+    static func fileName(_ id: String) -> String {
+        SHA256.hash(data: Data(id.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined() + ".json"
+    }
+
+    // ---- a backup on the stick (Jonah, 2026-11-13): <stick>/.cratebox/apple/, the same files as here ----
+    static let stickBackupKey = "cb.apple.stickBackup"
+    /// on unless turned off in Settings → AI
+    static var stickBackup: Bool { UserDefaults.standard.object(forKey: stickBackupKey) == nil || UserDefaults.standard.bool(forKey: stickBackupKey) }
+    static func backupDir(_ d: Device) -> URL { d.root.appendingPathComponent(".cratebox/apple", isDirectory: true) }
+    private var backupWork: DispatchWorkItem?
+    /// after analyses finish: back up to every open stick half a minute later (one write for a run of tracks)
+    private func backupSoon() {
+        guard AppleMusic.stickBackup else { return }
+        backupWork?.cancel()
+        let w = DispatchWorkItem { [weak self] in for d in Devices.shared.list { self?.backup(to: d) } }
+        backupWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: w)
+    }
+    /// copies results the stick doesn't have yet, then the index (the stick's entries kept, this device's win)
+    func backup(to d: Device, done: ((String) -> Void)? = nil) {
+        saveIndex()
+        let src = dir, dst = Self.backupDir(d), mine = index, name = d.name
+        DispatchQueue.global(qos: .utility).async {
+            let fm = FileManager.default
+            var n = 0, msg: String
+            do {
+                try fm.createDirectory(at: dst, withIntermediateDirectories: true)
+                for (id, s) in mine where s.failed == nil {
+                    let f = AppleMusic.fileName(id), to = dst.appendingPathComponent(f)
+                    if fm.fileExists(atPath: to.path) { continue }
+                    guard let data = try? Data(contentsOf: src.appendingPathComponent(f)) else { continue }
+                    try data.write(to: to, options: .atomic); n += 1
+                }
+                var theirs = (try? JSONDecoder().decode([String: Stamp].self, from: Data(contentsOf: dst.appendingPathComponent("index.json")))) ?? [:]
+                for (id, s) in mine where s.failed == nil { theirs[id] = s }
+                try JSONEncoder().encode(theirs).write(to: dst.appendingPathComponent("index.json"), options: .atomic)
+                msg = "Apple's analysis backed up to \(name): \(theirs.count) tracks (\(n) new)"
+            } catch {
+                msg = "Couldn't back up Apple's analysis to \(name): \(error.localizedDescription)"
+            }
+            DispatchQueue.main.async { AppLog.add(msg); done?(msg) }
+        }
+    }
+    /// brings back what the stick's backup has and this device doesn't (or only has as failed); nothing here is lost
+    func restore(from d: Device, done: @escaping (String) -> Void) {
+        let src = Self.backupDir(d), dst = dir, name = d.name
+        DispatchQueue.global(qos: .utility).async {
+            let fm = FileManager.default
+            guard let theirs = try? JSONDecoder().decode([String: Stamp].self, from: Data(contentsOf: src.appendingPathComponent("index.json"))) else {
+                DispatchQueue.main.async { done("No backup of Apple's analysis on \(name) yet") }; return
+            }
+            var got = [String: Stamp]()
+            for (id, s) in theirs where s.failed == nil && s.ver == AppleFeatures.VER {
+                let f = AppleMusic.fileName(id), to = dst.appendingPathComponent(f)
+                if !fm.fileExists(atPath: to.path) {
+                    guard let data = try? Data(contentsOf: src.appendingPathComponent(f)), (try? data.write(to: to, options: .atomic)) != nil else { continue }
+                }
+                got[id] = s
+            }
+            DispatchQueue.main.async {
+                var n = 0
+                for (id, s) in got {
+                    if let o = self.index[id], o.failed == nil, o.ver == AppleFeatures.VER { continue }
+                    self.index[id] = s; self.cache[id] = nil; n += 1
+                }
+                self.saveIndex()
+                self.analysed = self.index.values.filter { $0.failed == nil && $0.ver == AppleFeatures.VER }.count
+                self.twinStale = true
+                self.adoptGrids()
+                let msg = "Restored \(n) track\(n == 1 ? "" : "s")' analysis from \(name) (\(theirs.count) in its backup)"
+                AppLog.add(msg); done(msg)
+            }
+        }
     }
     /// Apple's results for a track, if they're for the file as it is now (its own, else its twin's)
     func features(_ t: LibTrack) -> AppleFeatures? {
@@ -530,6 +601,7 @@ final class AppleMusic: ObservableObject {
             DispatchQueue.main.async { [weak self] in self?.adoptGrids() }
             analysed += 1
             tries[id] = nil
+            backupSoon()
             AppLog.add("Apple analysed \(t?.info.title ?? id)")
             backgroundStep(finishedRun: false)
         case .failure(let e):
