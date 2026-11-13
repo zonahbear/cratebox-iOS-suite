@@ -66,10 +66,18 @@ final class UsbCopy: ObservableObject {
             self.say(app, tracks.isEmpty ? "Nothing to copy" : "Already on this device: \(already.count) track\(already.count == 1 ? "" : "s"), nothing copied", 6)
             return
         }
+        // not room for all of it: copy what fits (keeping 200 MB spare) rather than nothing, and say so
         let need = jobs.reduce(Int64(0)) { $0 + $1.size }
+        var skipped = 0
         if let free = (try? dest.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage, free < need + 200_000_000 {
-            self.say(app, "Not enough space: \(Self.mb(need)) to copy, \(Self.mb(max(0, free))) free on this device", 9)
-            return
+            var room = free - 200_000_000, fit = [Job]()
+            for j in jobs where j.size <= room { fit.append(j); room -= j.size }
+            skipped = jobs.count - fit.count
+            if fit.isEmpty {
+                self.say(app, "Not enough space on this device: \(Self.mb(need)) to copy, \(Self.mb(max(0, free))) free. Files you deleted stay in Files → Recently Deleted (and keep using space) until you empty it", 12)
+                return
+            }
+            jobs = fit
         }
         busy = d.id; cancelled = false
         let n = jobs.count, name = d.name
@@ -119,6 +127,7 @@ final class UsbCopy: ObservableObject {
                 var msg = "\(stopped ? "Stopped: copied" : "Copied") \(added.count) track\(added.count == 1 ? "" : "s") from \(name) to this device"
                 if !already.isEmpty { msg += ", \(already.count) already here" }
                 if failed > 0 { msg += ", \(failed) couldn't be copied (stick unplugged?)" }
+                if skipped > 0 { msg += ". \(skipped) didn't fit: free up space (Files → Recently Deleted counts) and Sync again" }
                 self.say(app, msg, 8)
             }
         }
