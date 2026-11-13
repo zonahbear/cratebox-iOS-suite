@@ -259,7 +259,8 @@ final class AppModel: ObservableObject, ControlTarget {
         let info = t.info
         // what the analysis needs from the track, read here: TrackInfo is the screen's, so the background task
         // works on copies and everything it finds is put back on the main thread
-        let rbURL = t.device != nil ? Devices.shared.anlzURL(t) : nil, onStick = t.device != nil
+        // a stick track, or a USB copy that brought rekordbox's analysis file with it
+        let rbURL = Devices.shared.anlzURL(t), onStick = t.device != nil || rbURL != nil
         let manual = info.gridManual, keyRB = info.keyFromRekordbox
         // Settings → Library & USB → Beat grids: Apple's grid instead of rekordbox's too (only, the default: Jonah's
         // order), or only instead of Cratebox's own (prefer). A grid fixed by hand stays. A track that had Apple's grid with the setting now off goes back to

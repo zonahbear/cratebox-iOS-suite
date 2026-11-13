@@ -21,6 +21,11 @@ struct TrackRecord: Codable {
     var fail: String? = nil
     /// the grid came from rekordbox's analysis on the stick (USB copies): a BPM range change leaves it alone
     var rbGrid: Bool? = nil
+    /// USB copies: rekordbox's analysis file copied beside the track (From USB/<stick>/PIONEER/USBANLZ/…/ANLZ0000.DAT,
+    /// path inside From USB), so its grid, cues and phrases are read at load like a stick track's, without the stick
+    var anlz: String? = nil
+    /// title, artist and key came from rekordbox's database (a USB copy): the file's own tags don't replace them
+    var rbTags: Bool? = nil
 }
 
 final class LibTrack: Identifiable {
@@ -36,6 +41,7 @@ final class LibTrack: Identifiable {
         info.gridManual = r.gridManual; info.autoBpm = r.autoBpm; info.autoFirst = r.autoFirst
         info.appleGrid = r.appleGrid ?? false
         info.rbGrid = r.rbGrid ?? false
+        info.keyFromRekordbox = r.rbTags == true && r.key >= 0
     }
     func sync() {
         rec.bpm = info.bpm; rec.firstBeat = info.firstBeat; rec.key = info.key; rec.duration = info.duration; rec.phrases = info.phrases
@@ -142,17 +148,31 @@ final class Library: ObservableObject {
         progress = "Scanning \(f.name)…"
         DispatchQueue.global(qos: .userInitiated).async {
             var found = [(String, Int64, Double)]()
+            let base = Library.plainPath(root)
             let keys: [URLResourceKey] = [.isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
             if let en = FileManager.default.enumerator(at: root, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]) {
                 for case let u as URL in en where Library.audioExt.contains(u.pathExtension.lowercased()) {
                     let v = try? u.resourceValues(forKeys: Set(keys))
                     guard v?.isRegularFile == true else { continue }
-                    let rel = u.path.replacingOccurrences(of: root.path + "/", with: "")
+                    // inside the folder, from both paths without symlinks or iOS's "/private" prefix: the enumerator
+                    // can hand back /private/var/… for a root of /var/…, and a plain replace then kept the whole
+                    // path as "rel", so every USB copy got a new id, lost rekordbox's data and pointed at no file
+                    // (Jonah, 2026-11-13: "no tracks are loading" after a restart, and a runaway analysis tally)
+                    let p = Library.plainPath(u)
+                    guard p.hasPrefix(base + "/") else { continue }
+                    let rel = String(p.dropFirst(base.count + 1))
                     found.append((rel, Int64(v?.fileSize ?? 0), v?.contentModificationDate?.timeIntervalSince1970 ?? 0))
                 }
             }
             DispatchQueue.main.async { self.merge(f, found) }
         }
+    }
+    /// a file path to compare by: symlinks resolved, without a leading "/private" (iOS's /var is /private/var)
+    static func plainPath(_ u: URL) -> String {
+        var p = u.standardizedFileURL.resolvingSymlinksInPath().path
+        if p.hasPrefix("/private/") { p.removeFirst("/private".count) }
+        while p.count > 1 && p.hasSuffix("/") { p.removeLast() }
+        return p
     }
     private func merge(_ f: MusicFolder, _ found: [(String, Int64, Double)]) {
         var keep = [LibTrack]()
@@ -172,8 +192,13 @@ final class Library: ObservableObject {
         status("\(f.name): \(keep.count) tracks\(fresh.isEmpty ? "" : ", \(fresh.count) new")")
         save()
         readTags(fresh)
-        for t in keep where !t.analysed { queue.append(t) }
+        // each track once: a rescan used to add the whole folder to the queue again (13,000 and counting)
+        var queued = Set(queue.map { $0.id }); if let c = current { queued.insert(c.id) }
+        for t in keep where !t.analysed && t.rec.fail == nil && queued.insert(t.id).inserted { queue.append(t) }
         runQueue()
+        // copies from a USB stick: rekordbox's title, artist, key, grid and cues from the stick's own files
+        // copied beside them (From USB/<stick>/PIONEER), as if the stick were plugged in
+        if f.id == UsbCopy.folderId { UsbCopy.shared.rehydrate(self) }
     }
     private func readTags(_ list: [LibTrack]) {
         for t in list {
@@ -187,6 +212,7 @@ final class Library: ObservableObject {
                     if item.commonKey == .commonKeyArtist { artist = try? await item.load(.stringValue) }
                 }
                 await MainActor.run {
+                    if t.rec.rbTags == true { return }          // a USB copy keeps rekordbox's title and artist
                     if let title, !title.isEmpty { t.rec.title = title; t.info.title = title }
                     if let artist, !artist.isEmpty { t.rec.artist = artist; t.info.artist = artist }
                     self.objectWillChange.send(); self.save()
@@ -241,7 +267,7 @@ final class Library: ObservableObject {
             }
             let t = LibTrack(r)
             tracks.append(t); byId[r.id] = t; out.append(t)
-            if !t.analysed { queue.append(t) }
+            if !t.analysed && !queue.contains(where: { $0 === t }) { queue.append(t) }
         }
         save(); runQueue()
         return out

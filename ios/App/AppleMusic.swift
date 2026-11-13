@@ -185,6 +185,7 @@ final class AppleMusic: ObservableObject {
     /// failed, and looked for again when the library changes
     private var missingNow = Set<String>()
     private var subs = Set<AnyCancellable>()
+    private var lastRescan = 0.0                   // when a missing copy last made the From USB folder rescan
     private var deadFolder = [String: Double]()   // music folders found unreachable, and when
     private var saveWork: DispatchWorkItem?
     private var mixCache = [String: (bpm: Double, first: Double, r: MixPoints.Result)]()
@@ -542,7 +543,8 @@ final class AppleMusic: ObservableObject {
             if t.device == nil { deadFolder[t.rec.folder] = now }
         }
         // copies deleted in Files: look at the folder again, so they leave the library (Sync copies them back)
-        if rescan, let f = app.library.folders.first(where: { $0.id == UsbCopy.folderId }) { app.library.scan(f) }
+        // at most once a minute: a rescan changes the library, which kicks this again 4 s later (it looped)
+        if rescan, now - lastRescan > 60, let f = app.library.folders.first(where: { $0.id == UsbCopy.folderId }) { lastRescan = now; app.library.scan(f) }
         guard let next = found else {
             if bgTask != nil { backgroundStep(finishedRun: true) }
             progress = todo.isEmpty ? "" : "\(todo.count) waiting for their files (plug the USB in, or Sync to copy them back)"

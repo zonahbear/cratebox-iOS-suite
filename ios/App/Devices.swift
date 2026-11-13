@@ -157,6 +157,12 @@ final class Devices: ObservableObject {
     }
     /// where a stick track's analysis file is (main thread: the device list lives there)
     func anlzURL(_ t: LibTrack) -> URL? {
+        // a USB copy: the analysis file copied along with it
+        if t.device == nil {
+            guard let a = t.rec.anlz, t.rec.folder == UsbCopy.folderId else { return nil }
+            let u = UsbCopy.root.appendingPathComponent(a)
+            return FileManager.default.fileExists(atPath: u.path) ? u : nil
+        }
         guard let d = device(of: t), let r = t.rb, !r.anlzPath.isEmpty else { return nil }
         return d.root.appendingPathComponent(String(r.anlzPath.drop { $0 == "/" }))
     }
