@@ -80,10 +80,15 @@ final class Library: ObservableObject {
 
     // ---- folders ----
     func url(of folder: MusicFolder) -> URL? {
+        // the copies from USB sticks live in the app's own Documents, whose path can change with an app update; it's
+        // never "unplugged" (deleting it in Files used to mark it so, and then none of its tracks would load)
+        if folder.id == UsbCopy.folderId {
+            let u = UsbCopy.root
+            try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
+            offline[folder.id] = nil; open[folder.id] = u; return u
+        }
         if offline[folder.id] != nil { return nil }
         if let u = open[folder.id] { return u }
-        // the copies from USB sticks live in the app's own Documents, whose path can change with an app update
-        if folder.id == UsbCopy.folderId { let u = UsbCopy.root; open[folder.id] = u; return u }
         var stale = false
         guard let u = try? URL(resolvingBookmarkData: folder.bookmark, options: [], relativeTo: nil, bookmarkDataIsStale: &stale) else { return nil }
         _ = u.startAccessingSecurityScopedResource()
@@ -117,7 +122,7 @@ final class Library: ObservableObject {
     /// dropped and the security-scoped access ends, so nothing in Cratebox holds the drive open
     func release(_ f: MusicFolder, unplugged: Bool) {
         open[f.id]?.stopAccessingSecurityScopedResource(); open[f.id] = nil
-        offline[f.id] = unplugged
+        if f.id != UsbCopy.folderId { offline[f.id] = unplugged }
         queue.removeAll { $0.rec.folder == f.id }
     }
     func seenGone(_ f: MusicFolder) { if offline[f.id] == false { offline[f.id] = true } }

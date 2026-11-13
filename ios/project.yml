@@ -35,7 +35,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         UILaunchScreen: {}
-        UIBackgroundModes: [audio]
+        UIBackgroundModes: [audio, processing]
+        BGTaskSchedulerPermittedIdentifiers: ["$(PRODUCT_BUNDLE_IDENTIFIER).analysis"]
         NSBluetoothAlwaysUsageDescription: Deck Bridge can show this device to your computer as a Bluetooth MIDI controller.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true

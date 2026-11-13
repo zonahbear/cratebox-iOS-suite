@@ -20,6 +20,7 @@ import CryptoKit
 import Foundation
 import UIKit
 import UIKit.UIGestureRecognizerSubclass
+import BackgroundTasks
 import CrateboxKit
 #if canImport(MusicUnderstanding)
 import MusicUnderstanding
@@ -145,12 +146,14 @@ final class AppleMusic: ObservableObject {
     func request(_ tracks: [LibTrack]) {
         let todo = tracks.filter { needs($0) }.map(\.id)
         let have = Set(wanted)
-        wanted += todo.filter { !have.contains($0) }
+        let add = todo.filter { !have.contains($0) }
+        wanted += add
+        if !add.isEmpty { startBackground(add.count) }
         app?.status(todo.isEmpty ? "Already analysed" : "Apple will analyse \(todo.count) track\(todo.count == 1 ? "" : "s") while nothing plays")
         kick()
     }
     /// forget what's asked for and stop the track being done
-    func cancelRequests() { wanted = []; job?.cancel(); progress = "" }
+    func cancelRequests() { wanted = []; job?.cancel(); progress = ""; backgroundStep(finishedRun: true) }
     weak var app: AppModel?
     /// what's been analysed (or failed): the file's size and date, and the format version
     struct Stamp: Codable {
@@ -164,6 +167,16 @@ final class AppleMusic: ObservableObject {
     private var jobId: String?
     private var watch: Timer?
     private var retry: DispatchWorkItem?
+    /// the app is in the background (Cratebox stays alive there while its audio runs): Apple's analysis doesn't
+    /// work there unless iOS gave us a continued-processing task, so it pauses instead of failing every track
+    private var inBackground = false
+    /// a track stopped by leaving the app (or by iOS ending the background task): put back, never counted as failed
+    private var interrupted = false
+    /// failures that may be passing (internal error, busy): tried 3 times, with a pause, before they count
+    private var tries = [String: Int]()
+    /// iOS 26+: the continued-processing task that lets a run carry on after you leave the app (Any: it's iOS 26 only)
+    private var bgTask: AnyObject?
+    private var bgTotal = 0, bgDone = 0
     private var subs = Set<AnyCancellable>()
     private var deadFolder = [String: Double]()   // music folders found unreachable, and when
     private var saveWork: DispatchWorkItem?
@@ -186,9 +199,75 @@ final class AppleMusic: ObservableObject {
         // new folders, a stick plugged in: look for tracks to analyse a few seconds after the list settles
         app.library.$tracks.sink { [weak self] _ in self?.twinStale = true }.store(in: &subs)
         app.library.$tracks.debounce(for: .seconds(4), scheduler: RunLoop.main).sink { [weak self] _ in self?.kick(); self?.adoptGrids() }.store(in: &subs)
+        NotificationCenter.default.publisher(for: UIApplication.didEnterBackgroundNotification).sink { [weak self] _ in self?.wentBackground() }.store(in: &subs)
+        NotificationCenter.default.publisher(for: UIApplication.willEnterForegroundNotification).sink { [weak self] _ in self?.cameBack() }.store(in: &subs)
+        registerBackground()
         kick()
         backfill()
         adoptGrids()
+    }
+
+    // ---- leaving the app (Jonah, 2026-11-13: a text came in mid-run and every track left showed as failed) ----
+    private func wentBackground() {
+        inBackground = true
+        guard bgTask == nil, job != nil else { return }
+        interrupted = true; job?.cancel()
+    }
+    private func cameBack() {
+        inBackground = false; tries = [:]
+        kick()
+    }
+    static var bgId: String { (Bundle.main.bundleIdentifier ?? "com.zonahbear.cratebox.suite") + ".analysis" }
+    private func registerBackground() {
+        if #available(iOS 26.0, *) {
+            BGTaskScheduler.shared.register(forTaskWithIdentifier: AppleMusic.bgId, using: nil) { [weak self] task in
+                DispatchQueue.main.async {
+                    guard let self, let t = task as? BGContinuedProcessingTask else { task.setTaskCompleted(success: false); return }
+                    self.bgTask = t
+                    t.progress.totalUnitCount = Int64(max(self.bgTotal, 1))
+                    t.progress.completedUnitCount = Int64(self.bgDone)
+                    t.expirationHandler = { [weak self] in
+                        DispatchQueue.main.async {
+                            guard let self else { return }
+                            self.bgTask = nil
+                            if self.inBackground, self.job != nil { self.interrupted = true; self.job?.cancel() }
+                        }
+                    }
+                    self.kick()
+                }
+            }
+        }
+    }
+    /// asked for in the app: ask iOS to let the run carry on in the background, with its progress on the lock screen
+    private func startBackground(_ n: Int) {
+        guard #available(iOS 26.0, *), !inBackground else { return }
+        bgTotal = n + bgTotal - bgDone; bgDone = 0
+        if let t = bgTask as? BGContinuedProcessingTask { t.progress.totalUnitCount = Int64(bgTotal); return }
+        func submit(gpu: Bool) throws {
+            let r = BGContinuedProcessingTaskRequest(identifier: AppleMusic.bgId, title: "Analysing tracks", subtitle: "Apple music analysis in Cratebox")
+            r.strategy = .queue
+            if gpu { r.requiredResources = .gpu }
+            try BGTaskScheduler.shared.submit(r)
+        }
+        do { try submit(gpu: BGTaskScheduler.supportedResources.contains(.gpu)) }
+        catch { try? submit(gpu: false) }
+    }
+    /// one more track done (or the run is over): the lock-screen progress follows
+    private func backgroundStep(finishedRun: Bool) {
+        guard #available(iOS 26.0, *), let t = bgTask as? BGContinuedProcessingTask else { return }
+        if !finishedRun {
+            bgDone += 1
+            t.progress.completedUnitCount = Int64(bgDone)
+            t.updateTitle("Analysing tracks", subtitle: "\(bgDone) of \(bgTotal)")
+        } else {
+            t.setTaskCompleted(success: true); bgTask = nil; bgTotal = 0; bgDone = 0
+        }
+    }
+    /// background, no task (or iOS ended it), and a track failed or stopped: end the task, carry on when you're back
+    private func backgroundPaused() {
+        if #available(iOS 26.0, *), let t = bgTask as? BGContinuedProcessingTask { t.setTaskCompleted(success: false) }
+        bgTask = nil
+        progress = "Paused while Cratebox is in the background: carries on when you come back"
     }
 
     // ---- results ----
@@ -319,6 +398,7 @@ final class AppleMusic: ObservableObject {
         retry?.cancel(); retry = nil
         guard AIMode.on, AppleMusic.usable, let app else { if !AIMode.on { stop() }; return }
         guard job == nil else { return }
+        if inBackground && bgTask == nil { if !wanted.isEmpty { backgroundPaused() }; return }
         if playing && !AppleMusic.whilePlaying {
             progress = "Waits while a deck plays"
             later(5); return
@@ -326,7 +406,7 @@ final class AppleMusic: ObservableObject {
         // Apple's analysis keeps the phone's processors busy for the whole track: it only starts when the app has
         // been left alone for a while, the phone isn't hot, and Low Power Mode is off
         TouchWatch.install()
-        if !AppleMusic.whilePlaying && ProcessInfo.processInfo.systemUptime - TouchWatch.last < AppleMusic.idleSecs {
+        if !inBackground && !AppleMusic.whilePlaying && ProcessInfo.processInfo.systemUptime - TouchWatch.last < AppleMusic.idleSecs {
             if !wanted.isEmpty { progress = "Waits until the app is left alone for \(Int(AppleMusic.idleSecs)) seconds" }
             later(5); return
         }
@@ -337,7 +417,7 @@ final class AppleMusic: ObservableObject {
         guard !wanted.isEmpty else { progress = ""; return }
         let want = Set(wanted)
         let todo = app.library.tracks.filter { want.contains($0.id) && needs($0) }
-        if todo.isEmpty && want.allSatisfy({ id in app.library.track(id) != nil }) { wanted = []; progress = ""; return }
+        if todo.isEmpty && want.allSatisfy({ id in app.library.track(id) != nil }) { wanted = []; progress = ""; backgroundStep(finishedRun: true); return }
         // a folder whose drive isn't there is asked once a minute, not once per track (resolving a bookmark to a
         // missing drive can take seconds, and this runs on the main thread)
         let now = Date().timeIntervalSince1970
@@ -348,6 +428,7 @@ final class AppleMusic: ObservableObject {
             if t.device == nil { deadFolder[t.rec.folder] = now }
         }
         guard let next = found else {
+            if bgTask != nil { backgroundStep(finishedRun: true) }
             progress = todo.isEmpty ? "" : "\(todo.count) to do when their drives are connected"
             if !todo.isEmpty { later(60) }
             return
@@ -401,9 +482,24 @@ final class AppleMusic: ObservableObject {
             twinStale = true
             DispatchQueue.main.async { [weak self] in self?.adoptGrids() }
             analysed += 1
+            tries[id] = nil
+            backgroundStep(finishedRun: false)
         case .failure(let e):
-            if e is CancellationError || cancelled { progress = AIMode.on ? "Paused (a deck started or a track was loaded)" : ""; later(5); return }
+            // stopped by leaving the app, by iOS, by a deck or a load: put back, not a failure
+            if e is CancellationError || cancelled || interrupted || inBackground {
+                interrupted = false
+                if inBackground { backgroundPaused(); return }
+                progress = AIMode.on ? "Paused (a deck started or a track was loaded)" : ""; later(5); return
+            }
+            // an error that may pass (Apple's internal error, still busy with the last track): try again a bit later
+            let n = (tries[id] ?? 0) + 1
+            if !AppleMusic.permanent(e) && n < 3 {
+                tries[id] = n; progress = "Apple's analysis stumbled; trying that track again in \(n * 10) s"
+                later(Double(n * 10)); return
+            }
+            tries[id] = nil
             index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: AppleMusic.reason(e))
+            backgroundStep(finishedRun: false)
         }
         // the index is written a couple of seconds after the last change, not after every track
         saveWork?.cancel()
@@ -439,8 +535,22 @@ final class AppleMusic: ObservableObject {
     }
     /// forget the failures, so those tracks are tried again
     func retryFailed() {
-        for (id, s) in index where s.failed != nil { index[id] = nil }
-        saveIndex(); objectWillChange.send(); kick()
+        let ids = index.filter { $0.value.failed != nil }.map(\.key)
+        for id in ids { index[id] = nil }
+        tries = [:]
+        // back on the to-do list (it may have emptied when the run "finished" on failures)
+        let have = Set(wanted)
+        let add = ids.filter { !have.contains($0) }
+        wanted += add
+        saveIndex(); objectWillChange.send()
+        startBackground(ids.count)
+        kick()
+    }
+    /// failures that trying again won't fix
+    static func permanent(_ e: Error) -> Bool {
+        let d = String(describing: e).lowercased()
+        return d.contains("protected") || d.contains("drm") || d.contains("invalidasset") || d.contains("unsupported")
+            || d.contains("nosuchfile") || d.contains("not found")
     }
     /// Apple's error in words: what went wrong and whether trying again can help
     static func reason(_ e: Error) -> String {

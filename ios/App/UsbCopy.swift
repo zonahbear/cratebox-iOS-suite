@@ -5,6 +5,7 @@
 // The copying runs on a background queue at utility priority; the decks hold their tracks in memory, so it never
 // touches playback. Main thread for everything else.
 import Foundation
+import UIKit
 import CrateboxKit
 
 final class UsbCopy: ObservableObject {
@@ -70,8 +71,12 @@ final class UsbCopy: ObservableObject {
         busy = d.id; cancelled = false
         let n = jobs.count, name = d.name
         progress = "Copying 0 of \(n) from \(name)…"
+        // leaving the app (a text, the lock button): iOS gives a little time to finish; whatever's copied by then is
+        // already in the library (every 10 tracks), and Sync later copies the rest
+        var bg = UIBackgroundTaskIdentifier.invalid
+        bg = UIApplication.shared.beginBackgroundTask(withName: "Copy from USB") { UIApplication.shared.endBackgroundTask(bg); bg = .invalid }
         DispatchQueue.global(qos: .utility).async {
-            var done = [TrackRecord](), failed = 0
+            var done = [TrackRecord](), failed = 0, batch = [TrackRecord]()
             let fm = FileManager.default
             for (i, j) in jobs.enumerated() {
                 if self.cancelled { break }
@@ -94,7 +99,8 @@ final class UsbCopy: ObservableObject {
                         if let ph = x.phrases { r.phrases = ph }
                         r.ver = Library.ANALYSIS_VER; r.rbGrid = true
                     } else { r.rbGrid = false; if (r.bpm ?? 0) <= 0 || r.firstBeat == nil { r.ver = 0 } }
-                    done.append(r)
+                    done.append(r); batch.append(r)
+                    if batch.count >= 10 { let b = batch; batch = []; DispatchQueue.main.async { _ = lib.addCopied(b) } }
                 } catch { failed += 1 }
                 DispatchQueue.main.async { self.progress = "Copying \(i + 1) of \(n) from \(name)…" }
             }
@@ -104,7 +110,8 @@ final class UsbCopy: ObservableObject {
                 var copied = [String: LibTrack]()
                 for t in added { copied[Library.twinKey((t.rec.rel as NSString).lastPathComponent, t.rec.size)] = t }
                 if let playlist { self.makePlaylist(playlist, order, already, copied, app) }
-                self.busy = nil; self.progress = ""
+self.busy = nil; self.progress = ""
+                if bg != .invalid { UIApplication.shared.endBackgroundTask(bg); bg = .invalid }
                 var msg = "\(stopped ? "Stopped: copied" : "Copied") \(added.count) track\(added.count == 1 ? "" : "s") from \(name) to this device"
                 if !already.isEmpty { msg += ", \(already.count) already here" }
                 if failed > 0 { msg += ", \(failed) couldn't be copied (stick unplugged?)" }
