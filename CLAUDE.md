@@ -10,8 +10,9 @@ fold this file into it.)
   size. If a device is missing, measure it (ios.yml, `measure: true`) and add it there first.
 - HEAT never goes into the shipping app (`com.zonahbear.cratebox.suite`). It lives only on `personal/heat`
   (`com.zonahbear.cratebox.heat`), which never merges back.
-- Installs only via TestFlight (sideloading retired). macOS CI is manual-only. ios.yml defaults to the `xcode-27` runner
-  (Apple Silicon, iOS 27 SDK, needed for AI mode's Music Understanding); `macos-15-intel` is the fallback (input `runner`).
+- Installs only via TestFlight (sideloading retired). macOS CI is manual-only. ios.yml and testflight.yml default to runner
+  `m4` = Jonah's self-hosted MacBook Pro M4 Pro (labels self-hosted/macOS/ARM64/cratebox-m4, setup in docs/self-hosted-runner.md);
+  `xcode-27` (GitHub's hosted Apple Silicon) is the backup. Xcode 27 on arm64 only, no Intel (both workflows check).
 - AI features stay behind Settings → AI mode (`cb.ai`, off by default) and on-device only. See breadcrumbs 2026-11-11.
 
 ## Breadcrumbs

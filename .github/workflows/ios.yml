@@ -1,7 +1,7 @@
 name: iOS checks
 # Tests and simulator screenshots only; installs come from TestFlight (testflight.yml), sideloading is retired.
-# Manual only (Actions → iOS build → Run workflow, pick the branch): each run costs ~130 of the private repo's
-# monthly minutes (macOS counts 10x). TestFlight (testflight.yml) is the normal install route now.
+# Manual only (Actions → iOS checks → Run workflow, pick the branch). On the self-hosted M4 (default) a run costs no
+# Actions minutes; on xcode-27 (GitHub's Mac) it costs ~130 (macOS counts 10x). TestFlight (testflight.yml) is the normal install route now.
 on:
   workflow_dispatch:
     inputs:
@@ -13,25 +13,34 @@ on:
         description: "Simulators to screenshot, comma-separated (e.g. iPhone SE (3rd generation),iPhone 16,iPad mini (A17 Pro)), or none"
         default: "iPhone 16 Pro Max,iPad Pro 13-inch (M4)"
       runner:
-        description: "Mac: xcode-27 = Apple Silicon with Xcode 27 / iOS 27 SDK (builds Apple's music analysis in); macos-15-intel = Xcode 26, without it"
+        description: "Mac: m4 = Jonah's MacBook Pro M4 Pro (self-hosted, Xcode 27, no Actions minutes); xcode-27 = GitHub's hosted Apple Silicon Xcode 27 (backup while the M4 is off). No Intel."
         type: choice
-        options: [xcode-27, macos-15-intel]
-        default: xcode-27
+        options: [m4, xcode-27]
+        default: m4
 permissions:
   contents: write
 concurrency: { group: "ios-${{ github.ref }}", cancel-in-progress: true }
 jobs:
   build:
-    # xcode-27 (Apple Silicon, iOS 27 SDK) compiles AI mode's Music Understanding; macos-15-intel (x86_64 simulators,
-    # Xcode ≤ 26.3) is the fallback for when the arm64 pool doesn't pick jobs up, as on 2026-11-10
-    runs-on: ${{ inputs.runner || 'xcode-27' }}
+    # m4 = the self-hosted MacBook Pro M4 Pro (labels self-hosted, macOS, ARM64, cratebox-m4; setup in
+    # docs/self-hosted-runner.md); xcode-27 = GitHub's hosted Apple Silicon. Jonah (2026-11-12): no Intel
+    # fallback; a stalled run is cancelled and retried on m4 or xcode-27
+    runs-on: ${{ (inputs.runner || 'm4') == 'm4' && fromJSON('["self-hosted","macOS","ARM64","cratebox-m4"]') || inputs.runner }}
     steps:
       - uses: actions/checkout@v4
       - name: Xcode
         run: |
-          brew install coreutils >/dev/null 2>&1 || true
-          sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
-          xcodebuild -version | tee ci.log
+          brew install coreutils xcodegen >/dev/null 2>&1 || true
+          for t in gtimeout xcodegen; do command -v $t >/dev/null || { echo "MISSING $t (on the M4: brew install coreutils xcodegen from Jonah's admin account)"; exit 1; }; done
+          # DEVELOPER_DIR instead of `sudo xcode-select`: the self-hosted M4 runs as a standard user without sudo.
+          # Newest installed Xcode 27 (Xcode_27.x.app on GitHub's Macs, Xcode.app / Xcode-beta.app on the M4)
+          X=$(for a in /Applications/Xcode*.app; do v=$(defaults read "$a/Contents/Info" CFBundleShortVersionString 2>/dev/null) && echo "$v $a"; done | grep '^27\.' | sort -V | tail -1 | cut -d' ' -f2-)
+          [ -n "$X" ] || { echo "NO XCODE 27 in /Applications: Xcode 27 on Apple Silicon only" | tee ci.log; exit 1; }
+          [ "$(uname -m)" = arm64 ] || { echo "NOT APPLE SILICON ($(uname -m)): no Intel runners" | tee ci.log; exit 1; }
+          echo "DEVELOPER_DIR=$X/Contents/Developer" >> "$GITHUB_ENV"
+          export DEVELOPER_DIR="$X/Contents/Developer"
+          echo "RUNNER ${RUNNER_NAME:-?} ($RUNNER_ENVIRONMENT) $X" | tee ci.log
+          xcodebuild -version | tee -a ci.log
       - name: Test tracks (tests/make_tracks.py, checked against the ones the fixtures came from)
         run: |
           python3 -m venv "$RUNNER_TEMP/venv" && "$RUNNER_TEMP/venv/bin/pip" install --quiet numpy 2>&1 | tail -3 | tee -a ci.log
@@ -184,7 +193,7 @@ jobs:
           { echo "run ${{ github.run_id }} sha ${{ github.sha }} at $(date -u)"; grep -E "error:|warning: unre|FAIL|failed|Executed|BUILD|passed|DSP |ANALYSIS |TRACKS |ENGINE |SYNC |PUBLISHED|CrateboxSuite.ipa|SIM |DEMO MIDI|METRIC |REF |\*\* " ci.log | head -600; echo "---- tail"; tail -80 ci.log; } > summary.txt || true
           git config user.name ci; git config user.email ci@users.noreply.github.com
           git fetch origin "$LOGS" || true
-          git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
+          { git branch -D ci-tmp >/dev/null 2>&1 || true; } && git checkout --orphan ci-tmp && git rm -rfq --cached . >/dev/null
           cp summary.txt ios-latest.txt
           mkdir -p shots && cp "$RUNNER_TEMP"/shots/*.png "$RUNNER_TEMP"/shots/*.txt "$RUNNER_TEMP"/shots/*.html shots/ 2>/dev/null || true
           git add -f ios-latest.txt shots && git commit -qm "ios ci ${{ github.run_id }}" && git push -qf origin "HEAD:$LOGS"

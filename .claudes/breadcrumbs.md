@@ -300,3 +300,4 @@ Intelligence for analysis" + "Toggle to switch between Apple and rb grid". All b
   between tracks when the phone isn't thermally nominal. MATCH sort computes each row's score once per sort, not per
   comparison. Not done: features JSON is still decoded on the main thread at load (a few hundred kB).
 - Shipped: ios.yml run 62 green (263608d), TestFlight run 53 uploaded 22:30Z (build 53.1). Untested on a device.
+- 2026-11-13 19:55Z · claude · CI-3: ios.yml/testflight.yml default to the self-hosted M4 (runner m4, label cratebox-m4), xcode-27 backup, no Intel; setup in docs/self-hosted-runner.md.
