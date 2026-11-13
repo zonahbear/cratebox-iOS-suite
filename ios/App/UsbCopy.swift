@@ -25,7 +25,7 @@ final class UsbCopy: ObservableObject {
 
     /// the stick tracks that aren't on the device yet (by file name and size)
     func missing(_ d: Device, in lib: Library) -> [LibTrack] {
-        let have = lib.twins()
+        let have = Self.liveTwins(lib)
         return d.byRbId.values.filter { t in
             guard let r = t.rb else { return false }
             return have[Library.twinKey(r.filename.isEmpty ? (r.path as NSString).lastPathComponent : r.filename, Int64(r.size))] == nil
@@ -41,7 +41,7 @@ final class UsbCopy: ObservableObject {
         let lib = app.library
         let folder = localFolder(lib)
         guard let folder, let dest = lib.url(of: folder) else { app.status("Couldn't make the From USB folder on this device", 7); return }
-        let have = lib.twins()
+        let have = Self.liveTwins(lib)
         let stick = Self.safe(d.name)
         var jobs = [Job](), already = [String: LibTrack](), order = [String]()
         for t in tracks {
@@ -147,8 +147,14 @@ final class UsbCopy: ObservableObject {
     /// the library folder that holds the copies, added the first time
     private func localFolder(_ lib: Library) -> MusicFolder? {
         let u = Self.root
+        let gone = !FileManager.default.fileExists(atPath: u.path)
         try? FileManager.default.createDirectory(at: u, withIntermediateDirectories: true)
-        if let f = lib.folders.first(where: { $0.id == Self.folderId }) { return f }
+        if let f = lib.folders.first(where: { $0.id == Self.folderId }) {
+            // the From USB folder was deleted (in Files): start it afresh, its old entries go and the copies come back
+            // with the same ids, so playlists and Apple's analysis still match them
+            if !gone, lib.url(of: f) != nil { return f }
+            lib.removeFolder(f)
+        }
         return lib.addFolder(u)
     }
 
@@ -157,7 +163,7 @@ final class UsbCopy: ObservableObject {
     /// copies that came in without rekordbox's grid (a rescan raced the copy) and stops them being analysed again
     func regrid(_ d: Device, app: AppModel) {
         if busy != nil { app.status("Wait for the copy to finish", 5); return }
-        let lib = app.library, have = lib.twins()
+        let lib = app.library, have = Self.liveTwins(lib)
         var jobs = [(LibTrack, URL, TrackRecord)]()
         for t in d.byRbId.values {
             guard let r = t.rb, let a = Devices.shared.anlzURL(t) else { continue }
@@ -183,6 +189,16 @@ final class UsbCopy: ObservableObject {
                 self.busy = nil; self.progress = ""
                 app.status("\(done.count) of \(jobs.count) tracks on this device now use \(d.name)'s rekordbox grids", 8)
             }
+        }
+    }
+
+    /// the library's tracks by file name + size, leaving out copies whose file was deleted from From USB (in Files),
+    /// so Sync copies those again
+    static func liveTwins(_ lib: Library) -> [String: LibTrack] {
+        let fm = FileManager.default, root = Self.root
+        let rootThere = fm.fileExists(atPath: root.path)
+        return lib.twins().filter { _, t in
+            t.rec.folder != Self.folderId || (rootThere && fm.fileExists(atPath: root.appendingPathComponent(t.rec.rel).path))
         }
     }
 
