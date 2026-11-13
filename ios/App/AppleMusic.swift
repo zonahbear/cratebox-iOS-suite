@@ -160,6 +160,9 @@ final class AppleMusic: ObservableObject {
         var size: Int64, mtime: Double, ver: Int, failed: String?
         /// the little the library's MATCH sort needs, kept here so sorting doesn't open every track's results
         var lufs: Double? = nil, shares: [Double]? = nil, lite: Bool? = nil
+        /// the track's artist + title (AppleMusic.metaKey) and length in seconds when it was analysed: another copy of
+        /// the same song (re-copied, renamed, re-encoded size) finds these results by them
+        var meta: String? = nil, dur: Double? = nil
     }
     private var index = [String: Stamp]()
     private var cache = [String: AppleFeatures]()
@@ -187,6 +190,8 @@ final class AppleMusic: ObservableObject {
     /// twin key (file name + size, Library.twinKey) → a track analysed under that key, so a USB track and its copy on
     /// this device share one analysis (Jonah, 2026-11-12). Rebuilt lazily when the library or the results change
     private var twinOf = [String: String]()
+    /// artist + title (metaKey) → analysed tracks under it and their lengths: the second way a copy finds its results
+    private var metaOf = [String: [(id: String, dur: Double?)]]()
     private var twinStale = true
     private let dir: URL
 
@@ -329,6 +334,18 @@ final class AppleMusic: ObservableObject {
         guard parts.count >= 2, size > 0 else { return nil }
         return Library.twinKey((String(parts[1]) as NSString).lastPathComponent, size)
     }
+    /// artist + title, lower case, spaces squeezed: nil without both (a title made from the file name isn't enough)
+    static func metaKey(_ t: LibTrack) -> String? {
+        func n(_ s: String) -> String { s.lowercased().split(whereSeparator: { $0.isWhitespace }).joined(separator: " ") }
+        let artist = n(t.rb?.artist ?? t.rec.artist), title = n(t.rb?.title ?? t.rec.title)
+        guard !artist.isEmpty, !title.isEmpty else { return nil }
+        return artist + "|" + title
+    }
+    /// the track's length in seconds when known (rekordbox's, else the library's)
+    static func length(_ t: LibTrack) -> Double? {
+        if let r = t.rb, r.duration > 0 { return Double(r.duration) }
+        return t.rec.duration > 0 ? t.rec.duration : nil
+    }
     /// whose results stand for a track: its own when they're current, else an analysed twin's (the same file on the
     /// stick and on this device: same name and size, so the same audio; dates differ after a copy, so they aren't
     /// compared). nil: neither is analysed
@@ -342,11 +359,25 @@ final class AppleMusic: ObservableObject {
                 if let k = AppleMusic.twinKey(id: id, size: s.size) { twinOf[k] = id }
             }
             // and the tracks that are here, by rekordbox's file name too (it can differ from the path's)
-            for o in app.library.tracks { if let s = index[o.id], s.failed == nil, current(s, o) { twinOf[AppleMusic.twinKey(o)] = o.id } }
+            var stamped = false
+            for o in app.library.tracks {
+                guard var s = index[o.id], s.failed == nil, current(s, o) else { continue }
+                twinOf[AppleMusic.twinKey(o)] = o.id
+                // results from before stamps kept artist + title: add them now, while the track is here to ask
+                if s.meta == nil, let m = AppleMusic.metaKey(o) { s.meta = m; s.dur = s.dur ?? AppleMusic.length(o); index[o.id] = s; stamped = true }
+            }
+            if stamped { saveIndex() }
+            metaOf = [:]
+            for (id, s) in index where s.failed == nil && s.ver == AppleFeatures.VER { if let m = s.meta { metaOf[m, default: []].append((id, s.dur)) } }
             twinStale = false
         }
-        guard let id = twinOf[AppleMusic.twinKey(t)], id != t.id, let s = index[id], s.failed == nil, s.ver == AppleFeatures.VER else { return nil }
-        return id
+        func usable(_ id: String) -> Bool { id != t.id && index[id].map { $0.failed == nil && $0.ver == AppleFeatures.VER } == true }
+        // the same file (name + size), else the same song by artist + title, the same length to within 2 s when
+        // both lengths are known (an extended mix and a radio edit share a title but not a length)
+        if let id = twinOf[AppleMusic.twinKey(t)], usable(id) { return id }
+        guard let m = AppleMusic.metaKey(t), let cands = metaOf[m] else { return nil }
+        let len = AppleMusic.length(t)
+        return cands.first { c in usable(c.id) && (len == nil || c.dur == nil || abs(len! - c.dur!) <= 2) }?.id
     }
     /// a stamp still describes the track's file (same size, same date when the library knows it, same format)
     private func current(_ s: Stamp, _ t: LibTrack) -> Bool {
@@ -487,7 +518,10 @@ final class AppleMusic: ObservableObject {
             if f.size == 0 { f.size = size }
             if f.mtime == 0 { f.mtime = mtime }
             // the library's size and date win for the stamp (that's what `current` compares against)
-            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: nil, lufs: f.lufs, shares: f.shares, lite: true)
+            let t = app?.library.track(id)
+            let applen = max(f.beats.last ?? 0, f.sections.last?.end ?? 0, f.phrases.last?.end ?? 0)
+            index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: nil, lufs: f.lufs, shares: f.shares, lite: true,
+                              meta: t.flatMap { AppleMusic.metaKey($0) }, dur: t.flatMap { AppleMusic.length($0) } ?? (applen > 0 ? applen : nil))
             mixCache[id] = nil
             if let d = try? JSONEncoder().encode(f) { try? d.write(to: file(id), options: .atomic) }
             cache[id] = f
