@@ -47,6 +47,7 @@ struct SettingsView: View {
     @EnvironmentObject var app: AppModel
     @EnvironmentObject var core: Core
     @EnvironmentObject var devices: Devices
+    @EnvironmentObject var playlists: Playlists
     @Environment(\.dismiss) var dismiss
     @AppStorage("cb.settingsTab") var tabRaw = SettingsTab.audio.rawValue
     @AppStorage("cb.bpmRange") var bpmRange = "88-175"
@@ -359,7 +360,7 @@ struct SettingsView: View {
                         ForEach(playlists.lists.filter { !$0.folder }) { p in
                             Button("\(playlists.path(p)) (\(p.items.count))") { apple.request(p.items.compactMap { app.library.track($0) }) }
                         }
-                    }.disabled(!aiMode || playlists.lists.allSatisfy(\.folder))
+                    }.disabled(!aiMode || playlists.lists.allSatisfy { $0.folder })
                     Button("Analyse the selected track") { if let id = app.selection, let t = app.library.track(id) { apple.request([t]) } }
                         .disabled(!aiMode || app.selection.flatMap { app.library.track($0) } == nil)
                     if apple.waiting > 0 {
