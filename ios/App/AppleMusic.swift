@@ -319,14 +319,14 @@ final class AppleMusic: ObservableObject {
         retry?.cancel(); retry = nil
         guard AIMode.on, AppleMusic.usable, let app else { if !AIMode.on { stop() }; return }
         guard job == nil else { return }
-        if playing {
+        if playing && !AppleMusic.whilePlaying {
             progress = "Waits while a deck plays"
             later(5); return
         }
         // Apple's analysis keeps the phone's processors busy for the whole track: it only starts when the app has
         // been left alone for a while, the phone isn't hot, and Low Power Mode is off
         TouchWatch.install()
-        if ProcessInfo.processInfo.systemUptime - TouchWatch.last < AppleMusic.idleSecs {
+        if !AppleMusic.whilePlaying && ProcessInfo.processInfo.systemUptime - TouchWatch.last < AppleMusic.idleSecs {
             if !wanted.isEmpty { progress = "Waits until the app is left alone for \(Int(AppleMusic.idleSecs)) seconds" }
             later(5); return
         }
@@ -362,11 +362,15 @@ final class AppleMusic: ObservableObject {
         }
         // a deck starts playing: stop this track (it's done again later), so analysis never competes with the audio
         watch = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            if let self, self.playing { self.job?.cancel() }
+            if let self, self.playing, !AppleMusic.whilePlaying { self.job?.cancel() }
         }
     }
     /// how long the screen must go untouched before a track is analysed
     static let idleSecs = 20.0
+    /// Settings → AI → Analyse while tracks play (Jonah, 2026-11-13; off by default): keeps going while decks play
+    /// and you're touching the screen. Heat and Low Power Mode still pause it
+    static let whilePlayingKey = "cb.apple.whilePlaying"
+    static var whilePlaying: Bool { UserDefaults.standard.bool(forKey: whilePlayingKey) }
     /// a track is being loaded (or something else needs the phone now): the track being analysed is put back
     func yield() {
         TouchWatch.last = ProcessInfo.processInfo.systemUptime
@@ -398,7 +402,7 @@ final class AppleMusic: ObservableObject {
             DispatchQueue.main.async { [weak self] in self?.adoptGrids() }
             analysed += 1
         case .failure(let e):
-            if e is CancellationError || cancelled { progress = AIMode.on ? "Paused while a deck plays" : ""; later(5); return }
+            if e is CancellationError || cancelled { progress = AIMode.on ? "Paused (a deck started or a track was loaded)" : ""; later(5); return }
             index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: AppleMusic.reason(e))
         }
         // the index is written a couple of seconds after the last change, not after every track

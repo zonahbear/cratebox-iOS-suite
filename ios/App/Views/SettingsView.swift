@@ -62,6 +62,7 @@ struct SettingsView: View {
     @AppStorage(AutoTrim.key) var autoTrim = false
     @AppStorage(AutoTrim.targetKey) var autoTrimTarget = -9.0
     @AppStorage(AppleGridMode.key) var gridOrder = 0
+    @AppStorage(AppleMusic.whilePlayingKey) var analyseWhilePlaying = false
     @ObservedObject var apple = AppleMusic.shared
     @State private var warn = false
     @State private var confirmClear = false
@@ -352,6 +353,7 @@ struct SettingsView: View {
                     LabeledContent("Apple music analysis", value: "\(apple.analysed) track\(apple.analysed == 1 ? "" : "s")" + (apple.failedCount > 0 ? ", \(apple.failedCount) failed" : ""))
                     if !apple.progress.isEmpty { Text(apple.progress).font(.caption).foregroundStyle(Theme.muted) }
                     if !aiMode { Text("Turn on AI mode above to analyse.").font(.caption).foregroundStyle(Theme.muted) }
+                    Toggle("Analyse while tracks play", isOn: Binding(get: { analyseWhilePlaying }, set: { analyseWhilePlaying = $0; apple.kick() }))
                     Button("Analyse the whole library on this device") { apple.request(app.library.tracks.filter { $0.device == nil }) }.disabled(!aiMode)
                     Menu("Analyse a playlist") {
                         ForEach(playlists.lists.filter { !$0.folder }) { p in
@@ -380,7 +382,7 @@ struct SettingsView: View {
                     }
                 }
             } header: { Text("Apple music analysis") } footer: {
-                Text("iOS 27+. Only what you ask for is analysed: pick it here, or long-press a track, playlist or stick in the library → Analyse. It finds beats, bars, key, phrases, vocals and loudness in the background, only while nothing plays and the app is left alone. It also sorts the library by MATCH (what would follow the playing track best) and marks MIX IN and MIX OUT on a loaded track's waveform. Whose grid wins: Library & USB → Beat grids.")
+                Text("iOS 27+. Only what you ask for is analysed: pick it here, or long-press a track, playlist or stick in the library → Analyse. It finds beats, bars, key, phrases, vocals and loudness in the background, only while nothing plays and the app is left alone, unless Analyse while tracks play is on (that shares the processors with the decks: on an older phone it could cause dropouts or warm the phone; it still pauses when the phone gets hot or in Low Power Mode). It also sorts the library by MATCH (what would follow the playing track best) and marks MIX IN and MIX OUT on a loaded track's waveform. Whose grid wins: Library & USB → Beat grids.")
             }
             Section {
                 ForEach(AutoMix.Transition.allCases, id: \.self) { k in
