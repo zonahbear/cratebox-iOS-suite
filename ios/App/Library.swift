@@ -244,7 +244,12 @@ final class Library: ObservableObject {
     var failed: [LibTrack] { tracks.filter { $0.device == nil && $0.rec.fail != nil } }
     /// try the failed ones again (after plugging the drive back in, adding the folder again, …)
     func retryFailed() {
-        for t in failed { t.rec.fail = nil; t.rec.ver = 0; t.info.bpm = nil; if !queue.contains(where: { $0 === t }) { queue.append(t) } }
+        for t in failed {
+            t.rec.fail = nil
+            if (t.info.bpm ?? 0) > 0 { continue }          // it has a grid (rekordbox's): nothing to redo
+            t.rec.ver = 0; t.info.bpm = nil
+            if !queue.contains(where: { $0 === t }) { queue.append(t) }
+        }
         objectWillChange.send(); save(); runQueue()
     }
     /// a decoding error in words
@@ -329,7 +334,12 @@ final class Library: ObservableObject {
                     t.rec.ver = Library.ANALYSIS_VER
                     if !t.info.gridManual { t.info.autoBpm = r.bpm; t.info.autoFirst = r.firstBeat }
                     self.changed(t)
-                } else { t.rec.ver = Library.ANALYSIS_VER; t.info.bpm = 0; self.changed(t) }
+                } else {
+                    // failed: a grid it already has (rekordbox's, from a USB copy) stays; only a track with none gets "no BPM"
+                    t.rec.ver = Library.ANALYSIS_VER
+                    if (t.info.bpm ?? 0) <= 0 { t.info.bpm = 0 }
+                    self.changed(t)
+                }
                 self.objectWillChange.send()
                 self.runQueue()
             }
