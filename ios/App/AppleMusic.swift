@@ -285,11 +285,12 @@ final class AppleMusic: ObservableObject {
         SHA256.hash(data: Data(id.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined() + ".json"
     }
 
-    // ---- a backup on the stick (Jonah, 2026-11-13): <stick>/.cratebox/apple/, the same files as here ----
+    // ---- a backup on the stick (Jonah, 2026-11-13): <stick>/Cratebox/Apple analysis/, the same files as here, in
+    // plain sight so it's easy to find and copy (index.json + one .json per track) ----
     static let stickBackupKey = "cb.apple.stickBackup"
     /// on unless turned off in Settings → AI
     static var stickBackup: Bool { UserDefaults.standard.object(forKey: stickBackupKey) == nil || UserDefaults.standard.bool(forKey: stickBackupKey) }
-    static func backupDir(_ d: Device) -> URL { d.root.appendingPathComponent(".cratebox/apple", isDirectory: true) }
+    static func backupDir(_ d: Device) -> URL { d.root.appendingPathComponent("Cratebox/Apple analysis", isDirectory: true) }
     private var backupWork: DispatchWorkItem?
     /// after analyses finish: back up to every open stick half a minute later (one write for a run of tracks)
     private func backupSoon() {

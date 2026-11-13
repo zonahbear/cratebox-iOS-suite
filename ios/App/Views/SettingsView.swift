@@ -375,8 +375,8 @@ struct SettingsView: View {
                         Button("Analyse the USB \(d.name)") { apple.request(Array(d.byRbId.values)) }.disabled(!aiMode)
                     }
                     if devices.list.isEmpty { Text("Analyse USB: plug in and open a rekordbox USB first").font(.caption).foregroundStyle(Theme.muted) }
-                    // a copy of Apple's results on the stick (<stick>/.cratebox/apple, hidden), and the way back
-                    Toggle("Back up Apple's analysis to the USB", isOn: $stickBackup)
+                    // a copy of Apple's results on the stick (<stick>/Cratebox/Apple analysis), and the way back
+                    Toggle("Back up Apple's analysis to the USB (Cratebox/Apple analysis)", isOn: $stickBackup)
                     ForEach(devices.list) { d in
                         Button("Back up to \(d.name) now") { apple.backup(to: d) { backupNote = $0 } }
                         Button("Restore from \(d.name)'s backup") { apple.restore(from: d) { backupNote = $0 } }
