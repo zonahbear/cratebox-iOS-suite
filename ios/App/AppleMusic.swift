@@ -529,6 +529,7 @@ final class AppleMusic: ObservableObject {
             DispatchQueue.main.async { [weak self] in self?.adoptGrids() }
             analysed += 1
             tries[id] = nil
+            AppLog.add("Apple analysed \(t?.info.title ?? id)")
             backgroundStep(finishedRun: false)
         case .failure(let e):
             // stopped by leaving the app, by iOS, by a deck or a load: put back, not a failure
@@ -544,6 +545,7 @@ final class AppleMusic: ObservableObject {
                 later(Double(n * 10)); return
             }
             tries[id] = nil
+            AppLog.add("Apple failed \(app?.library.track(id)?.info.title ?? id): \(e)")
             index[id] = Stamp(size: size, mtime: mtime, ver: AppleFeatures.VER, failed: url.map { FileManager.default.fileExists(atPath: $0.path) } == false
                 ? "The file isn't there any more (moved or deleted). If it came from a USB stick, Sync copies it again" : AppleMusic.reason(e))
             backgroundStep(finishedRun: false)

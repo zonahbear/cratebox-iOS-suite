@@ -67,6 +67,7 @@ struct SettingsView: View {
     @ObservedObject var apple = AppleMusic.shared
     @State private var warn = false
     @State private var confirmClear = false
+    @State private var reporting = false
     @ObservedObject var usbCopy = UsbCopy.shared
 
     var tab: SettingsTab { SettingsTab(stored: tabRaw) }
@@ -88,6 +89,7 @@ struct SettingsView: View {
                 }
             }
             .toolbar(.hidden, for: .navigationBar)      // the rail and title bar are the header; MIDI learn and Compare still get a back bar
+            .sheet(isPresented: $reporting) { ReportView() }
             .alert("Edit playlists on rekordbox USB sticks?", isPresented: $warn) {
                 Button("Cancel", role: .cancel) {}
                 Button("I understand, turn it on", role: .destructive) { devices.editable = true }
@@ -136,6 +138,8 @@ struct SettingsView: View {
         HStack(spacing: 4) {
             Text(current.title).font(.system(size: 17, weight: .bold)).lineLimit(1)
             Spacer(minLength: 0)
+            Button { reporting = true } label: { Image(systemName: "ladybug").font(.system(size: 17)) }
+                .frame(minWidth: 44, minHeight: 44).accessibilityLabel("Report a problem (send this session to GitHub)")
             Button("Done") { dismiss() }
                 .font(.system(size: 16, weight: .semibold))
                 .frame(minWidth: 52, minHeight: 44)

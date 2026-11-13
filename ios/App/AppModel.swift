@@ -110,6 +110,7 @@ final class AppModel: ObservableObject, ControlTarget {
         Devices.shared.restore()
         DriveWatch.shared.app = self
         DriveWatch.shared.start()
+        AppLog.add("launch")
         CrashLog.shared.start()              // crash reports from iOS land in Files → Cratebox → Crash reports
         AppleMusic.shared.attach(self)       // AI mode: Apple's Music Understanding in the background (iOS 27, off by default)
         restoreBrowse()
@@ -214,6 +215,7 @@ final class AppModel: ObservableObject, ControlTarget {
     }
 
     func status(_ s: String, _ secs: Double = 4) {
+        if !s.isEmpty && s != statusText { AppLog.add(s) }       // the session log (Settings → Report a problem)
         statusText = s
         statusUntil = secs > 0 ? hostSeconds() + secs : 0
     }
