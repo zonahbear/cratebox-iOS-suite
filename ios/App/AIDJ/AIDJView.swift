@@ -295,7 +295,7 @@ struct AIDJPicker: View {
     @State private var query = ""
     var body: some View {
         let q = query.lowercased()
-        let tracks = library.tracks.filter { ($0.info.bpm ?? 0) > 0 && (q.isEmpty || $0.info.title.lowercased().contains(q) || $0.info.artist.lowercased().contains(q)) }
+        let tracks = library.preferLocal(library.tracks).filter { ($0.info.bpm ?? 0) > 0 && (q.isEmpty || $0.info.title.lowercased().contains(q) || $0.info.artist.lowercased().contains(q)) }
         return NavigationStack {
             List(tracks, id: \.id) { t in
                 let k = dj.selected.firstIndex(of: t.id)

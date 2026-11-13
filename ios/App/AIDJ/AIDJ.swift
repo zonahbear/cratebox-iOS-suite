@@ -141,8 +141,8 @@ final class AIDJ: ObservableObject {
         case .playlist(let v): list = LibraryPane.build(v, app.library, app.playlists, Devices.shared, query: "", sort: LibraryPane.storedSort(v)).compactMap { $0.t }
         case .selected: list = selected.compactMap { app.library.track($0) }
         }
-        var seen = Set<String>()
-        list = list.filter { seen.insert($0.id).inserted && ($0.info.bpm ?? 0) > 0 && $0.info.duration > 60 }
+        // the stick and its copies on this device are one song each: the copy is used
+        list = app.library.preferLocal(list).filter { ($0.info.bpm ?? 0) > 0 && $0.info.duration > 60 }
         if let f = vibe { list = list.filter { f.matches(title: $0.info.title, artist: $0.info.artist, bpm: $0.info.bpm, key: $0.info.key, duration: $0.info.duration) } }
         return list
     }

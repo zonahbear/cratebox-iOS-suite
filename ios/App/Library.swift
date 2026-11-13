@@ -204,6 +204,30 @@ final class Library: ObservableObject {
         Dictionary(tracks.filter { $0.device == nil }.map { (Library.twinKey(($0.rec.rel as NSString).lastPathComponent, $0.rec.size), $0) }, uniquingKeysWith: { a, _ in a })
     }
     static func twinKey(_ name: String, _ size: Int64) -> String { "\(name.lowercased())|\(size)" }
+    /// one entry per song: a stick track whose copy is on this device (same file name and size, or same artist,
+    /// title and length to within 2 s) becomes that copy, which plays without the stick; then duplicates go
+    /// (Jonah, 2026-11-13: a synced library with the stick in counted every track twice)
+    func preferLocal(_ list: [LibTrack]) -> [LibTrack] {
+        guard list.contains(where: { $0.device != nil }) else { return list }
+        let own = tracks.filter { $0.device == nil }
+        var byFile = [String: LibTrack](), byMeta = [String: [LibTrack]]()
+        for t in own {
+            byFile[AppleMusic.twinKey(t)] = byFile[AppleMusic.twinKey(t)] ?? t
+            if let m = AppleMusic.metaKey(t) { byMeta[m, default: []].append(t) }
+        }
+        var seen = Set<String>()
+        return list.compactMap { t -> LibTrack? in
+            var u = t
+            if t.device != nil {
+                if let c = byFile[AppleMusic.twinKey(t)] { u = c }
+                else if let m = AppleMusic.metaKey(t), let cs = byMeta[m] {
+                    let len = AppleMusic.length(t)
+                    if let c = cs.first(where: { c in let l = AppleMusic.length(c); return len == nil || l == nil || abs(len! - l!) <= 2 }) { u = c }
+                }
+            }
+            return seen.insert(u.id).inserted ? u : nil
+        }
+    }
     /// tracks UsbCopy just copied into one of the library's folders: they join straight away with rekordbox's title,
     /// artist, grid and key (no rescan, no second analysis); ones without rekordbox's grid go to the analysis queue
     func addCopied(_ recs: [TrackRecord]) -> [LibTrack] {
