@@ -139,12 +139,13 @@ final class AppleMusic: ObservableObject {
     var waiting: Int {
         guard let app else { return 0 }
         let want = Set(wanted)
-        return app.library.tracks.filter { want.contains($0.id) && needs($0) }.count
+        // a stick track and its copy here are one song: counted (and analysed) once, as the copy
+        return app.library.preferLocal(app.library.tracks.filter { want.contains($0.id) }).filter { needs($0) }.count
     }
     private func needs(_ t: LibTrack) -> Bool { source(t) == nil && (index[t.id].map { !current($0, t) } ?? true) }
     /// ask for these tracks (already analysed ones, and ones sharing a twin's results, are skipped)
     func request(_ tracks: [LibTrack]) {
-        let todo = tracks.filter { needs($0) }.map(\.id)
+        let todo = (app?.library.preferLocal(tracks) ?? tracks).filter { needs($0) }.map(\.id)
         let have = Set(wanted)
         let add = todo.filter { !have.contains($0) }
         wanted += add
@@ -450,7 +451,7 @@ final class AppleMusic: ObservableObject {
         // only what was asked for; a track whose twin (USB ↔ this device) is already analysed shares those results
         guard !wanted.isEmpty else { progress = ""; return }
         let want = Set(wanted)
-        let todo = app.library.tracks.filter { want.contains($0.id) && needs($0) }
+        let todo = app.library.preferLocal(app.library.tracks.filter { want.contains($0.id) }).filter { needs($0) }
         if todo.isEmpty && want.allSatisfy({ id in app.library.track(id) != nil }) { wanted = []; progress = ""; backgroundStep(finishedRun: true); return }
         // a folder whose drive isn't there is asked once a minute, not once per track (resolving a bookmark to a
         // missing drive can take seconds, and this runs on the main thread)
