@@ -26,6 +26,9 @@ struct TrackRecord: Codable {
     var anlz: String? = nil
     /// title, artist and key came from rekordbox's database (a USB copy): the file's own tags don't replace them
     var rbTags: Bool? = nil
+    /// USB copies: rekordbox's artwork for it, copied with the stick's PIONEER folder (path inside From USB, the small
+    /// a1.jpg; the bigger a1_m.jpg is next to it when rekordbox exported one)
+    var art: String? = nil
 }
 
 final class LibTrack: Identifiable {

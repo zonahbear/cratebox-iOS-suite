@@ -1,5 +1,6 @@
 // Album art. Library rows (the library and the controller's browser) show rekordbox's small icon for stick
-// tracks (export.pdb's artwork table → PIONEER/Artwork/…/a1.jpg), and the file's own cover for other tracks.
+// tracks and their USB copies (export.pdb's artwork table → PIONEER/Artwork/…/a1.jpg, copied with the stick's
+// PIONEER folder), and the file's own cover for other tracks.
 // Decks show the full-size cover embedded in the file, shrunk to fit, for every track, stick tracks included.
 // rekordbox's a1_m.jpg, then its a1.jpg, are used only when the file has no cover (Jonah, 2026-11-12). With
 // no art anywhere, or when the track itself is missing, a greyscale record is drawn. Images are decoded off
@@ -35,6 +36,11 @@ final class Artwork {
         var files = [URL]()
         if let p = t.rb?.artwork, let d = Devices.shared.device(of: t) {
             func on(_ path: String) -> URL { d.root.appendingPathComponent(String(path.drop { $0 == "/" })) }
+            if s == .deck { files.append(on(PDBTrack.bigArtwork(p))) }
+            files.append(on(p))
+        } else if t.device == nil, t.rec.folder == UsbCopy.folderId, let p = t.rec.art {
+            // a USB copy: rekordbox's artwork, copied from the stick's PIONEER folder with it
+            func on(_ path: String) -> URL { UsbCopy.root.appendingPathComponent(path) }
             if s == .deck { files.append(on(PDBTrack.bigArtwork(p))) }
             files.append(on(p))
         }

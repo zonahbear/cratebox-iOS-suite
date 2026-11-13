@@ -2,9 +2,9 @@
 // stick. All of a stick (also "Sync"), one playlist (or a folder of them), or the tracks you pick. Never deletes, never
 // writes to the stick, never copies a track twice: a track whose file name and size are already in the library is
 // skipped (the Linux app's usbcopy.rs uses the same twin rule). Copies keep rekordbox's title, artist, grid and key,
-// and the stick's whole PIONEER folder comes along (Jonah, 2026-11-13: "as if the app thinks it's reading a rekordbox
-// usb when there isn't one"): From USB/<stick>/ is laid out like the stick (Contents/… + PIONEER/rekordbox/export.pdb,
-// USBANLZ, Artwork), so each copy's title, artist, key, grid, phrases and cues come from rekordbox's own files with
+// and the rest of the stick comes along, PIONEER folder included (Jonah, 2026-11-13: "as if the app thinks it's reading a
+// rekordbox usb when there isn't one", "copy the ENTIRE USB"): From USB/<stick>/ is laid out like the stick (Contents/… + PIONEER/rekordbox/export.pdb,
+// USBANLZ, Artwork, and every other file), so each copy's title, artist, key, art, grid, phrases and cues come from rekordbox's own files with
 // the stick unplugged (rehydrate), and it can all be seen and copied in Files.
 // The copying runs on a background queue at utility priority; the decks hold their tracks in memory, so it never
 // touches playback. Main thread for everything else.
@@ -49,25 +49,48 @@ final class UsbCopy: ObservableObject {
         }
         return fm.fileExists(atPath: local.path)
     }
-    /// the stick's whole PIONEER folder (export.pdb, exportLibrary.db, every ANLZ file, artwork) to
-    /// From USB/<stick>/PIONEER, file by file, skipping files already there at the same size (any thread)
-    static func copyPioneer(_ stickRoot: URL, stick: String) {
+    /// Everything on the stick to From USB/<stick>/, laid out as it is on the stick (Jonah, 2026-11-13: "copy the ENTIRE
+    /// USB, including the pioneer folder"): PIONEER (export.pdb, exportLibrary.db, every ANLZ file, artwork) and every
+    /// other file and folder. File by file, skipping ones already there at the same size (the databases are always
+    /// copied again: they change in place). Audio files are left out when `skip` has their path on the stick (the
+    /// track copies handle those, with their own checks) or `twins` has their name + size (already on this device, so
+    /// they'd be listed twice). Hidden files and the system's own folders are left out. Any thread.
+    /// `pioneerOnly`: just the PIONEER folder (copying one playlist or a few tracks).
+    static func copyAll(_ stickRoot: URL, stick: String, skip: Set<String>, twins: Set<String>, pioneerOnly: Bool = false, cancelled: () -> Bool = { false }) {
         let fm = FileManager.default
-        let from = stickRoot.appendingPathComponent("PIONEER", isDirectory: true), base = Library.plainPath(from)
-        let to = root.appendingPathComponent(stick + "/PIONEER", isDirectory: true)
-        guard let en = fm.enumerator(at: from, includingPropertiesForKeys: [.isRegularFileKey, .fileSizeKey], options: [.skipsHiddenFiles]) else { return }
+        let base = Library.plainPath(stickRoot)
+        let to = root.appendingPathComponent(stick, isDirectory: true)
+        let system: Set<String> = ["System Volume Information", "$RECYCLE.BIN", "LOST.DIR"]
+        guard let en = fm.enumerator(at: stickRoot, includingPropertiesForKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey], options: [.skipsHiddenFiles]) else { return }
         for case let u as URL in en {
-            let v = try? u.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey])
+            if cancelled() { return }
+            let v = try? u.resourceValues(forKeys: [.isRegularFileKey, .isDirectoryKey, .fileSizeKey])
+            if v?.isDirectory == true { if system.contains(u.lastPathComponent) { en.skipDescendants() }; continue }
             guard v?.isRegularFile == true else { continue }
             let p = Library.plainPath(u)
             guard p.hasPrefix(base + "/") else { continue }
-            let d = to.appendingPathComponent(String(p.dropFirst(base.count + 1)))
+            let rel = String(p.dropFirst(base.count + 1))
+            if rel.hasSuffix(".part") || (pioneerOnly && !rel.hasPrefix("PIONEER/")) { continue }
             let size = Int64(v?.fileSize ?? -1)
-            if let ds = (try? fm.attributesOfItem(atPath: d.path))?[.size] as? Int64, ds == size, !u.lastPathComponent.hasPrefix("export") { continue }
+            if Library.audioExt.contains(u.pathExtension.lowercased()) {
+                if skip.contains(rel.lowercased()) || twins.contains(Library.twinKey(u.lastPathComponent, size)) { continue }
+            }
+            let d = to.appendingPathComponent(rel)
+            let db = rel.hasPrefix("PIONEER/rekordbox/export")
+            if !db, let ds = (try? fm.attributesOfItem(atPath: d.path))?[.size] as? Int64, ds == size { continue }
             try? fm.createDirectory(at: d.deletingLastPathComponent(), withIntermediateDirectories: true)
+            // beside it, then into place, so an unplugged stick never leaves half a file under the real name
+            let part = d.appendingPathExtension("part")
+            try? fm.removeItem(at: part)
+            guard (try? fm.copyItem(at: u, to: part)) != nil else { continue }
             try? fm.removeItem(at: d)
-            try? fm.copyItem(at: u, to: d)
+            try? fm.moveItem(at: part, to: d)
         }
+    }
+    /// what copyAll leaves to the track copies (main thread: the stick's tracks and the library live there)
+    static func allArgs(_ d: Device, _ lib: Library) -> (skip: Set<String>, twins: Set<String>) {
+        let skip = Set(d.byRbId.values.compactMap { $0.rb.map { String($0.path.drop { $0 == "/" }).lowercased() } })
+        return (skip, Set(liveTwins(lib).keys))
     }
 
     /// Copies on this device that lack rekordbox's data (copied before PIONEER came along, or a rescan gave them new
@@ -82,7 +105,7 @@ final class UsbCopy: ObservableObject {
         DispatchQueue.global(qos: .utility).async {
             let fm = FileManager.default
             var dbs = [String: [String: PDBTrack]]()
-            var out = [(LibTrack, PDBTrack, String?, Devices.RBRead?)]()
+            var out = [(LibTrack, PDBTrack, String?, String?, Devices.RBRead?)]()
             for (t, rel) in recs {
                 let stick = String(rel.prefix { $0 != "/" })
                 if dbs[stick] == nil {
@@ -93,17 +116,22 @@ final class UsbCopy: ObservableObject {
                     dbs[stick] = m
                 }
                 guard let x = dbs[stick]?[rel] else { continue }
+                var art: String?
+                if let w = x.artwork, !w.isEmpty {
+                    let ar = stick + "/" + String(w.drop { $0 == "/" })
+                    if fm.fileExists(atPath: root.appendingPathComponent(ar).path) { art = ar }
+                }
                 var a: String?, read: Devices.RBRead?
                 if !x.anlzPath.isEmpty {
                     let ar = stick + "/" + String(x.anlzPath.drop { $0 == "/" })
                     let u = root.appendingPathComponent(ar)
                     if fm.fileExists(atPath: u.path) { a = ar; read = Devices.readAnalysis(at: u) }
                 }
-                out.append((t, x, a, read))
+                out.append((t, x, a, art, read))
             }
             DispatchQueue.main.async {
                 var n = 0
-                for (t, x, a, read) in out {
+                for (t, x, a, art, read) in out {
                     if !x.title.isEmpty { t.rec.title = x.title; t.info.title = x.title }
                     if !x.artist.isEmpty || !x.title.isEmpty { t.rec.artist = x.artist; t.info.artist = x.artist }
                     let k = RekordboxANLZ.keyIndex(x.key)
@@ -111,6 +139,7 @@ final class UsbCopy: ObservableObject {
                     if t.info.duration <= 0, x.duration > 0 { t.info.duration = Double(x.duration) }
                     t.rec.rbTags = true
                     if let a { t.rec.anlz = a }
+                    if let art { t.rec.art = art }
                     if let read, read.bpm > 0 {
                         var r = t.rec
                         r.bpm = read.bpm; r.firstBeat = read.firstBeat; r.key = t.info.key
@@ -187,11 +216,13 @@ final class UsbCopy: ObservableObject {
         // already in the library (every 10 tracks), and Sync later copies the rest
         var bg = UIBackgroundTaskIdentifier.invalid
         bg = UIApplication.shared.beginBackgroundTask(withName: "Copy from USB") { UIApplication.shared.endBackgroundTask(bg); bg = .invalid }
-        let stickRoot = d.root
+        let stickRoot = d.root, all = Self.allArgs(d, lib)
         DispatchQueue.global(qos: .utility).async {
             var done = [TrackRecord](), failed = 0, batch = [TrackRecord]()
             let fm = FileManager.default
-            Self.copyPioneer(stickRoot, stick: stick)
+            // the rest of the stick first (PIONEER: database, grids, cues, artwork; and every other file)
+            DispatchQueue.main.async { self.progress = mirror ? "Copying \(name)'s rekordbox files and the rest of the stick…" : "Copying \(name)'s rekordbox files…" }
+            Self.copyAll(stickRoot, stick: stick, skip: all.skip, twins: all.twins, pioneerOnly: !mirror) { self.cancelled }
             for (i, j) in jobs.enumerated() {
                 if self.cancelled { break }
                 let to = dest.appendingPathComponent(j.rel)
@@ -247,15 +278,15 @@ final class UsbCopy: ObservableObject {
             if busy != nil { self.say(app, "Wait for the copy to finish", 5); return }
             // nothing to copy: still bring the stick's PIONEER folder over (database, grids, cues, artwork) and give
             // every copy rekordbox's data from it
-            busy = d.id; progress = "Copying \(d.name)'s rekordbox files…"
-            let stickRoot = d.root, stick = Self.safe(d.name), lib = app.library
+            busy = d.id; cancelled = false; progress = "Copying the rest of \(d.name) (rekordbox files and everything else)…"
+            let stickRoot = d.root, stick = Self.safe(d.name), lib = app.library, all = Self.allArgs(d, lib)
             DispatchQueue.global(qos: .utility).async {
-                Self.copyPioneer(stickRoot, stick: stick)
+                Self.copyAll(stickRoot, stick: stick, skip: all.skip, twins: all.twins) { self.cancelled }
                 DispatchQueue.main.async {
                     self.busy = nil; self.progress = ""
                     let n = self.mirrorPlaylists(d, app: app)
                     self.rehydrate(lib, all: true) { k in
-                        self.say(app, "\(d.name): every track's already on this device; rekordbox's files copied, \(k) track\(k == 1 ? "" : "s") use them; \(n) playlist\(n == 1 ? "" : "s") brought up to date", 8)
+                        self.say(app, "\(d.name): every track's already on this device; the whole stick copied, \(k) track\(k == 1 ? "" : "s") use them; \(n) playlist\(n == 1 ? "" : "s") brought up to date", 8)
                     }
                 }
             }
@@ -343,7 +374,7 @@ final class UsbCopy: ObservableObject {
         }
         if jobs.isEmpty { self.say(app, "No tracks on this device match \(d.name)", 6); return }
         busy = d.id; progress = "Reading \(d.name)'s grids…"
-        let stickRoot = d.root, stick = Self.safe(d.name)
+        let stickRoot = d.root, stick = Self.safe(d.name), all = Self.allArgs(d, lib)
         DispatchQueue.global(qos: .utility).async {
             var done = [(LibTrack, TrackRecord)]()
             for (local, a, base) in jobs {
@@ -355,7 +386,7 @@ final class UsbCopy: ObservableObject {
                 done.append((local, r))
             }
             // and the stick's PIONEER folder, so copies keep it all without the stick
-            Self.copyPioneer(stickRoot, stick: stick)
+            Self.copyAll(stickRoot, stick: stick, skip: all.skip, twins: all.twins)
             DispatchQueue.main.async {
                 for (t, r) in done { Library.applyRekordbox(r, to: t) }
                 lib.objectWillChange.send(); lib.save()
