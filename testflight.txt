@@ -1,0 +1,33 @@
+run 43403058043 sha c4dac0cbd33bdb136d21d21985db7cf1248a2cd7 build 79.1 at Fri Nov 13 09:43:21 UTC 2026
+     1 valid identities found
+PROFILE 'Cratebox Suite App Store' f7990ec7-b8d7-4271-8a93-731e96311219 team 369KQMGQW6 app 369KQMGQW6.com.zonahbear.cratebox.suite expires Fri Oct 22 05:33:14 UTC 2027
+** ARCHIVE SUCCEEDED **
+** EXPORT SUCCEEDED **
+2026-11-13 09:43:20.728 ERROR: [ContentDelivery.Uploader.7542C61340] Failed to create URL for 'CDUploaderStateInfoResumeFilePath'. The file doesn’t exist. (4) The file doesn’t exist.
+UPLOADED build 79.1 from c4dac0c
+---- tail
+Xcode 27.2
+Build version 27B52
+  1) 558B71ABDA92ABBF9DC23066817FC569002E0ABA "Apple Distribution: Jonah Snead (369KQMGQW6)"
+     1 valid identities found
+PROFILE 'Cratebox Suite App Store' f7990ec7-b8d7-4271-8a93-731e96311219 team 369KQMGQW6 app 369KQMGQW6.com.zonahbear.cratebox.suite expires Fri Oct 22 05:33:14 UTC 2027
+⚙️  Generating project...
+⚙️  Writing project...
+Created project at /Users/runner/work/cratebox-iOS-suite/cratebox-iOS-suite/ios/Cratebox.xcodeproj
+** ARCHIVE SUCCEEDED **
+2026-11-13 09:42:14.737 xcodebuild[11890:35581] [MT] IDEDistribution: -[IDEDistributionLogging _createLoggingBundleAtPath:]: Created bundle at path "/var/folders/5n/5t77mfb93jd7q8v9s6f0dn0m0000gn/T/Cratebox_2026-11-13_09-42-14.723.xcdistributionlogs".
+Exported Cratebox to: /Users/runner/work/_temp/export
+** EXPORT SUCCEEDED **
+
+-rw-r--r--  1 runner  staff  4814994 Nov 13 09:42 /Users/runner/work/_temp/export/Cratebox.ipa
+Running altool at path '/Applications/Xcode_27.2.app/Contents/SharedFrameworks/ContentDelivery.framework/Resources/altool'...
+
+2026-11-13 09:43:20.728 ERROR: [ContentDelivery.Uploader.7542C61340] Failed to create URL for 'CDUploaderStateInfoResumeFilePath'. The file doesn’t exist. (4) The file doesn’t exist.
+2026-11-13 09:43:20.732  INFO: [ContentDelivery.Uploader.7542C61340] 
+==========================================
+UPLOAD SUCCEEDED with no errors
+Delivery UUID: a9fb19c5-0406-4c5e-aedd-d689aba53896
+Transferred 4814994 bytes in 2.398 seconds (2.0MB/s, 16.062Mbps)
+==========================================
+No errors uploading archive at '/Users/runner/work/_temp/export/Cratebox.ipa'.
+UPLOADED build 79.1 from c4dac0c
