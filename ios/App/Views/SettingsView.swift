@@ -327,7 +327,7 @@ struct SettingsView: View {
                     .confirmationDialog("Throw away Apple's analysis of all \(apple.analysed) tracks?", isPresented: $confirmClear, titleVisibility: .visible) {
                         Button("Delete and analyse again", role: .destructive) { apple.clear() }
                         Button("Cancel", role: .cancel) {}
-                    } message: { Text("There's no copy: every track is analysed again from scratch, only while nothing plays. Your grids, rekordbox's and Cratebox's aren't touched.") }
+                    } message: { Text("There's no copy: every track on this device is analysed again from scratch, only while nothing plays. Your grids, rekordbox's and Cratebox's aren't touched.") }
             }
         } header: { Text("Beat grids") } footer: {
             Text("Used from a track's next load, for playing and for AI DJ's mix points. A grid you fix here (TAP · GRID) always wins; so does a CUE you set, as AI DJ's mix-in point. rekordbox doesn't say which of its grids were fixed by hand, so they count as rekordbox's: nudge one here once to make it yours. Apple's half-time counts are doubled to match.")
@@ -351,6 +351,22 @@ struct SettingsView: View {
                 } else {
                     LabeledContent("Apple music analysis", value: "\(apple.analysed) track\(apple.analysed == 1 ? "" : "s")" + (apple.failedCount > 0 ? ", \(apple.failedCount) failed" : ""))
                     if !apple.progress.isEmpty { Text(apple.progress).font(.caption).foregroundStyle(Theme.muted) }
+                    if !aiMode { Text("Turn on AI mode above to analyse.").font(.caption).foregroundStyle(Theme.muted) }
+                    Button("Analyse the whole library on this device") { apple.request(app.library.tracks.filter { $0.device == nil }) }.disabled(!aiMode)
+                    Menu("Analyse a playlist") {
+                        ForEach(playlists.lists.filter { !$0.folder }) { p in
+                            Button("\(playlists.path(p)) (\(p.items.count))") { apple.request(p.items.compactMap { app.library.track($0) }) }
+                        }
+                    }.disabled(!aiMode || playlists.lists.allSatisfy(\.folder))
+                    Button("Analyse the selected track") { if let id = app.selection, let t = app.library.track(id) { apple.request([t]) } }
+                        .disabled(!aiMode || app.selection.flatMap { app.library.track($0) } == nil)
+                    if apple.waiting > 0 {
+                        HStack {
+                            Text("\(apple.waiting) waiting").font(.caption).foregroundStyle(Theme.muted)
+                            Spacer()
+                            Button("Stop", role: .destructive) { apple.cancelRequests() }
+                        }
+                    }
                     if apple.failedCount > 0 {
                         DisclosureGroup("Why \(apple.failedCount) failed") {
                             ForEach(Array(apple.failures.prefix(200).enumerated()), id: \.offset) { _, f in
@@ -364,7 +380,7 @@ struct SettingsView: View {
                     }
                 }
             } header: { Text("Apple music analysis") } footer: {
-                Text("iOS 27+. Finds beats, bars, key, phrases, vocals and loudness in the background, only while nothing plays. It also sorts the library by MATCH (what would follow the playing track best) and marks MIX IN and MIX OUT on a loaded track's waveform. Whose grid wins: Library & USB → Beat grids.")
+                Text("iOS 27+. Only what you ask for is analysed: pick it here, or long-press a track, playlist or stick in the library → Analyse. It finds beats, bars, key, phrases, vocals and loudness in the background, only while nothing plays and the app is left alone. It also sorts the library by MATCH (what would follow the playing track best) and marks MIX IN and MIX OUT on a loaded track's waveform. Whose grid wins: Library & USB → Beat grids.")
             }
             Section {
                 ForEach(AutoMix.Transition.allCases, id: \.self) { k in

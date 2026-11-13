@@ -317,6 +317,7 @@ struct LibraryPane: View {
             if let t {
                 addToMenu([t])
                 if let d = devices.device(of: t) { Button("Copy to this device") { UsbCopy.shared.copy([t], from: d, app: app) } }
+                analyseButton([t])
             }
         }
     }
@@ -333,6 +334,12 @@ struct LibraryPane: View {
     func onDeck(_ t: LibTrack?) -> Int? { guard let t else { return nil }; return core.decks.firstIndex { $0.track === t.info } }
     func clockShort(_ s: Double) -> String { String(format: "%d:%02d", Int(s) / 60, Int(s) % 60) }
 
+    /// long-press → Analyse: Apple's analysis (AI mode), only for what's asked (Jonah, 2026-11-13)
+    @ViewBuilder func analyseButton(_ tracks: [LibTrack]) -> some View {
+        if aiMode && AppleMusic.usable && !tracks.isEmpty {
+            Button { AppleMusic.shared.request(tracks) } label: { Label(tracks.count == 1 ? "Analyse" : "Analyse \(tracks.count) tracks", systemImage: "waveform.badge.magnifyingglass") }
+        }
+    }
     @ViewBuilder func addToMenu(_ tracks: [LibTrack]) -> some View {
         Menu("Add to playlist") {
             ForEach(playlists.lists.filter { !$0.folder }) { p in Button(playlists.path(p)) { playlists.add(tracks, to: p.id); app.status("Added to \(p.name)") } }
@@ -413,6 +420,7 @@ struct LibraryPane: View {
                 Button("Top level") { playlists.moveList(p.id, into: nil) }
                 ForEach(playlists.lists.filter { $0.folder && $0.id != p.id }) { f in Button(playlists.path(f)) { playlists.moveList(p.id, into: f.id) } }
             }
+            if !p.folder { analyseButton(p.items.compactMap { library.track($0) }) }
             Button("Delete", role: .destructive) { if app.view == .playlist(p.id) { app.view = .collection }; playlists.delete(p.id) }
         }
     }
@@ -436,6 +444,7 @@ struct LibraryPane: View {
             }
             Button("Sync to this device (copy what's new)") { UsbCopy.shared.sync(d, app: app) }
             Button("Copy all to this device") { UsbCopy.shared.copy(Array(d.byRbId.values), from: d, app: app) }
+            analyseButton(Array(d.byRbId.values))
             Button("Name it in Cratebox…") { renaming = "devname:\(d.id)"; renameText = d.name }
             Button("Eject", role: .destructive) { devices.eject(d) }
         }
@@ -469,7 +478,7 @@ struct LibraryPane: View {
     }
     /// everything you can do to a rekordbox playlist or folder on a stick (editing: Settings, behind the disclaimer)
     @ViewBuilder func devNodeMenu(_ n: PDBPlaylist, _ d: Device) -> some View {
-        if !n.folder { Button("Copy to my playlists") { copy(n, d) } }
+        if !n.folder { Button("Copy to my playlists") { copy(n, d) }; analyseButton(devices.tracks(of: n, in: d)) }
         Button(n.folder ? "Copy its tracks to this device" : "Copy to this device (with the playlist)") { UsbCopy.shared.copyPlaylist(n, from: d, app: app) }
         if devices.editable {
             Button("Rename") { renaming = "dev:\(d.id):\(n.id)"; renameText = n.name }

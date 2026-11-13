@@ -129,6 +129,28 @@ final class AppleMusic: ObservableObject {
 
     @Published private(set) var progress = ""
     @Published private(set) var analysed = 0
+    /// the tracks you asked Apple to analyse (Settings → AI, or long-press → Analyse). Nothing is analysed unless
+    /// it's asked for (Jonah, 2026-11-13): it used to start on every track by itself
+    @Published private(set) var wanted: [String] = UserDefaults.standard.stringArray(forKey: "cb.apple.wanted") ?? [] {
+        didSet { UserDefaults.standard.set(wanted, forKey: "cb.apple.wanted") }
+    }
+    /// how many of the asked-for tracks still need doing
+    var waiting: Int {
+        guard let app else { return 0 }
+        let want = Set(wanted)
+        return app.library.tracks.filter { want.contains($0.id) && needs($0) }.count
+    }
+    private func needs(_ t: LibTrack) -> Bool { source(t) == nil && (index[t.id].map { !current($0, t) } ?? true) }
+    /// ask for these tracks (already analysed ones, and ones sharing a twin's results, are skipped)
+    func request(_ tracks: [LibTrack]) {
+        let todo = tracks.filter { needs($0) }.map(\.id)
+        let have = Set(wanted)
+        wanted += todo.filter { !have.contains($0) }
+        app?.status(todo.isEmpty ? "Already analysed" : "Apple will analyse \(todo.count) track\(todo.count == 1 ? "" : "s") while nothing plays")
+        kick()
+    }
+    /// forget what's asked for and stop the track being done
+    func cancelRequests() { wanted = []; job?.cancel(); progress = "" }
     weak var app: AppModel?
     /// what's been analysed (or failed): the file's size and date, and the format version
     struct Stamp: Codable {
@@ -305,14 +327,17 @@ final class AppleMusic: ObservableObject {
         // been left alone for a while, the phone isn't hot, and Low Power Mode is off
         TouchWatch.install()
         if ProcessInfo.processInfo.systemUptime - TouchWatch.last < AppleMusic.idleSecs {
-            if index.count < app.library.tracks.count { progress = "Waits until the app is left alone for \(Int(AppleMusic.idleSecs)) seconds" }
+            if !wanted.isEmpty { progress = "Waits until the app is left alone for \(Int(AppleMusic.idleSecs)) seconds" }
             later(5); return
         }
         let heat = ProcessInfo.processInfo.thermalState
         if heat == .serious || heat == .critical { progress = "Waits for the phone to cool down"; later(30); return }
         if ProcessInfo.processInfo.isLowPowerModeEnabled { progress = "Waits while Low Power Mode is on"; later(30); return }
-        // a track whose twin (USB ↔ this device) is already analysed shares those results: not done again
-        let todo = app.library.tracks.filter { t in source(t) == nil && (index[t.id].map { !current($0, t) } ?? true) }
+        // only what was asked for; a track whose twin (USB ↔ this device) is already analysed shares those results
+        guard !wanted.isEmpty else { progress = ""; return }
+        let want = Set(wanted)
+        let todo = app.library.tracks.filter { want.contains($0.id) && needs($0) }
+        if todo.isEmpty && want.allSatisfy({ id in app.library.track(id) != nil }) { wanted = []; progress = ""; return }
         // a folder whose drive isn't there is asked once a minute, not once per track (resolving a bookmark to a
         // missing drive can take seconds, and this runs on the main thread)
         let now = Date().timeIntervalSince1970
@@ -394,7 +419,7 @@ final class AppleMusic: ObservableObject {
         try? FileManager.default.removeItem(at: dir)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         objectWillChange.send()
-        kick()
+        if let app { request(app.library.tracks.filter { $0.device == nil }) }
     }
     var failedCount: Int { index.values.filter { $0.failed != nil }.count }
     /// tracks Apple's analysis gave up on, with why (Settings → AI)
