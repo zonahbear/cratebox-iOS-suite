@@ -1,0 +1,30 @@
+# TestFlight crash reports → the ci-logs-crashes branch (crashes/ folder), one text file per report.
+# TestFlight only keeps reports a tester sent with "Share" on its crash prompt. Personal fields (email) are dropped:
+# this repo is public. Manual only (Actions minutes); Linux runner, so it's cheap.
+name: TestFlight crashes
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+      BUNDLE_ID: com.zonahbear.cratebox.suite
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install --quiet pyjwt cryptography
+      - name: Fetch crash reports
+        run: python3 .github/scripts/testflight_crashes.py
+      - name: Save to the ci-logs-crashes branch
+        run: |
+          mkdir -p /tmp/c && cp -r out/. /tmp/c/
+          git config user.name "github-actions"; git config user.email "github-actions@users.noreply.github.com"
+          git fetch -q origin ci-logs-crashes && git checkout -q ci-logs-crashes || git checkout -q --orphan ci-logs-crashes
+          git rm -rqf . >/dev/null 2>&1 || true
+          mkdir -p crashes && cp -r /tmp/c/. crashes/
+          git add -f crashes && git commit -qm "crashes ${{ github.run_id }}" && git push -q origin HEAD:ci-logs-crashes || echo "nothing new"
