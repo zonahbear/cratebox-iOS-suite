@@ -204,7 +204,12 @@ final class Library: ObservableObject {
     func addCopied(_ recs: [TrackRecord]) -> [LibTrack] {
         var out = [LibTrack]()
         for r in recs {
-            if let t = byId[r.id] { out.append(t); continue }
+            // already listed (a rescan of the folder found the file while the copy was still running, so it came in
+            // without rekordbox's grid): give it rekordbox's grid now, unless you fixed the grid yourself
+            if let t = byId[r.id] {
+                if r.rbGrid == true { Library.applyRekordbox(r, to: t) }
+                out.append(t); continue
+            }
             let t = LibTrack(r)
             tracks.append(t); byId[r.id] = t; out.append(t)
             if !t.analysed { queue.append(t) }
@@ -218,6 +223,17 @@ final class Library: ObservableObject {
         byId = Dictionary(tracks.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
     }
 
+    /// rekordbox's grid, phrases and key (from a stick's analysis) onto a track on this device; a grid you set wins
+    static func applyRekordbox(_ r: TrackRecord, to t: LibTrack) {
+        guard !t.rec.gridManual, let bpm = r.bpm, bpm > 0 else { return }
+        t.info.bpm = bpm; t.info.firstBeat = r.firstBeat; t.info.autoBpm = bpm; t.info.autoFirst = r.firstBeat
+        if !r.phrases.isEmpty { t.info.phrases = r.phrases }
+        if r.key >= 0 { t.info.key = r.key }
+        if t.info.duration <= 0 { t.info.duration = r.duration }
+        t.info.appleGrid = false; t.info.rbGrid = true
+        t.rec.rbGrid = true; t.rec.ver = Library.ANALYSIS_VER; t.rec.fail = nil
+        t.sync()
+    }
     func changed(_ t: LibTrack) { let f = t.rec.fail; t.sync(); t.rec.fail = f; save() }
     /// tracks Cratebox's own analysis couldn't do, with why (Settings → Library & USB)
     var failed: [LibTrack] { tracks.filter { $0.device == nil && $0.rec.fail != nil } }

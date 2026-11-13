@@ -152,6 +152,40 @@ final class UsbCopy: ObservableObject {
         return lib.addFolder(u)
     }
 
+    /// Re-sync from the stick: every track on this device that is also on stick `d` (same file name and size) gets
+    /// rekordbox's grid, phrases and key again, unless you set its grid yourself. Nothing is copied or deleted; fixes
+    /// copies that came in without rekordbox's grid (a rescan raced the copy) and stops them being analysed again
+    func regrid(_ d: Device, app: AppModel) {
+        if busy != nil { app.status("Wait for the copy to finish", 5); return }
+        let lib = app.library, have = lib.twins()
+        var jobs = [(LibTrack, URL, TrackRecord)]()
+        for t in d.byRbId.values {
+            guard let r = t.rb, let a = Devices.shared.anlzURL(t) else { continue }
+            let key = Library.twinKey(r.filename.isEmpty ? (r.path as NSString).lastPathComponent : r.filename, Int64(r.size))
+            guard let local = have[key], !local.rec.gridManual else { continue }
+            jobs.append((local, a, t.rec))
+        }
+        if jobs.isEmpty { app.status("No tracks on this device match \(d.name)", 6); return }
+        busy = d.id; progress = "Reading \(d.name)'s grids…"
+        DispatchQueue.global(qos: .utility).async {
+            var done = [(LibTrack, TrackRecord)]()
+            for (local, a, base) in jobs {
+                guard let x = Devices.readAnalysis(at: a), x.bpm > 0 else { continue }
+                var r = base
+                r.bpm = x.bpm; r.firstBeat = x.firstBeat
+                if let ph = x.phrases { r.phrases = ph }
+                r.rbGrid = true
+                done.append((local, r))
+            }
+            DispatchQueue.main.async {
+                for (t, r) in done { Library.applyRekordbox(r, to: t) }
+                lib.objectWillChange.send(); lib.save()
+                self.busy = nil; self.progress = ""
+                app.status("\(done.count) of \(jobs.count) tracks on this device now use \(d.name)'s rekordbox grids", 8)
+            }
+        }
+    }
+
     /// a stick name that's safe as a folder name
     static func safe(_ s: String) -> String {
         let t = s.replacingOccurrences(of: "[/\\\\:]", with: "-", options: .regularExpression).trimmingCharacters(in: .whitespaces)

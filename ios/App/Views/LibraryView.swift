@@ -443,6 +443,7 @@ struct LibraryPane: View {
                 if d.unsaved && !d.saving { Button("Try saving again") { devices.write(d) } }
             }
             Button("Sync to this device (copy what's new)") { UsbCopy.shared.sync(d, app: app) }
+            Button("Re-sync grids to this device") { UsbCopy.shared.regrid(d, app: app) }
             Button("Copy all to this device") { UsbCopy.shared.copy(Array(d.byRbId.values), from: d, app: app) }
             analyseButton(Array(d.byRbId.values))
             Button("Name it in Cratebox…") { renaming = "devname:\(d.id)"; renameText = d.name }
